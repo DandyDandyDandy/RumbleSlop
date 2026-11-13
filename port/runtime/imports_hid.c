@@ -110,7 +110,7 @@ static void script_live(uint64_t now) {
             if (sscanf(line, "%*s %d", &n) == 1) pc_input_test_wheel(n);
             continue;
         }
-        if (!strcmp(name, "GOAL")) {                                 // test aids (test_aids.c)
+        if (!strcmp(name, "GOAL") || !strcmp(name, "BANANAS")) {                                 // test aids (test_aids.c)
             extern void test_aids_request(const char *what);
             test_aids_request(name);
             continue;
