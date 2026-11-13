@@ -108,6 +108,10 @@ def main():
     n = place_tree(paths.UNITY / 'aa_pc', sa / 'aa', skip=('retarget_report.tsv',))
     for sub in sorted(p for p in (rom / 'StreamingAssets').iterdir() if p.is_dir() and p.name != 'aa'):
         n += place_tree(sub, sa / sub.name)
+    sys.path.insert(0, str(paths.PORT / 'assets'))
+    import delisted
+    if delisted.patch(str(sa / 'aa' / 'Switch')):
+        print('characters that can no longer be bought or earned: their unlock rules are switched off (the port owns them)')
     print(f'game folder ready: {game} ({n} asset files)')
 
 

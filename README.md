@@ -90,4 +90,6 @@ in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md): above all [XC2 Recomp](http
 and the projects it descends from (TotK Recomp, LAS Recomp, MacNativeGames), whose ARM64-to-C lifter and shader
 translator do the heavy lifting, [Ryujinx](https://github.com/Ryujinx/Ryujinx) for the shader translator's core,
 [UnityPy](https://github.com/K0lb3/UnityPy), [Kenney](https://kenney.nl) for the button icons (CC0), and
-[Switchbrew](https://switchbrew.org) for the file format documentation.
+[Switchbrew](https://switchbrew.org) for the file format documentation. That the characters which can no longer be bought or earned only need
+their unlock rule changed was found by iswimfly ([Delisted Character Fix](https://gamebanana.com/mods/690229));
+the port gives them to every save in its own way and includes nothing of that mod.

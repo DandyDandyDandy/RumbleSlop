@@ -114,3 +114,7 @@
 4517e70   Wonder.UI.Text.UITextEmojiDisplayModule::getEmojiTag
 44e1e30   Wonder.UI.UIPartViewButtonBase::SetupButtonGuide
 4516ca0   Wonder.UI.Text.UITextEmojiDisplayModule::updateText
+43ccbd0   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID)   (delisted.c)
+43d1750   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
+43cb7f0   Wonder.SaveUserParam+ShopItemParam::OnCreate
+43cb9a0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
