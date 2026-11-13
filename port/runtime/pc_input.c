@@ -11,7 +11,9 @@
 //   * keys are identified as the game does (UnityEngine.InputSystem.Key, a physical key position), read with
 //     GetAsyncKeyState through the scan code, so WASD stays where it is on any keyboard layout.
 //   * the mouse wheel moves through lists: one notch is a tap of the Up or Down arrow key, which the menus
-//     already understand. Not while a stage is being played, where those keys steer.
+//     already understand. Not while a stage is being played, where those keys steer;
+//   * a list's scroll bar can be dragged: the lists scroll with the focused item, so a drag is turned into the
+//     same arrow-key taps, one per item's worth of bar length.
 // The keyboard belongs to player 1. The player's own bindings are in <exe dir>\port_keys<BR_PROFILE>.txt.
 // Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera).
 #include <windows.h>
@@ -138,6 +140,47 @@ static BOOL CALLBACK wheel_window(HWND h, LPARAM out) {
     return FALSE;
 }
 void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches); }      // BR_INPUT_LIVE "WHEEL <n>"
+
+// ---- dragging a scroll bar. The game's lists are Wonder.UI.UIPartViewBaseVirtualScrollRect views over a
+// UnityEngine.UI.ScrollRect; the bar only shows where the list is. The view that updated last is remembered
+// (its Update is hooked); a press on its bar, or within GRAB_PX beside it, starts a drag.
+#define F_OBJ_ALIVE_ 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
+#define F_SCROLLRECT_VBAR 0x415cbf0ull       // UnityEngine.UI.ScrollRect::get_verticalScrollbar
+#define VSR_ITEM_COUNT 0x58                  // UIPartViewBaseVirtualScrollRect.itemCount
+#define VSR_SCROLL_RECT 0x78                 // .m_ScrollRect
+#define GRAB_PX 14.0f
+static uint64_t g_list_view, g_list_tick;    // the list view seen last by its Update hook (a managed pointer, used the same frame only)
+int rt_hook_44f12d0(Cpu *c) {                // UIPartViewBaseVirtualScrollRect.Update
+    g_list_view = c->x[0];
+    g_list_tick = GetTickCount64();
+    return 0;
+}
+static void drag_tick(Cpu *c) {
+    extern int rt_ui_mouse(float *x, float *y, int *down);
+    extern int rt_ui_rect(Cpu *c, uint64_t view, float r[4]);
+    static int dragging, was_down;
+    static float last_y, rest;
+    float x, y, r[4];
+    int down = 0, inside = rt_ui_mouse(&x, &y, &down), fresh = down && !was_down;
+    uint64_t view = g_list_view;
+    was_down = down;
+    g_list_view = 0;                              // only a view that updates this frame is used
+    if (fresh && getenv("BR_DRAG_LOG")) rt_log("drag: press at %.0f %.0f inside %d view %d age %d", x, y, inside, view != 0, (int)(GetTickCount64() - g_list_tick));
+    if (!down || !inside || g_wheel_blocked) { dragging = 0; return; }
+    if (!view || GetTickCount64() - g_list_tick > 200 || !(rt_call(c, FN(F_OBJ_ALIVE_), 2, view, 0ull) & 1)) { dragging = 0; return; }
+    uint64_t sr = LD64(view + VSR_SCROLL_RECT);
+    uint64_t bar = sr && (rt_call(c, FN(F_OBJ_ALIVE_), 2, sr, 0ull) & 1) ? rt_call(c, FN(F_SCROLLRECT_VBAR), 2, sr, 0ull) : 0;
+    if (!bar || !(rt_call(c, FN(F_OBJ_ALIVE_), 2, bar, 0ull) & 1) || !rt_ui_rect(c, bar, r) || r[3] < 8) { dragging = 0; return; }
+    if (fresh && getenv("BR_DRAG_LOG")) rt_log("drag: bar %.0f %.0f %.0f %.0f items %d", r[0], r[1], r[2], r[3], (int)LD32(view + VSR_ITEM_COUNT));
+    if (fresh && x >= r[0] - GRAB_PX && x <= r[0] + r[2] + GRAB_PX && y >= r[1] && y <= r[1] + r[3]) { dragging = 1; last_y = y; rest = 0; }
+    if (!dragging) return;
+    int items = (int)LD32(view + VSR_ITEM_COUNT);
+    float step = r[3] / (float)(items > 1 ? items : 1);
+    rest += y - last_y;                           // y grows upwards; up = towards the first item
+    last_y = y;
+    while (rest >= step) { InterlockedExchangeAdd(&g_wheel, 1); rest -= step; }
+    while (rest <= -step) { InterlockedExchangeAdd(&g_wheel, -1); rest += step; }
+}
 static void wheel_tick(Cpu *c) {              // once a frame, on the thread that owns the window
     if (!g_wheel_old_proc) {
         HWND w = NULL;
@@ -145,6 +188,7 @@ static void wheel_tick(Cpu *c) {              // once a frame, on the thread tha
         if (w) g_wheel_old_proc = (WNDPROC)SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)wheel_proc);
     }
     g_wheel_blocked = (int)rt_call(c, FN(F_MAIN_GAME_STATE), 1, 0ull) == 4;
+    drag_tick(c);
 }
 
 void pc_input_test_key(const char *name, int ms) {

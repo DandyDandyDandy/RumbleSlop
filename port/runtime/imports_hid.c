@@ -104,6 +104,13 @@ static void script_live(uint64_t now) {
             if (sscanf(line, "%*s %31s %d", key, &ms) >= 1) pc_input_test_key(key, ms);
             continue;
         }
+        if (!strcmp(name, "HOLD") || !strcmp(name, "RELEASE")) {       // left button held at x y / let go (online_ui.c)
+            extern void rt_ui_test_hold(int x, int y, int down);
+            int x = 0, y = 0;
+            if (name[0] == 'R') rt_ui_test_hold(0, 0, 0);
+            else if (sscanf(line, "%*s %d %d", &x, &y) == 2) rt_ui_test_hold(x, y, 1);
+            continue;
+        }
         if (!strcmp(name, "WHEEL")) {                                // mouse wheel notches (pc_input.c): WHEEL <n>, n < 0 = down
             extern void pc_input_test_wheel(int notches);
             int n = 0;

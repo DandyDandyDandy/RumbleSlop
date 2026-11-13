@@ -647,10 +647,13 @@ static BOOL CALLBACK main_window(HWND h, LPARAM out) {
 // The mouse for the UI, in window pixels from the bottom left (ui_mouse_frame, once a frame, at the end of the
 // frame): the cursor, whether it moved, and a left click, which stays pending through the next frame's updates until
 // something takes it (rt_ui_click_consume). BR_INPUT_LIVE "CLICK x y" and "MOVE x y" stand in for the real mouse.
-static int g_click, g_test_click, g_test_move, g_test_x, g_test_y, g_mouse_moved, g_mouse_inside;
+static int g_click, g_test_click, g_test_move, g_test_x, g_test_y, g_mouse_moved, g_mouse_inside, g_mouse_down, g_test_hold;
 static float g_click_x, g_click_y, g_mouse_x = -1, g_mouse_y = -1;
 void rt_ui_test_click(int x, int y) { g_test_x = x; g_test_y = y; g_test_click = 1; }
 void rt_ui_test_move(int x, int y) { g_test_x = x; g_test_y = y; g_test_move = 1; }
+// BR_INPUT_LIVE "HOLD x y": the left button goes down at x y and stays down while further MOVE lines move the
+// cursor; "RELEASE" lets go (a drag, for the scroll bars).
+void rt_ui_test_hold(int x, int y, int down) { if (down) { g_test_x = x; g_test_y = y; g_test_move = 1; } g_test_hold = down; }
 static void ui_mouse_frame(void) {
     static int was_down;
     HWND w = NULL;
@@ -659,9 +662,10 @@ static void ui_mouse_frame(void) {
     int down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0, edge = down && !was_down && window_focused();
     was_down = down;
     g_click = 0; g_mouse_moved = 0;
+    g_mouse_down = g_test_hold || (down && window_focused());
     EnumThreadWindows(GetCurrentThreadId(), main_window, (LPARAM)&w);
     if (!w || !GetClientRect(w, &cr)) return;
-    if (g_test_click || g_test_move) { p.x = g_test_x; p.y = g_test_y; edge = g_test_click; g_test_click = g_test_move = 0; }
+    if (g_test_click || g_test_move || g_test_hold) { p.x = g_test_x; p.y = g_test_y; edge = g_test_click; g_test_click = g_test_move = 0; }
     else if (!window_focused() || !GetCursorPos(&p) || !ScreenToClient(w, &p)) { g_mouse_inside = 0; return; }
     float x = (float)p.x, y = (float)(cr.bottom - p.y);
     g_mouse_inside = p.x >= 0 && p.y >= 0 && p.x < cr.right && p.y < cr.bottom;
@@ -670,6 +674,9 @@ static void ui_mouse_frame(void) {
     if (edge && g_mouse_inside) { g_click = 1; g_click_x = x; g_click_y = y; }
 }
 int rt_ui_click_pending(void) { return g_click; }
+// The cursor in window pixels from the bottom left, and whether the left button is held; 0 when the cursor is not
+// over the window.
+int rt_ui_mouse(float *x, float *y, int *down) { *x = g_mouse_x; *y = g_mouse_y; *down = g_mouse_down; return g_mouse_inside; }
 void rt_ui_click_consume(void) { g_click = 0; }
 int rt_ui_mouse_moved(void) { return g_mouse_moved; }
 // The element's rectangle on screen; 0 when it is not shown.
@@ -691,6 +698,7 @@ float rt_ui_hit(Cpu *c, uint64_t view, int hover) {
     if (!ui_rect(c, view, r)) return 0;
     return x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3] ? r[2] * r[3] + 1 : 0;
 }
+int rt_ui_rect(Cpu *c, uint64_t view, float r[4]) { return ui_rect(c, view, r); }      // x, y, width, height on screen
 // 1 when the pending click landed on the UI element (a view or any component of it).
 int rt_ui_clicked(Cpu *c, uint64_t view) { return rt_ui_hit(c, view, 0) > 0; }
 // A quick "pressed" motion for a button the port handles itself: the button shrinks to 82% and springs back over

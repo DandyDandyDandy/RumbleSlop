@@ -118,3 +118,4 @@
 43d1750   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
 43cb7f0   Wonder.SaveUserParam+ShopItemParam::OnCreate
 43cb9a0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
+44f12d0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (scroll bar dragging, pc_input.c)
