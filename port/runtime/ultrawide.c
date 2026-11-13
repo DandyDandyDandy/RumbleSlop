@@ -12,6 +12,10 @@
 //   * on a wide screen the in-game HUD canvases get the menus' centred 1920x1080 SafeMargin (single-player view
 //     only; with split screen the game's own per-view layout is kept). On a tall screen the HUD keeps the game's
 //     layout, which reaches the top and bottom edges.
+//   * cameras that use physical properties with a horizontal gate fit (the main menu's 3D scene) are switched to a
+//     vertical fit on a wide screen. With a horizontal fit the width of the view is fixed and a wider screen
+//     cuts off top and bottom, which zooms in on the characters; with a vertical fit the view keeps its 16:9
+//     height and gains width.
 // Nothing changes at 16:9, and everything follows a resolution change at once.
 //
 // Diagnostics. BR_SCREEN_DUMP=<seconds>[,<seconds>...]: at those times after the first frame, log every camera
@@ -305,8 +309,14 @@ static void dump(Cpu *c) {
         uint64_t tt = rt_call(c, FN(F_CAM_TARGET), 2, cam, 0ull);
         rt_call(c, FN(F_CAM_DEPTH), 2, cam, 0ull);
         float depth = vf(c, 0);
-        rt_log("screen: camera %-40s depth %5.1f rect %.3f %.3f %.3f %.3f  pixels %.0f %.0f %.0f %.0f  target %s", name_of(c, cam, a, sizeof a),
-               depth, r[0], r[1], r[2], r[3], p[0], p[1], p[2], p[3], tt ? name_of(c, tt, b, sizeof b) : "screen");
+        rt_call(c, FN(0x3e7e030ull), 2, cam, 0ull);              // Camera.get_fieldOfView (vertical, degrees)
+        float fov = vf(c, 0);
+        rt_call(c, FN(0x3e7eb00ull), 2, cam, 0ull);              // Camera.get_aspect
+        float aspect = vf(c, 0);
+        int physical = (int)(rt_call(c, FN(0x3e7fae0ull), 2, cam, 0ull) & 1), fit = (int)rt_call(c, FN(0x3e80680ull), 2, cam, 0ull);
+        rt_log("screen: camera %-40s depth %5.1f rect %.3f %.3f %.3f %.3f  pixels %.0f %.0f %.0f %.0f  target %s  fov %.2f aspect %.3f physical %d gate fit %d",
+               name_of(c, cam, a, sizeof a), depth, r[0], r[1], r[2], r[3], p[0], p[1], p[2], p[3], tt ? name_of(c, tt, b, sizeof b) : "screen",
+               fov, aspect, physical, fit);
     }
     for (int i = 0; i < g_nscalers; i++) {
         uint64_t s = g_scalers[i];
@@ -328,6 +338,35 @@ static void dump(Cpu *c) {
 
 static volatile int g_dump_request;
 void ultrawide_request_dump(void) { g_dump_request = 1; }   // dump cameras and canvases (and the UI tree with BR_SCREEN_TREE) now
+// Camera.gateFit of physical cameras that draw to the screen: Vertical (1) on a wide screen, back to Horizontal
+// (2) otherwise for the ones this changed (found again by the fit they have). Looked at twice a second:
+// Camera.allCameras makes a new array each time.
+#define F_CAM_USE_PHYSICAL 0x3e7fae0ull    // UnityEngine.Camera::get_usePhysicalProperties
+#define F_CAM_GET_GATE_FIT 0x3e80680ull
+#define F_CAM_SET_GATE_FIT 0x3e806d0ull
+static void gate_fit_tick(Cpu *c) {
+    static uint64_t next;
+    static int changed;
+    uint64_t now = GetTickCount64();
+    if (now < next || (!g_wide && !changed)) return;
+    next = now + 500;
+    uint64_t cams = rt_call(c, FN(F_CAM_ALL), 1, 0ull);
+    int n = cams ? (int)LD32(cams + 0x18) : 0, left = 0;
+    for (int i = 0; i < n; i++) {
+        uint64_t cam = LD64(cams + 0x20 + 8ull * i);
+        if (!alive(c, cam) || !(rt_call(c, FN(F_CAM_USE_PHYSICAL), 2, cam, 0ull) & 1) || rt_call(c, FN(F_CAM_TARGET), 2, cam, 0ull)) continue;
+        int fit = (int)rt_call(c, FN(F_CAM_GET_GATE_FIT), 2, cam, 0ull);
+        if (g_wide && fit == 2) {
+            char a[96];
+            rt_call(c, FN(F_CAM_SET_GATE_FIT), 3, cam, 1ull, 0ull);
+            if (!changed) rt_log("screen: wide screen: camera %s fits its view vertically", name_of(c, cam, a, sizeof a));
+            changed = 1;
+        } else if (!g_wide && changed && fit == 1) rt_call(c, FN(F_CAM_SET_GATE_FIT), 3, cam, 2ull, 0ull);
+        if (g_wide && (fit == 1 || fit == 2)) left++;
+    }
+    if (!g_wide && !left) changed = 0;
+}
+
 void ultrawide_tick(Cpu *c) {   // once per frame, after every Update; the caller preserves the registers
     static const char *spec;
     static int next = -1;
@@ -346,6 +385,7 @@ void ultrawide_tick(Cpu *c) {   // once per frame, after every Update; the calle
     g_wide = sh > 0 && sw * 9 > sh * 16 + 16;
     g_tall = sw > 0 && sw * 9 < sh * 16 - 16;
     float w = g_wide ? 1080.0f * (float)sw / (float)sh : 1920, h = g_tall ? 1920.0f * (float)sh / (float)sw : 1080;
+    gate_fit_tick(c);
     if (w != g_cur_w || h != g_cur_h) { g_prev_w = g_cur_w; g_prev_h = g_cur_h; g_cur_w = w; g_cur_h = h; g_restore_frames = 600; }
     else if (!g_wide && !g_tall && g_restore_frames > 0) g_restore_frames--;   // back at 16:9: keep walking a while to undo
     if (g_dump_request) {                 // BR_INPUT_LIVE line "DUMP": collect during the next frame, dump at its end
