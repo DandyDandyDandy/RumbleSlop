@@ -104,6 +104,11 @@ static void script_live(uint64_t now) {
             if (sscanf(line, "%*s %31s %d", key, &ms) >= 1) pc_input_test_key(key, ms);
             continue;
         }
+        if (!strcmp(name, "GOAL")) {                                 // test aids (test_aids.c)
+            extern void test_aids_request(const char *what);
+            test_aids_request(name);
+            continue;
+        }
         if (!strcmp(name, "DUMP")) {                                 // screen dump now (ultrawide.c, BR_SCREEN_TREE)
             extern void ultrawide_request_dump(void);
             ultrawide_request_dump();

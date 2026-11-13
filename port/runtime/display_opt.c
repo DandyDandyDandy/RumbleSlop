@@ -397,11 +397,13 @@ int rt_hook_43a7850(Cpu *c) {
         extern void copy_button_tick(Cpu *c);
         extern void name_ui_tick(Cpu *c);
         extern void pc_input_tick(Cpu *c);
+        extern void test_aids_tick(Cpu *c);
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
         chara_dump_tick(c);
         window_title_tick();
         ultrawide_tick(c);
+        test_aids_tick(c);
         online_tick(c);
         mouse_diag_tick(c);
         copy_button_tick(c);
