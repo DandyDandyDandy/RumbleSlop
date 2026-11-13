@@ -10,6 +10,8 @@
 //     same gates as the pad (valid state, active layer, device mask, the chat wheel's blocked actions);
 //   * keys are identified as the game does (UnityEngine.InputSystem.Key, a physical key position), read with
 //     GetAsyncKeyState through the scan code, so WASD stays where it is on any keyboard layout.
+//   * the mouse wheel moves through lists: one notch is a tap of the Up or Down arrow key, which the menus
+//     already understand. Not while a stage is being played, where those keys steer.
 // The keyboard belongs to player 1. The player's own bindings are in <exe dir>\port_keys<BR_PROFILE>.txt.
 // Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera).
 #include <windows.h>
@@ -110,6 +112,41 @@ static int window_focused(void) {
     if (w) GetWindowThreadProcessId(w, &pid);
     return pid == GetCurrentProcessId();
 }
+// ---- the mouse wheel. The window's messages are read through a subclassed window procedure (the wheel has no
+// state to poll); notches wait in g_wheel and are played as arrow-key taps, one every WHEEL_STEP_MS.
+#define KEY_UP_ARROW 63
+#define WHEEL_TAP_MS 40
+#define WHEEL_STEP_MS 70
+#define F_MAIN_GAME_STATE 0x42a1ed0ull      // Wonder.MainGame.get_mainGameState (static): 4 = a stage is being played
+static volatile LONG g_wheel;                // notches not yet played: > 0 up (away from the user), < 0 down
+static WNDPROC g_wheel_old_proc;
+static int g_wheel_blocked;
+static LRESULT CALLBACK wheel_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    extern int rt_no_real_input(void);
+    if (m == WM_MOUSEWHEEL && !rt_no_real_input()) {
+        static int rest;                         // precision wheels and touchpads send fractions of a notch
+        rest += GET_WHEEL_DELTA_WPARAM(w);
+        int n = rest / WHEEL_DELTA;
+        rest -= n * WHEEL_DELTA;
+        if (n) InterlockedExchangeAdd(&g_wheel, n);
+    }
+    return CallWindowProcW(g_wheel_old_proc, h, m, w, l);
+}
+static BOOL CALLBACK wheel_window(HWND h, LPARAM out) {
+    if (!IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
+    *(HWND *)out = h;
+    return FALSE;
+}
+void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches); }      // BR_INPUT_LIVE "WHEEL <n>"
+static void wheel_tick(Cpu *c) {              // once a frame, on the thread that owns the window
+    if (!g_wheel_old_proc) {
+        HWND w = NULL;
+        EnumThreadWindows(GetCurrentThreadId(), wheel_window, (LPARAM)&w);
+        if (w) g_wheel_old_proc = (WNDPROC)SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)wheel_proc);
+    }
+    g_wheel_blocked = (int)rt_call(c, FN(F_MAIN_GAME_STATE), 1, 0ull) == 4;
+}
+
 void pc_input_test_key(const char *name, int ms) {
     int k = pc_key_by_name(name);
     if (k) g_test_until[k] = GetTickCount64() + (uint64_t)(ms > 0 ? ms : 100);
@@ -135,6 +172,18 @@ static void sample(KeySet *s) {
         if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) s->mouse |= 16;
     }
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
+    {                                           // the wheel: the next waiting notch becomes an arrow-key tap
+        static uint64_t next;
+        if (g_wheel_blocked || text) InterlockedExchange(&g_wheel, 0);
+        else if (g_wheel && now >= next) {
+            LONG n = g_wheel;
+            if (n > 8 || n < -8) n = InterlockedExchange(&g_wheel, n > 0 ? 8 : -8) > 0 ? 8 : -8;     // a spin does not queue for seconds
+            InterlockedExchangeAdd(&g_wheel, n > 0 ? -1 : 1);
+            g_test_until[n > 0 ? KEY_UP_ARROW : KEY_DOWN] = now + WHEEL_TAP_MS;
+            next = now + WHEEL_STEP_MS;
+            g_kbm_tick = now;
+        }
+    }
     for (int k = 1; k < NKEY; k++) {
         int down = 0;
         if (g_test_until[k] > now) down = 1;
@@ -552,6 +601,7 @@ int rt_hook_45429f0(Cpu *c) {                // UIOptionChoicesItemData_KeyConfi
 void pc_input_tick(Cpu *c) {
     static int dump = -1;
     buttons_sweep(c);
+    wheel_tick(c);
     if (dump < 0) dump = getenv("BR_INPUT_DUMP") != NULL;
     if (dump != 1 || !g_captured) return;
     dump = 2;

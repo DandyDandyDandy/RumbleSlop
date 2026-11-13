@@ -36,7 +36,7 @@ static int key(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 // BR_INPUT_LIVE is not disturbed by whoever is using the PC meanwhile.
 int rt_no_real_input(void) {
     static int v = -1;
-    if (v < 0) v = getenv("BR_NO_REAL_INPUT") != NULL;
+    if (v < 0) { const char *e = getenv("BR_NO_REAL_INPUT"); v = e && *e && *e != '0'; }
     return v;
 }
 static int focused(void) {
@@ -102,6 +102,12 @@ static void script_live(uint64_t now) {
             char key[32] = "";
             int ms = 100;
             if (sscanf(line, "%*s %31s %d", key, &ms) >= 1) pc_input_test_key(key, ms);
+            continue;
+        }
+        if (!strcmp(name, "WHEEL")) {                                // mouse wheel notches (pc_input.c): WHEEL <n>, n < 0 = down
+            extern void pc_input_test_wheel(int notches);
+            int n = 0;
+            if (sscanf(line, "%*s %d", &n) == 1) pc_input_test_wheel(n);
             continue;
         }
         if (!strcmp(name, "GOAL")) {                                 // test aids (test_aids.c)

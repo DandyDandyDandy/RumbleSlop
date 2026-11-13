@@ -19,7 +19,10 @@ img = open(W + r'\work\re\main.bin', 'rb').read()
 md_ = open(W + r'\work\game\romfs\Data\Managed\Metadata\global-metadata.dat', 'rb').read()
 L = json.load(open(U + r'\layout.json'))
 MR = {k: (int(v, 16) if isinstance(v, str) else v) for k, v in L['metadata_registration']['fields'].items()}
-TS = 0x483dae8
+_h = lambda v: int(v, 16) if isinstance(v, str) else v
+TS = _h(L['text'][1])                       # size of .text (from layout.json, so any game version works)
+DATA_LO = _h(L['data'][0])                  # start of .data: the metadata-usage pointer slots are here
+DATA_HI = DATA_LO + _h(L['data'][1])
 
 q = lambda o: struct.unpack_from('<Q', img, o)[0]
 u = lambda o: struct.unpack_from('<I', img, o)[0]
@@ -129,10 +132,12 @@ gm_spec = {}
 for r in csv.DictReader(open(U + r'\generic_methods.tsv', encoding='utf-8'), delimiter='\t'):
     if r['address']:
         names.setdefault(int(r['address'], 16), r['name'])
-for r in csv.DictReader(open(U + r'\closure\boundary_direct.tsv', encoding='utf-8'), delimiter='\t'):
-    names.setdefault(int(r['target'], 16), r['identification'])
-for r in csv.DictReader(open(U + r'\api\runtime_symbols.tsv', encoding='utf-8'), delimiter='\t'):
-    names.setdefault(int(r['address'], 16), r['name'])
+for _f, _k, _v in ((U + r'\closure\boundary_direct.tsv', 'target', 'identification'), (U + r'\api\runtime_symbols.tsv', 'address', 'name')):
+    try:                                    # developer outputs of closure_build.py / api_map_build.py: names for native code
+        for r in csv.DictReader(open(_f, encoding='utf-8'), delimiter='\t'):
+            names.setdefault(int(r[_k], 16), r[_v])
+    except OSError:
+        pass
 try:
     for r in csv.DictReader(open(W + r'\generated\plt_stubs.tsv', encoding='utf-8'), delimiter='\t'):
         names.setdefault(int(r['nso_offset'], 16), 'import ' + r['symbol'])
@@ -307,7 +312,7 @@ def dis(a, mx=4000):
             if ins.mnemonic != 'ldr':
                 continue    # metadata-initialised flag bytes
             v = q(ad) if ad + 8 <= len(img) else 0
-            us = usage(q(v)) if 0x5dd4000 <= v < len(img) - 8 else usage(v)
+            us = usage(q(v)) if DATA_LO <= v < len(img) - 8 else usage(v)
             if us:
                 slots[m.group(1)] = us
                 note = '   ; &' + us
@@ -376,9 +381,9 @@ if __name__ == '__main__':
                 print('%#x %s' % (a, n))
     elif cmd == 'got':          # got <regex>: metadata-usage pointer slots whose usage matches
         rx = re.compile(sys.argv[2])
-        for ad in range(0x5dd4000, min(len(img) - 8, 0x6200000), 8):
+        for ad in range(DATA_LO, min(len(img) - 8, DATA_HI), 8):
             v = q(ad)
-            if 0x5dd4000 <= v < len(img) - 8:
+            if DATA_LO <= v < len(img) - 8:
                 us = usage(q(v))
                 if us and rx.search(us):
                     print('%#x -> %#x %s' % (ad, v, us))
