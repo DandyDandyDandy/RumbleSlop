@@ -66,6 +66,9 @@ void np_code(Np *np, char *out, size_t n);        // "" unless hosting
 // port_index: the host's port minus its base port (0..15); both sides must use the same base port
 int np_code_parse(const char *code, uint32_t *ip, int *port_index, uint32_t *secret);
 void np_code_format(uint32_t ip, int port_index, uint32_t secret, char *out, size_t n);
+// Tag of the game content this build plays with (0 = the plain game). Peers with different tags cannot join each
+// other: the join fails with NP_FAIL_VERSION. Call before hosting or joining.
+void np_set_content_tag(uint32_t tag);
 
 // upnp.c: 1 on success, ext_ip receives the router's external address ("" when unknown)
 int upnp_map(uint16_t port, const char *local_ip, char *ext_ip, size_t n);

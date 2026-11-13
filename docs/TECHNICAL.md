@@ -541,9 +541,15 @@ Texture facts found the hard way:
 
 ## Known gaps
 
+* The setup was run from scratch on one PC (Windows 11, NVIDIA GPU) with the downloaded tools: every step passed,
+  the extracted game matched a hactool extraction file for file, and the built game was started and played
+  through the title, menus and the first Adventure stage. Not tried: a PC without the tools' run-time
+  libraries, an add-on content `.nsp` through the `dlc` step, a base game given as `.nsp`.
 * Exercised: title, main menu, options, the first Adventure stage; online Battle (2 players and 2 + 14 CPUs: lobby,
   race, results, back to the lobby, host disbanding), online Adventure (first stage, ball collision, restart after
   time over), split-screen Adventure with 2 and 4 players. Other modes and later stages are untested.
+* Online rooms carry a content tag (`np_set_content_tag`, netplay.c): a build with other game tables (a fork
+  that adds courses) cannot join a plain one. The plain game's tag is 0.
 * Online was tested with two instances on one PC only (same address, no packet loss beyond the transport test's
   simulation). Not tested: over the internet, UPnP on a router that offers it, more than two real players, a
   guest leaving in the middle of a match.

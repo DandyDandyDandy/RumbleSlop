@@ -69,7 +69,7 @@ UPnP; without UPnP it works on the same network or VPN, or with the port forward
 
 ## Known problems
 
-- Tested: title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
+- Tested: the setup from scratch on one PC; title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
   split-screen Adventure. Later stages and other modes have had little or no testing.
 - Online play has not been tested over the internet.
 - The opening movie cannot be skipped.

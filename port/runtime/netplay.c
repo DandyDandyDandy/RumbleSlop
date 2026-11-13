@@ -25,7 +25,13 @@
 #include "netplay.h"
 
 #define MAGIC 0x314e5242u   // "BRN1"
-#define PROTO 1
+#define PROTO_BASE 1
+// The protocol number both sides must share. A build whose game tables differ from the plain game's (extra
+// courses and stages) mixes a tag of that content in, so that only players with the same content meet: course
+// and stage numbers sent in a room mean nothing to a game with other tables. Tag 0 is the plain game.
+static uint16_t g_proto = PROTO_BASE;
+#define PROTO g_proto
+void np_set_content_tag(uint32_t tag) { g_proto = (uint16_t)(PROTO_BASE ^ (tag ? (uint16_t)(0x8000u | ((tag ^ (tag >> 15)) & 0x7fffu)) : 0)); }
 enum { PT_HELLO = 1, PT_CHALLENGE, PT_JOIN, PT_ACCEPT, PT_REJECT, PT_REL = 16, PT_UNREL, PT_PING, PT_PONG, PT_BYE, PT_ACK };
 enum { MSG_GAME = 1, MSG_PEERS };
 #define HDR 21              // magic, type, token, ack, ack bits
