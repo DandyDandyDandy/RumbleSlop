@@ -6,13 +6,13 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_GET_GAMEOBJECT 0x3edc5c0ull       // UnityEngine.Component::get_gameObject
-#define F_GET_TRANSFORM 0x3edc570ull        // UnityEngine.Component::get_transform
-#define F_SET_ACTIVE 0x3ee0320ull           // UnityEngine.GameObject::SetActive(bool)
-#define F_OBJ_NAME 0x3ee4e30ull             // UnityEngine.Object::get_name
-#define F_RT_GET_ANCHORED_POS 0x3eec8d0ull  // UnityEngine.RectTransform
-#define F_RT_SET_ANCHORED_POS 0x3eec9a0ull
-#define F_SET_SELECT_MAIN 0x451da20ull
+#define F_GET_GAMEOBJECT 0x3f07fb0ull       // UnityEngine.Component::get_gameObject
+#define F_GET_TRANSFORM 0x3f07f60ull        // UnityEngine.Component::get_transform
+#define F_SET_ACTIVE 0x3f0bd10ull           // UnityEngine.GameObject::SetActive(bool)
+#define F_OBJ_NAME 0x3f10820ull             // UnityEngine.Object::get_name
+#define F_RT_GET_ANCHORED_POS 0x3f182c0ull  // UnityEngine.RectTransform
+#define F_RT_SET_ANCHORED_POS 0x3f18390ull
+#define F_SET_SELECT_MAIN 0x454ef20ull
 #define STR_LEN 0x10
 #define STR_CHARS 0x14
 #define LIST_ITEMS 0x10                     // System.Collections.Generic.List<T>
@@ -48,7 +48,7 @@ static float button_x(Cpu *c, uint64_t button, float *y) {
 // title state, for the play-style cards. The three lists are parallel (one entry per card). The Local Communication
 // entry is taken out of all three before the module is built from them, so it can be neither seen nor focused.
 static void drop_local_card(Cpu *c, uint64_t parents, uint64_t children, uint64_t views);
-int rt_hook_455d620(Cpu *c) {
+int rt_hook_458b250(Cpu *c) {
     uint64_t args[9], lr = c->x[30];                        // the constructor runs afterwards: its arguments must survive the calls
     for (int i = 0; i < 9; i++) args[i] = c->x[i];
     if (args[1] && args[2] && args[3]) drop_local_card(c, args[1], args[2], args[3]);
@@ -85,7 +85,7 @@ static void drop_local_card(Cpu *c, uint64_t parents, uint64_t children, uint64_
 }
 // UIViewSelectPlayStyle.SetPlayStyleSelectMain(): switches the screen's parts on, among them
 // {+0x68 UIPartViewIndependentButton eShop button}. The eShop button stays off.
-int rt_hook_451da20(Cpu *c) {
+int rt_hook_454ef20(Cpu *c) {
     static __thread int inside;
     if (inside) return 0;
     uint64_t self = X(0);
@@ -95,14 +95,14 @@ int rt_hook_451da20(Cpu *c) {
     return 1;
 }
 // UIStateTitle.onCallEShop(...): the -/+ press that opened the eShop. Nothing to open on PC.
-int rt_hook_4521150(Cpu *c) { (void)c; return 1; }
+int rt_hook_4552670(Cpu *c) { (void)c; return 1; }
 
 // UIStateBase.RequestStateTransition(int stateId, UIStateArg arg, bool, ...). Online Play > Adventure and > Battle
 // open a "friends or random people" choice. Random matchmaking does not exist on PC, so the choice is skipped: the
 // main menu goes straight to the friends screen (create or join a room) and that screen's Back returns to the main
 // menu. State ids: 9 main menu, 36 Adventure choice, 40 Adventure friends, 45 Battle choice, 47 Battle friends.
 // BR_STATE_LOG=1 logs each request.
-int rt_hook_45076b0(Cpu *c) {
+int rt_hook_45384e0(Cpu *c) {
     static int log = -1;
     if (log < 0) log = getenv("BR_STATE_LOG") != NULL;
     const char *cls = (const char *)(uintptr_t)LD64(LD64(X(0)) + 0x10);

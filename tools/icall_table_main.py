@@ -1,5 +1,5 @@
 """Recover (icall name -> engine function address) from main.bin by decoding every call site of
-scripting_add_internal_call (0x106b7c0). Two patterns:
+scripting_add_internal_call (0x106fdc0). Two patterns:
   loop:     ldrsw x8,[xA,xI,lsl#2]; add x0,xA,x8; ldr x1,[xB,xI,lsl#3]; bl; add xI,xI,#1; cmp xI,#N
             (xA = int32 self-relative name table in rodata, xB = function pointer table in data)
   unrolled: adrp/add x0 -> name ; adrp x1 ; ldr x1,[x1,#off] -> function pointer slot in data ; bl
@@ -8,7 +8,7 @@ from _env import GAME, REPO, TOOLS, UNITY_EDITOR, W  # noqa: E402,F401
 import struct, numpy as np, capstone, re, os
 MAIN = W + r'\work\re\main.bin'
 OUT = W + r'\work\unity'
-REG = 0x106b7c0
+REG = 0x106fdc0
 TS = 0x483dae8
 d = open(MAIN, 'rb').read()
 w = np.frombuffer(d[:TS & ~3], dtype='<u4')

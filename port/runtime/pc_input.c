@@ -23,13 +23,13 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_CHECK_ACTION 0x439a4c0ull         // AppInput.State.checkAction(Action.eID, Func<eButton,bool>, ...)
-#define F_ACTION_ANALOG 0x439ace0ull        // AppInput.State.ActionAnalogValue(Action.eID) -> float
-#define F_IS_VALID_STATE 0x4385980ull       // AppInput.isValidState (static)
-#define F_LAYER_CURRENT 0x4394b70ull        // AppInput.Layer.current (static)
-#define F_GET_ASSIGN_SET 0x4386f50ull       // AppInput.actionAssignSet (static)
-#define F_HASHSET_CONTAINS 0x30d9ae0ull     // HashSet<enum>.Contains
-#define M_HASHSET_ACTION_CONTAINS 0x611afc0ull
+#define F_CHECK_ACTION 0x43c8530ull         // AppInput.State.checkAction(Action.eID, Func<eButton,bool>, ...)
+#define F_ACTION_ANALOG 0x43c8d50ull        // AppInput.State.ActionAnalogValue(Action.eID) -> float
+#define F_IS_VALID_STATE 0x43b39f0ull       // AppInput.isValidState (static)
+#define F_LAYER_CURRENT 0x43c2be0ull        // AppInput.Layer.current (static)
+#define F_GET_ASSIGN_SET 0x43b4fc0ull       // AppInput.actionAssignSet (static)
+#define F_HASHSET_CONTAINS 0x3100190ull     // HashSet<enum>.Contains
+#define M_HASHSET_ACTION_CONTAINS 0x616c098ull
 #define STATE_ID 0x20                       // AppInput.State fields
 #define STATE_LAYER 0x24
 #define STATE_DEVICE_MASK 0x78
@@ -119,7 +119,7 @@ static int window_focused(void) {
 #define KEY_UP_ARROW 63
 #define WHEEL_TAP_MS 40
 #define WHEEL_STEP_MS 70
-#define F_MAIN_GAME_STATE 0x42a1ed0ull      // Wonder.MainGame.get_mainGameState (static): 4 = a stage is being played
+#define F_MAIN_GAME_STATE 0x42cfd10ull      // Wonder.MainGame.get_mainGameState (static): 4 = a stage is being played
 static volatile LONG g_wheel;                // notches not yet played: > 0 up (away from the user), < 0 down
 static WNDPROC g_wheel_old_proc;
 static int g_wheel_blocked;
@@ -144,13 +144,13 @@ void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches
 // ---- dragging a scroll bar. The game's lists are Wonder.UI.UIPartViewBaseVirtualScrollRect views over a
 // UnityEngine.UI.ScrollRect; the bar only shows where the list is. The view that updated last is remembered
 // (its Update is hooked); a press on its bar, or within GRAB_PX beside it, starts a drag.
-#define F_OBJ_ALIVE_ 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
-#define F_SCROLLRECT_VBAR 0x415cbf0ull       // UnityEngine.UI.ScrollRect::get_verticalScrollbar
+#define F_OBJ_ALIVE_ 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
+#define F_SCROLLRECT_VBAR 0x41885e0ull       // UnityEngine.UI.ScrollRect::get_verticalScrollbar
 #define VSR_ITEM_COUNT 0x58                  // UIPartViewBaseVirtualScrollRect.itemCount
 #define VSR_SCROLL_RECT 0x78                 // .m_ScrollRect
 #define GRAB_PX 14.0f
 static uint64_t g_list_view, g_list_tick;    // the list view seen last by its Update hook (a managed pointer, used the same frame only)
-int rt_hook_44f12d0(Cpu *c) {                // UIPartViewBaseVirtualScrollRect.Update
+int rt_hook_45220f0(Cpu *c) {                // UIPartViewBaseVirtualScrollRect.Update
     g_list_view = c->x[0];
     g_list_tick = GetTickCount64();
     return 0;
@@ -259,33 +259,33 @@ static int g_loaded, g_captured;
 // ActionAssignKeyboard.KeyDef(Key, bool), KeyArrayDef(Key[], bool), AnalogKeyDef(Key, int startMS, int endMS, bool)
 // and ActionAssignMouse.ButtonDef(eMouseButton): called by AppInput's class constructor while it builds the default
 // table, each followed by the constructor of the ActionAssignDatum they belong to.
-int rt_hook_4395740(Cpu *c) { g_pending.nkeys = 1; g_pending.keys[0] = (uint8_t)W(0); g_pending.analog = 0; return 0; }
-int rt_hook_4395810(Cpu *c) {
+int rt_hook_43c37b0(Cpu *c) { g_pending.nkeys = 1; g_pending.keys[0] = (uint8_t)W(0); g_pending.analog = 0; return 0; }
+int rt_hook_43c3880(Cpu *c) {
     uint64_t arr = X(0);
     int n = arr ? (int)LD32(arr + ARR_LEN) : 0;
     g_pending.nkeys = 0; g_pending.analog = 0;
     for (int i = 0; i < n && i < MAX_KEYS; i++) g_pending.keys[g_pending.nkeys++] = (uint8_t)LD32(arr + ARR_DATA + 4 * (uint64_t)i);
     return 0;
 }
-int rt_hook_43958e0(Cpu *c) {
+int rt_hook_43c3950(Cpu *c) {
     g_pending.nkeys = 1; g_pending.keys[0] = (uint8_t)W(0); g_pending.analog = 1;
     g_pending.start_ms = (uint16_t)W(1); g_pending.end_ms = (uint16_t)W(2);
     return 0;
 }
-int rt_hook_4395060(Cpu *c) { g_pending.mouse = (uint8_t)W(0); return 0; }
+int rt_hook_43c30d0(Cpu *c) { g_pending.mouse = (uint8_t)W(0); return 0; }
 static int datum(Cpu *c) {                    // ActionAssignDatum..ctor(Action.eID in_ActionID, ...): seven overloads
     uint32_t a = W(1);
     if (a < ACTION_COUNT) { g_default[a] = g_pending; g_captured++; }
     memset(&g_pending, 0, sizeof g_pending);
     return 0;
 }
-int rt_hook_4395dd0(Cpu *c) { return datum(c); }
-int rt_hook_4395e70(Cpu *c) { return datum(c); }
-int rt_hook_4395f00(Cpu *c) { return datum(c); }
-int rt_hook_4396040(Cpu *c) { return datum(c); }
-int rt_hook_4396170(Cpu *c) { return datum(c); }
-int rt_hook_43962b0(Cpu *c) { return datum(c); }
-int rt_hook_43963e0(Cpu *c) { return datum(c); }
+int rt_hook_43c3e40(Cpu *c) { return datum(c); }
+int rt_hook_43c3ee0(Cpu *c) { return datum(c); }
+int rt_hook_43c3f70(Cpu *c) { return datum(c); }
+int rt_hook_43c40b0(Cpu *c) { return datum(c); }
+int rt_hook_43c41e0(Cpu *c) { return datum(c); }
+int rt_hook_43c4320(Cpu *c) { return datum(c); }
+int rt_hook_43c4450(Cpu *c) { return datum(c); }
 
 static void keys_path(char *out, size_t n) {
     char exe[MAX_PATH];
@@ -395,7 +395,7 @@ static int enabled(void) {
 int pc_keyboard_actions(void) { return enabled(); }
 
 // AppInput.State.checkAction(Action.eID, Func<eButton,bool> controllerFunc, ...): the pad first, then our devices.
-int rt_hook_439a4c0(Cpu *c) {
+int rt_hook_43c8530(Cpu *c) {
     static __thread int inside;
     if (inside || !enabled()) return 0;
     uint64_t state = X(0), func = X(2), a3 = X(3), a4 = X(4);
@@ -415,7 +415,7 @@ int rt_hook_439a4c0(Cpu *c) {
     return 1;
 }
 // AppInput.State.ActionAnalogValue(Action.eID): 0..1. A held key counts fully, an analog key by its ramp.
-int rt_hook_439ace0(Cpu *c) {
+int rt_hook_43c8d50(Cpu *c) {
     static __thread int inside;
     if (inside || !enabled()) return 0;
     uint64_t state = X(0);
@@ -436,7 +436,7 @@ int rt_hook_439ace0(Cpu *c) {
 }
 // AppInput.Update() / FixedUpdate(): sample our devices where the game samples the pads.
 // {+0x3c float repeat start time, +0x40 float repeat interval}
-int rt_hook_4387310(Cpu *c) {
+int rt_hook_43b5380(Cpu *c) {
     if (!enabled()) return 0;
     uint64_t self = X(0);
     float a, b;
@@ -460,7 +460,7 @@ int rt_hook_4387310(Cpu *c) {
     }
     return 0;
 }
-int rt_hook_4387af0(Cpu *c) {
+int rt_hook_43b5b60(Cpu *c) {
     if (enabled()) sample(&g_fixed);
     return 0;
 }
@@ -472,17 +472,17 @@ int rt_hook_4387af0(Cpu *c) {
 // the moved cursor is tested against that detector's buttons and handed to the handler, exactly what the engine's
 // event system would have done. Because it happens while the screen polls, a screen that is not taking input (a
 // dialog is up, a fade is running) is not clickable either.
-#define F_MONITOR_INPUT 0x4549be0ull        // UIUserInputDetector.MonitorInputOnUpdate()
-#define F_CHECK_FADE 0x4549cb0ull           // UIUserInputDetector.ckeckFadeState(): 1 = no fade in the way
-#define F_MOUSE_ON_CLICK 0x4548d70ull       // UIButtonMouseAction.OnClick(UIPartViewButtonBase)
-#define F_MOUSE_ON_ENTER 0x4548da0ull       // UIButtonMouseAction.OnPointerEnter(UIPartViewButtonBase)
-#define F_PLAY_ANIMATION 0x44ec3b0ull       // UIPartViewButtonBase.PlayAnimation(eAnimationKind, bool isDisable, float normalizedTime)
-#define F_GCHANDLE_NEW 0x4657a0ull
-#define F_GCHANDLE_TARGET 0x4657f0ull
-#define F_GCHANDLE_FREE 0x465810ull
-#define F_OBJ_ALIVE 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
-#define F_OBJ_NAME 0x3ee4e30ull
-#define F_GET_GAMEOBJECT 0x3edc5c0ull
+#define F_MONITOR_INPUT 0x457ac20ull        // UIUserInputDetector.MonitorInputOnUpdate()
+#define F_CHECK_FADE 0x457acf0ull           // UIUserInputDetector.ckeckFadeState(): 1 = no fade in the way
+#define F_MOUSE_ON_CLICK 0x4579db0ull       // UIButtonMouseAction.OnClick(UIPartViewButtonBase)
+#define F_MOUSE_ON_ENTER 0x4579de0ull       // UIButtonMouseAction.OnPointerEnter(UIPartViewButtonBase)
+#define F_PLAY_ANIMATION 0x451cee0ull       // UIPartViewButtonBase.PlayAnimation(eAnimationKind, bool isDisable, float normalizedTime)
+#define F_GCHANDLE_NEW 0x469da0ull
+#define F_GCHANDLE_TARGET 0x469df0ull
+#define F_GCHANDLE_FREE 0x469e10ull
+#define F_OBJ_ALIVE 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
+#define F_OBJ_NAME 0x3f10820ull
+#define F_GET_GAMEOBJECT 0x3f07fb0ull
 #define DET_USER_INPUT 0x38                 // UIUserInputDetector: m_UserInput, targetLayer, standing Back button
 #define DET_LAYER 0x28
 #define DET_RETURN_BUTTON 0x50
@@ -505,7 +505,7 @@ static struct { uint64_t view; uint32_t handle; } g_buttons[MAX_BUTTONS];
 static uint64_t g_hover_view;
 
 // UIPartViewButtonBase.SetMouseAction(UIButtonMouseAction): remember the button.
-int rt_hook_44ec770(Cpu *c) {
+int rt_hook_451d2a0(Cpu *c) {
     uint64_t view = X(0), action = X(1), lr = c->x[30];
     int free_slot = -1;
     if (!view || !action) return 0;
@@ -583,7 +583,7 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
     return r;
 }
 // UIUserInputDetector.MonitorInputOnUpdate(): the input the screen sees this frame.
-int rt_hook_4549be0(Cpu *c) {
+int rt_hook_457ac20(Cpu *c) {
     static __thread int inside;
     if (inside) return 0;
     uint64_t det = X(0);
@@ -609,10 +609,10 @@ int rt_hook_4549be0(Cpu *c) {
 // pressed button from it. A pressed keyboard key takes the same road: the edit state is told a button was pushed,
 // and the item (UIOptionChoicesItemData_KeyConfig {+0x40 its current SelectButton.eID, +0x44 Action.eID}) binds
 // the key to its action instead and reports its pad button unchanged. Esc closes the dialog without a change.
-#define F_GET_STATE 0x437ae60ull            // AppInput.GetState(int playerIndex, eLayer) (static)
-#define F_EDIT_ON_PUSH 0x44d7d40ull         // UIStateOptionKeyConfigEdit.onPushButton(AppInput.State)
+#define F_GET_STATE 0x43a8eb0ull            // AppInput.GetState(int playerIndex, eLayer) (static)
+#define F_EDIT_ON_PUSH 0x4508ae0ull         // UIStateOptionKeyConfigEdit.onPushButton(AppInput.State)
 static __thread int t_edit_key;              // the key being assigned (-1: none, just close), while onPushButton runs
-int rt_hook_44d7970(Cpu *c) {                // UIStateOptionKeyConfigEdit.exec(float): {+0xa0 eLayer, +0xa8 int playerIndex}
+int rt_hook_4508710(Cpu *c) {                // UIStateOptionKeyConfigEdit.exec(float): {+0xa0 eLayer, +0xa8 int playerIndex}
     uint64_t self = X(0);
     int key = 0;
     if (!enabled() || LD32(self + 0xa8) != 0) return 0;
@@ -626,11 +626,11 @@ int rt_hook_44d7970(Cpu *c) {                // UIStateOptionKeyConfigEdit.exec(
     return 1;
 }
 // UIOptionChoicesItemData_KeyConfig.ResetValue(): Options > Reset puts the row's pad button back; its key as well.
-int rt_hook_453f8e0(Cpu *c) {
+int rt_hook_456fe00(Cpu *c) {
     if (enabled()) pc_action_reset((int)LD32(X(0) + 0x44));
     return 0;
 }
-int rt_hook_45429f0(Cpu *c) {                // UIOptionChoicesItemData_KeyConfig.SetKeyConfigEditButton(AppInput.State) -> SelectButton.eID
+int rt_hook_4572a10(Cpu *c) {                // UIOptionChoicesItemData_KeyConfig.SetKeyConfigEditButton(AppInput.State) -> SelectButton.eID
     if (!t_edit_key) return 0;
     uint64_t item = X(0);
     if (t_edit_key > 0) {

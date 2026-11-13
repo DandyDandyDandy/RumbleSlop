@@ -10,13 +10,13 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_MAIN_GAME_STAGE 0x42a11f0ull      // Wonder.MainGame::get_mainGameStage (through the singleton; null outside a stage)
-#define F_PLAYER_LIST 0x42a1880ull          // Wonder.MainGame::get_playerList -> List<MgPlayer>
-#define F_GOAL_COLI_LIST 0x42f0680ull       // Wonder.MainGameStage::get_goalColiList -> List<MgGoalColi>
-#define F_PLAYER_BALL 0x42c80b0ull          // Wonder.MgPlayer::get_ball -> PhysicsBall
-#define F_GOAL_ENTER 0x4301e40ull           // Wonder.MgGoalColi::OnTriggerEnterPlayer(PhysicsBall)
-#define F_OBJ_ALIVE 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
-#define PLAYER_IS_LOCAL 0x1b8               // MgPlayer.m_IsLocal
+#define F_MAIN_GAME_STAGE 0x42cf030ull      // Wonder.MainGame::get_mainGameStage (through the singleton; null outside a stage)
+#define F_PLAYER_LIST 0x42cf6c0ull          // Wonder.MainGame::get_playerList -> List<MgPlayer>
+#define F_GOAL_COLI_LIST 0x431f2e0ull       // Wonder.MainGameStage::get_goalColiList -> List<MgGoalColi>
+#define F_PLAYER_BALL 0x42f6a40ull          // Wonder.MgPlayer::get_ball -> PhysicsBall
+#define F_GOAL_ENTER 0x4330e70ull           // Wonder.MgGoalColi::OnTriggerEnterPlayer(PhysicsBall)
+#define F_OBJ_ALIVE 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
+#define PLAYER_IS_LOCAL 0x1c0               // MgPlayer.m_IsLocal (0x1b8 in 2.00)
 #define LIST_ITEMS 0x10
 #define LIST_SIZE 0x18
 #define ARR_DATA 0x20

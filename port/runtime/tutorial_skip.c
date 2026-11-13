@@ -11,18 +11,18 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
-#define F_INIT_METADATA 0x44c0d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
-#define F_OBJECT_NEW 0x44c4a0ull
-#define F_GCHANDLE_NEW 0x4657a0ull          // il2cpp_gchandle_new(obj, pinned)
-#define F_GCHANDLE_TARGET 0x4657f0ull
-#define F_GCHANDLE_FREE 0x465810ull
-#define F_USER_PARAM 0x43d4e30ull           // SaveDataContainer.UserParam.entity (static) -> SaveUserParam
-#define F_USER_PARAM_SAVE 0x43d4fb0ull      // SaveDataContainer.UserParam.Save() (static): the game's own save request
-#define F_RIGHT_FOR_DIALOG 0x4441580ull     // UIOperationRightData.CreateForDialog(UIStateBase, bool isSystemView) (static)
-#define F_YESNO_ARG_CTOR 0x44e0000ull       // UIStateArgYesNoDialog..ctor(text, focus, onYes, onNo, system view, open SE, wait sec, no cancel)
-#define F_INTERRUPT_STATE 0x4509b90ull      // UIStateManager.RequestInterruptState(kind, right, arg) (static) -> UIStateHandle
-#define M_CLASS_YESNO_ARG 0x6116910ull
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_INIT_METADATA 0x4506d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
+#define F_OBJECT_NEW 0x450aa0ull
+#define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
+#define F_GCHANDLE_TARGET 0x469df0ull
+#define F_GCHANDLE_FREE 0x469e10ull
+#define F_USER_PARAM 0x4403f70ull           // SaveDataContainer.UserParam.entity (static) -> SaveUserParam
+#define F_USER_PARAM_SAVE 0x44040f0ull      // SaveDataContainer.UserParam.Save() (static): the game's own save request
+#define F_RIGHT_FOR_DIALOG 0x44729c0ull     // UIOperationRightData.CreateForDialog(UIStateBase, bool isSystemView) (static)
+#define F_YESNO_ARG_CTOR 0x4510cc0ull       // UIStateArgYesNoDialog..ctor(text, focus, onYes, onNo, system view, open SE, wait sec, no cancel)
+#define F_INTERRUPT_STATE 0x453a940ull      // UIStateManager.RequestInterruptState(kind, right, arg) (static) -> UIStateHandle
+#define M_CLASS_YESNO_ARG 0x61679d0ull
 #define STATE_YESNO_DIALOG 0x3b             // Def_UIState.eStateKind
 #define USER_ADVENTURE 0x38                 // SaveUserParam -> AdventureParam
 #define ADV_PLAYED_TUTORIAL 0x28            // AdventureParam.m_playedTutorial (bool)
@@ -83,7 +83,7 @@ static int ask(Cpu *c, uint64_t title) {
 // Util.Movie.RequestMgMovieToTutorial(UIStateBase state, Movie.eID movie, bool viewOnly, bool withFollowing): called by
 // the title only, every frame of its last start-up state on a first start, and once from the play-style screen's
 // tutorial entry (where the save already has the tutorial marked as played).
-int rt_hook_4421e60(Cpu *c) {
+int rt_hook_4452e90(Cpu *c) {
     uint64_t a[5], lr = c->x[30];
     for (int i = 0; i < 5; i++) a[i] = c->x[i];
     int held = ask(c, a[0]);

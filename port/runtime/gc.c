@@ -10,12 +10,12 @@
 #include "rt.h"
 
 // The engine helper pushes through two small Boehm entry points that are not in the lift set (only the engine
-// called them): GC_push_one (main+0x3df5a0) and GC_push_all_stack (main+0x3df810). Both reduce to
-// GC_mark_and_push_stack (lifted, main+0x3df5d0) for every word inside the plausible heap bounds; that is what the
+// called them): GC_push_one (main+0x3e3b90) and GC_push_all_stack (main+0x3e3e00). Both reduce to
+// GC_mark_and_push_stack (lifted, main+0x3e3bc0) for every word inside the plausible heap bounds; that is what the
 // host does here, eagerly.
-#define GC_MARK_AND_PUSH_STACK (GUEST_BASE + 0x3df5d0)
-#define GC_LEAST_PLAUSIBLE     (GUEST_BASE + 0x64424b0)
-#define GC_GREATEST_PLAUSIBLE  (GUEST_BASE + 0x6c9f620)
+#define GC_MARK_AND_PUSH_STACK (GUEST_BASE + 0x3e3bc0)
+#define GC_LEAST_PLAUSIBLE     (GUEST_BASE + 0x6496a48)
+#define GC_GREATEST_PLAUSIBLE  (GUEST_BASE + 0x6cf47a0)
 static void gc_push_word(Cpu *c, uint64_t w) {
     if (w >= LD64(GC_LEAST_PLAUSIBLE) && w < LD64(GC_GREATEST_PLAUSIBLE)) rt_call(c, GC_MARK_AND_PUSH_STACK, 1, w);
 }
@@ -29,15 +29,15 @@ static RtThread *g_stopped[512];
 static int g_nstopped;
 static uint64_t g_stops;
 
-// Which threads stop. The Switch engine's helper (main+0x1c163f0) walks the table the lifted runtime keeps of the
+// Which threads stop. The Switch engine's helper (main+0x1c1a9f0) walks the table the lifted runtime keeps of the
 // threads registered with the collector: 4096 slots of {u32 in use} and {nn::os::ThreadType *} (stride 8) behind
-// the pointers at main+0x613bde0 / +0x613bde8, enabled by the byte behind main+0x613bdf0. The host does the same:
+// the pointers at main+0x618d348 / +0x618d350, enabled by the byte behind main+0x618d358. The host does the same:
 // only registered threads are suspended and scanned. Engine threads that merely have a guest context (they called
 // an il2cpp API once) keep running - the engine relies on that, e.g. GarbageCollectSharedAssets stops the world and
 // then waits for its own worker threads.
-#define GC_THREAD_FLAGS   (GUEST_BASE + 0x613bde0)
-#define GC_THREAD_PTRS    (GUEST_BASE + 0x613bde8)
-#define GC_THREAD_ENABLE  (GUEST_BASE + 0x613bdf0)
+#define GC_THREAD_FLAGS   (GUEST_BASE + 0x618d348)
+#define GC_THREAD_PTRS    (GUEST_BASE + 0x618d350)
+#define GC_THREAD_ENABLE  (GUEST_BASE + 0x618d358)
 #define GC_THREAD_SLOTS   4096
 static int gc_registered(uint64_t thread_type) {
     uint64_t flags = LD64(GC_THREAD_FLAGS), ptrs = LD64(GC_THREAD_PTRS);
@@ -149,18 +149,18 @@ void rt_gc_init(void) {}
 
 // ---- engine helpers called by the lifted runtime (work/unity/closure/boundary_runtime_to_engine.tsv)
 static const struct { uint64_t off; const char *host; HostFn fn; } g_helpers[] = {
-    {0xc7e240, "_ZdlPv", 0},   {0xc7fcc0, "_Znwm", 0},  {0xc7fff0, "_Znam", 0},     {0xc802f0, "_ZdaPv", 0},
-    {0x10f29d0, "malloc", 0},  {0x10f29f0, "free", 0},  {0x10f2a10, "calloc", 0},   {0x10f2a60, "realloc", 0},
-    {0x10f2a80, "aligned_alloc", 0},
-    {0x10f1c60, "engine_gc_page_alloc", 0},
-    {0x10f1c90, "engine_gc_stack_base", 0},
-    {0x10f7fc0, "engine_flag_10f7fc0", 0},
-    {0x10f8ba0, "engine_is_mounted", 0},
-    {0x10f8410, "engine_datetime_ticks", 0},
-    {0x1104f40, "engine_register_plugin", 0},
-    {0x1c163f0, "gc_stop_world", gc_stop_world},
-    {0x1c16470, "gc_start_world", gc_start_world},
-    {0x1c164e0, "gc_push_stacks", gc_push_stacks},
+    {0xc82840, "_ZdlPv", 0},   {0xc842c0, "_Znwm", 0},  {0xc845f0, "_Znam", 0},     {0xc848f0, "_ZdaPv", 0},
+    {0x10f6fd0, "malloc", 0},  {0x10f6ff0, "free", 0},  {0x10f7010, "calloc", 0},   {0x10f7060, "realloc", 0},
+    {0x10f7080, "aligned_alloc", 0},
+    {0x10f6260, "engine_gc_page_alloc", 0},
+    {0x10f6290, "engine_gc_stack_base", 0},
+    {0x10fc5c0, "engine_flag_10f7fc0", 0},
+    {0x10fd1a0, "engine_is_mounted", 0},
+    {0x10fca10, "engine_datetime_ticks", 0},
+    {0x1109540, "engine_register_plugin", 0},
+    {0x1c1a9f0, "gc_stop_world", gc_stop_world},
+    {0x1c1aa70, "gc_start_world", gc_start_world},
+    {0x1c1aae0, "gc_push_stacks", gc_push_stacks},
 };
 
 void rt_bind_engine_helpers(void) {

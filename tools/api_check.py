@@ -3,7 +3,7 @@ import sys; sys.path.insert(0,TOOLS)
 from api_map_data import W
 import numpy as np, bisect, re
 s=np.load(W + r'\work\unity\api\fde_starts.npy').tolist()
-i0=bisect.bisect_left(s,0x4652c0); i1=bisect.bisect_left(s,0x465d28)
+i0=bisect.bisect_left(s,0x4698c0); i1=bisect.bisect_left(s,0x46a328)
 cl=s[i0:i1]; used=[v[0] for v in W.values()]
 print(len(cl),len(W),len(set(used)), 'unassigned',[hex(a) for a in cl if a not in used], 'bad',[hex(a) for a in used if a not in cl])
 print('order ok', used==sorted(used))

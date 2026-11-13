@@ -14,7 +14,7 @@ def strnote(lines):
         m = re.match(r'add (x\d+), (x\d+), #(0x[0-9a-f]+|\d+)$', l)
         if m and m.group(2) in pages:
             t = pages[m.group(2)] + int(m.group(3), 0)
-            if 0x483e000 <= t < 0x5dd4000:
+            if 0x483e000 <= t < 0x5e22000:
                 st = d[t:t+48].split(b'\0')[0]
                 if len(st) >= 4 and all(32 <= c < 127 for c in st): l += ' {%r}' % st.decode()
         out.append(l)

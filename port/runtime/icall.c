@@ -183,7 +183,7 @@ static void icall_body(Cpu *c, void *user) {
     // function on its render thread.
     if (__builtin_expect(e->plugin_event, 0))
         for (int i = 0; i < 3; i++)
-            if (c->x[i] - GUEST_BASE < 0x4840000ull && !(c->x[i] & 3) && rt_lifted_lookup(c->x[i])) {
+            if (c->x[i] - GUEST_BASE < 0x487b000ull && !(c->x[i] & 3) && rt_lifted_lookup(c->x[i])) {
                 static volatile LONG logged;
                 if (InterlockedIncrement(&logged) <= 4)
                     rt_log("icall %s: argument %d is guest code main+%#llx, passing a host stub", e->name, i, (unsigned long long)(c->x[i] - GUEST_BASE));

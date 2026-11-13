@@ -24,24 +24,24 @@
 #include "netplay.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_INIT_METADATA 0x44c0d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
-#define F_CLASS_INIT 0x44c310ull            // il2cpp_codegen_runtime_class_init(klass)
-#define F_SZARRAY_NEW 0x44c230ull           // SZArrayNew(array class, length)
-#define F_WRITE_BARRIER 0x44c010ull         // Il2CppCodeGenWriteBarrier(void **slot, void *value)
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
-#define F_ON_EVENT_RECEIVED 0x227c010ull    // static SessionAPI.OnEventReceived(byte[] data, PeerID from, bool reliable)
-#define F_NOTIFY_READY_INTERNET 0x2298aa0ull   // OnlineEventObserverExtension.NotifyReadyToUserInternet(list)
-#define F_NOTIFY_DISCONNECT 0x2298e10ull       // ...NotifyOnDisconnect(list)
-#define F_NOTIFY_MASTER_CHANGED 0x2298ff0ull   // SessionEventObserverExtension.NotifyMasterChanged(list, PeerID)
-#define F_NOTIFY_MASTER_LEFT 0x2299120ull      // ...NotifyMasterLeftRoom(list, MasterLeftReason)
-#define F_NOTIFY_PEERS 0x2299250ull            // ...NotifyPeerListChanged(list, PeerID[])
-#define F_UNITASK_FROM_RESULT_BOOL 0x256ae40ull   // UniTask.FromResult<bool>(bool, MethodInfo *)
+#define F_INIT_METADATA 0x4506d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
+#define F_CLASS_INIT 0x450910ull            // il2cpp_codegen_runtime_class_init(klass)
+#define F_SZARRAY_NEW 0x450830ull           // SZArrayNew(array class, length)
+#define F_WRITE_BARRIER 0x450610ull         // Il2CppCodeGenWriteBarrier(void **slot, void *value)
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_ON_EVENT_RECEIVED 0x2283a00ull    // static SessionAPI.OnEventReceived(byte[] data, PeerID from, bool reliable)
+#define F_NOTIFY_READY_INTERNET 0x22a0490ull   // OnlineEventObserverExtension.NotifyReadyToUserInternet(list)
+#define F_NOTIFY_DISCONNECT 0x22a0800ull       // ...NotifyOnDisconnect(list)
+#define F_NOTIFY_MASTER_CHANGED 0x22a09e0ull   // SessionEventObserverExtension.NotifyMasterChanged(list, PeerID)
+#define F_NOTIFY_MASTER_LEFT 0x22a0b10ull      // ...NotifyMasterLeftRoom(list, MasterLeftReason)
+#define F_NOTIFY_PEERS 0x22a0c40ull            // ...NotifyPeerListChanged(list, PeerID[])
+#define F_UNITASK_FROM_RESULT_BOOL 0x2575cf0ull   // UniTask.FromResult<bool>(bool, MethodInfo *)
 // metadata usage pointer slots (each holds the address of the slot that receives the class / method)
-#define M_CLASS_SM 0x60d21e8ull             // GCS1.Network.NPLN.NplnMultiplaySM
-#define M_CLASS_MULTIPLAY 0x60d0a98ull      // GCS1.Network.MultiplayAPI
-#define M_CLASS_PEERID_ARR 0x60d2a40ull     // GCS1.Network.PeerID[]
-#define M_CLASS_BYTE_ARR 0x60cf328ull       // byte[]
-#define M_METHOD_FROM_RESULT_BOOL 0x60d3bc0ull
+#define M_CLASS_SM 0x61231e8ull             // GCS1.Network.NPLN.NplnMultiplaySM
+#define M_CLASS_MULTIPLAY 0x6121a98ull      // GCS1.Network.MultiplayAPI
+#define M_CLASS_PEERID_ARR 0x6123a40ull     // GCS1.Network.PeerID[]
+#define M_CLASS_BYTE_ARR 0x6120328ull       // byte[]
+#define M_METHOD_FROM_RESULT_BOOL 0x6124bc0ull
 // object layouts
 #define SM_STATIC_INSTANCE 0x30
 #define SM_ONLINE_OBSERVERS 0x40
@@ -226,7 +226,7 @@ void online_tick(Cpu *c) {
 
 // ---------------------------------------------------------------------------------------------------- matchmaking
 // NplnMatchmakingAPI.RequestMatchmaking(IMatchmakingContext context)
-int rt_hook_2262740(Cpu *c) {
+int rt_hook_226a130(Cpu *c) {
     uint64_t ctx = X(1);
     const char *name = ctx ? (const char *)(uintptr_t)LD64(LD64(ctx) + 0x10) : "";
     NpConfig cfg;
@@ -257,7 +257,7 @@ int rt_hook_2262740(Cpu *c) {
     return 1;
 }
 // NplnMatchmakingAPI.RequestLeaveRoom()
-int rt_hook_2262910(Cpu *c) {
+int rt_hook_226a300(Cpu *c) {
     if (g_state == ST_IDLE) return 0;
     rt_log("online: leaving the room");
     np_leave(g_np);
@@ -268,12 +268,12 @@ int rt_hook_2262910(Cpu *c) {
 }
 
 // ---------------------------------------------------------------------------------------------------- NplnAPIFacade
-int rt_hook_2263240(Cpu *c) {   // double get_NetworkTime()
+int rt_hook_226ac30(Cpu *c) {   // double get_NetworkTime()
     if (g_state == ST_IDLE) return 0;
     rt_setd(c, 0, g_frame_time);
     return 1;
 }
-int rt_hook_2263430(Cpu *c) {   // int get_ServerRTT()
+int rt_hook_226ae20(Cpu *c) {   // int get_ServerRTT()
     if (g_state != ST_INROOM) return 0;
     int r = np_rtt(g_np, np_master_id(g_np));
     RET(r < 0 ? 0 : r);
@@ -286,42 +286,42 @@ static int is_peer(uint64_t id) {
         if (ids[i] == id) return 1;
     return 0;
 }
-int rt_hook_2263440(Cpu *c) {   // bool IsConnected(PeerID)
+int rt_hook_226ae30(Cpu *c) {   // bool IsConnected(PeerID)
     if (g_state != ST_INROOM) return 0;
     RET((X(2) & 1) && is_peer(X(1)));
     return 1;
 }
-int rt_hook_2263560(Cpu *c) {   // bool IsConnectionServer(PeerID)
+int rt_hook_226af50(Cpu *c) {   // bool IsConnectionServer(PeerID)
     if (g_state != ST_INROOM) return 0;
     RET((X(2) & 1) && X(1) == np_master_id(g_np));
     return 1;
 }
-int rt_hook_2263680(Cpu *c) {   // bool get_IsMatchmaking()
+int rt_hook_226b070(Cpu *c) {   // bool get_IsMatchmaking()
     if (g_state == ST_IDLE) return 0;
     RET(0);
     return 1;
 }
-int rt_hook_2263830(Cpu *c) {   // bool get_IsInRoom()
+int rt_hook_226b220(Cpu *c) {   // bool get_IsInRoom()
     if (g_state == ST_IDLE) return 0;
     RET(g_state == ST_INROOM);
     return 1;
 }
-int rt_hook_2263a70(Cpu *c) {   // bool get_IsLocalNetwork()
+int rt_hook_226b460(Cpu *c) {   // bool get_IsLocalNetwork()
     if (g_state == ST_IDLE) return 0;
     RET(0);
     return 1;
 }
-int rt_hook_2263bc0(Cpu *c) {   // bool get_IsProcessing()
+int rt_hook_226b5b0(Cpu *c) {   // bool get_IsProcessing()
     if (g_state == ST_IDLE) return 0;
     RET(g_state == ST_CONNECTING);
     return 1;
 }
-int rt_hook_2263db0(Cpu *c) {   // string get_CurrentState()
+int rt_hook_226b7a0(Cpu *c) {   // string get_CurrentState()
     if (g_state == ST_IDLE) return 0;
     RET(new_str(c, g_state == ST_INROOM ? "PC room" : "PC connecting"));
     return 1;
 }
-int rt_hook_2263ec0(Cpu *c) {   // string get_GameID()
+int rt_hook_226b8b0(Cpu *c) {   // string get_GameID()
     if (g_state == ST_IDLE) return 0;
     RET(new_str(c, "pc"));
     return 1;
@@ -334,8 +334,8 @@ static int leave_all(Cpu *c, const char *what) {
     went_offline(c);
     return 1;
 }
-int rt_hook_2264110(Cpu *c) { return leave_all(c, "disconnect"); }                    // void Disconnect()
-int rt_hook_22641c0(Cpu *c) {                                                         // void Cancel()
+int rt_hook_226bb00(Cpu *c) { return leave_all(c, "disconnect"); }                    // void Disconnect()
+int rt_hook_226bbb0(Cpu *c) {                                                         // void Cancel()
     if (g_state != ST_CONNECTING) return 0;
     return leave_all(c, "cancelled while connecting");
 }
@@ -374,28 +374,28 @@ static int send_array(Cpu *c, uint64_t payload, int reliable, uint64_t targets) 
         if (LD8(targets + ARR_DATA + 16 * (uint64_t)i + 8) & 1) ids[n++] = LD64(targets + ARR_DATA + 16 * (uint64_t)i);
     return send_ids(c, payload, reliable, ids, n);
 }
-int rt_hook_227f940(Cpu *c) {   // bool SendInternal(byte code, byte[] payload, bool sendReliable, ReceiverGroup receiver)
+int rt_hook_2287330(Cpu *c) {   // bool SendInternal(byte code, byte[] payload, bool sendReliable, ReceiverGroup receiver)
     if (g_state != ST_INROOM) return 0;
     RET(send_group(c, X(2), (int)(X(3) & 1), (int)W(4)));
     return 1;
 }
-int rt_hook_227fb50(Cpu *c) {   // bool SendInternal(byte code, byte[] payload, PeerID peerId, bool sendReliable)
+int rt_hook_2287540(Cpu *c) {   // bool SendInternal(byte code, byte[] payload, PeerID peerId, bool sendReliable)
     if (g_state != ST_INROOM) return 0;
     uint64_t id = X(3);
     RET(X(2) && (X(4) & 1) ? send_ids(c, X(2), (int)(X(5) & 1), &id, 1) : 0);
     return 1;
 }
-int rt_hook_227fda0(Cpu *c) {   // bool SendStreamUnreliable(byte[] payload)
+int rt_hook_2287790(Cpu *c) {   // bool SendStreamUnreliable(byte[] payload)
     if (g_state != ST_INROOM) return 0;
     RET(send_group(c, X(1), 0, 0));
     return 1;
 }
-int rt_hook_227ffa0(Cpu *c) {   // bool SendStreamUnreliable(byte[] payload, PeerID[] targets)
+int rt_hook_2287990(Cpu *c) {   // bool SendStreamUnreliable(byte[] payload, PeerID[] targets)
     if (g_state != ST_INROOM) return 0;
     RET(send_array(c, X(1), 0, X(2)));
     return 1;
 }
-int rt_hook_22801b0(Cpu *c) {   // bool get_CanParticipate()
+int rt_hook_2287ba0(Cpu *c) {   // bool get_CanParticipate()
     if (g_state != ST_INROOM) return 0;
     RET(np_can_participate(g_np));
     return 1;
@@ -404,40 +404,40 @@ static int from_result(Cpu *c, int v) {
     rt_call(c, FN(F_UNITASK_FROM_RESULT_BOOL), 2, (uint64_t)v, meta(c, M_METHOD_FROM_RESULT_BOOL));   // UniTask<bool> in x0, x1
     return 1;
 }
-int rt_hook_22802c0(Cpu *c) {   // UniTask<bool> SetCanParticipateAsync(bool canParticipate)
+int rt_hook_2287cb0(Cpu *c) {   // UniTask<bool> SetCanParticipateAsync(bool canParticipate)
     if (g_state != ST_INROOM) return 0;
     int ok = np_set_can_participate(g_np, (int)(X(1) & 1));
     rt_log("online: room %s for new players%s", (X(1) & 1) ? "open" : "closed", ok ? "" : " (refused: not the host)");
     return from_result(c, ok);
 }
-int rt_hook_2280410(Cpu *c) {   // PeerID get_LocalPeerID()
+int rt_hook_2287e00(Cpu *c) {   // PeerID get_LocalPeerID()
     if (g_state != ST_INROOM) return 0;
     c->x[0] = np_local_id(g_np);
     c->x[1] = 1;
     return 1;
 }
-int rt_hook_2280520(Cpu *c) {   // PeerID get_MasterPeerID()
+int rt_hook_2287f10(Cpu *c) {   // PeerID get_MasterPeerID()
     if (g_state != ST_INROOM) return 0;
     c->x[0] = np_master_id(g_np);
     c->x[1] = 1;
     return 1;
 }
-int rt_hook_2280630(Cpu *c) {   // UniTask<bool> RequestPromoteToMasterAsync(): the creator stays master
+int rt_hook_2288020(Cpu *c) {   // UniTask<bool> RequestPromoteToMasterAsync(): the creator stays master
     if (g_state != ST_INROOM) return 0;
     return from_result(c, np_master_id(g_np) == np_local_id(g_np));
 }
-int rt_hook_2280700(Cpu *c) {   // PeerID[] get_Peers()
+int rt_hook_22880f0(Cpu *c) {   // PeerID[] get_Peers()
     if (g_state != ST_INROOM) return 0;
     RET(new_peers(c));
     return 1;
 }
-int rt_hook_2280830(Cpu *c) {   // int GetRtt(PeerID)
+int rt_hook_2288220(Cpu *c) {   // int GetRtt(PeerID)
     if (g_state != ST_INROOM) return 0;
     int r = np_rtt(g_np, X(1));
     RET(r < 0 ? 0 : r);
     return 1;
 }
-int rt_hook_2280c80(Cpu *c) {   // string get_RoomID()
+int rt_hook_2288670(Cpu *c) {   // string get_RoomID()
     char code[32];
     if (g_state != ST_INROOM) return 0;
     snprintf(code, sizeof code, "pc-%08x", (unsigned)(np_master_id(g_np) & 0xffffffff));
@@ -450,9 +450,9 @@ int rt_hook_2280c80(Cpu *c) {   // string get_RoomID()
 // of local-wireless rooms. There is no such service in the PC port: the search finishes at once with no rooms.
 // FindRoomContext {+0 Type: 0 local Adventure, 1 local Battle, 2 by world}; a completed UniTask<T> is
 // {source = null, result, token = 0}, returned through x8.
-#define M_CLASS_LOCAL_ROOM_ARR 0x60d37c8ull    // GCS1.Network.LocalRoomInfo[]
-#define M_CLASS_WORLD_ROOM_ARR 0x60d38a8ull    // GCS1.Network.WorldNumRoomInfo[]
-int rt_hook_2272270(Cpu *c) {
+#define M_CLASS_LOCAL_ROOM_ARR 0x61247c8ull    // GCS1.Network.LocalRoomInfo[]
+#define M_CLASS_WORLD_ROOM_ARR 0x61248a8ull    // GCS1.Network.WorldNumRoomInfo[]
+int rt_hook_2279c60(Cpu *c) {
     uint64_t out = c->x[8], ctx = X(1);
     int type = ctx ? (int)LD32(ctx) : 2;
     uint64_t arr = rt_call(c, FN(F_SZARRAY_NEW), 2, meta(c, type == 2 ? M_CLASS_WORLD_ROOM_ARR : M_CLASS_LOCAL_ROOM_ARR), 0ull);

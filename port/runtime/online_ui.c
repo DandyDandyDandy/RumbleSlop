@@ -11,27 +11,27 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
-#define F_TMP_GET_TEXT 0x3e06400ull         // TMP_Text.get_text()
-#define F_TMP_SET_TEXT 0x3e0caa0ull         // TMP_Text.SetText(string, bool syncTextInputBox)
-#define F_TMP_GET_FONT_SIZE 0x3e07440ull
-#define F_TMP_SET_AUTO_SIZING 0x3e076d0ull
-#define F_TMP_GET_AUTO_SIZING 0x3e076c0ull
-#define F_TMP_SET_FONT_SIZE_MIN 0x3e07740ull
-#define F_TMP_SET_FONT_SIZE_MAX 0x3e077b0ull
-#define F_TMP_SET_CHAR_SPACING 0x3e07980ull
-#define F_TMP_SET_WORD_WRAPPING 0x3e07c20ull
-#define F_SET_EXPLANATION 0x46bf430ull
-#define F_GET_GAMEOBJECT 0x3edc5c0ull       // UnityEngine.Component::get_gameObject
-#define F_GET_TRANSFORM 0x3edc570ull        // UnityEngine.Component::get_transform
-#define F_SET_ACTIVE 0x3ee0320ull           // UnityEngine.GameObject::SetActive(bool)
-#define F_GO_ACTIVE_SELF 0x3ee0390ull   // UnityEngine.GameObject::get_activeSelf
-#define F_RT_GET_ANCHOR_MIN 0x3eec590ull    // UnityEngine.RectTransform
-#define F_RT_GET_ANCHOR_MAX 0x3eec730ull
-#define F_RT_GET_ANCHORED_POS 0x3eec8d0ull
-#define F_RT_SET_ANCHORED_POS 0x3eec9a0ull
-#define F_RT_GET_SIZE_DELTA 0x3eeca70ull
-#define F_RT_SET_SIZE_DELTA 0x3eecb40ull
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_TMP_GET_TEXT 0x3e31c60ull         // TMP_Text.get_text()
+#define F_TMP_SET_TEXT 0x3e38300ull         // TMP_Text.SetText(string, bool syncTextInputBox)
+#define F_TMP_GET_FONT_SIZE 0x3e32ca0ull
+#define F_TMP_SET_AUTO_SIZING 0x3e32f30ull
+#define F_TMP_GET_AUTO_SIZING 0x3e32f20ull
+#define F_TMP_SET_FONT_SIZE_MIN 0x3e32fa0ull
+#define F_TMP_SET_FONT_SIZE_MAX 0x3e33010ull
+#define F_TMP_SET_CHAR_SPACING 0x3e331e0ull
+#define F_TMP_SET_WORD_WRAPPING 0x3e33480ull
+#define F_SET_EXPLANATION 0x46f7550ull
+#define F_GET_GAMEOBJECT 0x3f07fb0ull       // UnityEngine.Component::get_gameObject
+#define F_GET_TRANSFORM 0x3f07f60ull        // UnityEngine.Component::get_transform
+#define F_SET_ACTIVE 0x3f0bd10ull           // UnityEngine.GameObject::SetActive(bool)
+#define F_GO_ACTIVE_SELF 0x3f0bd80ull   // UnityEngine.GameObject::get_activeSelf
+#define F_RT_GET_ANCHOR_MIN 0x3f17f80ull    // UnityEngine.RectTransform
+#define F_RT_GET_ANCHOR_MAX 0x3f18120ull
+#define F_RT_GET_ANCHORED_POS 0x3f182c0ull
+#define F_RT_SET_ANCHORED_POS 0x3f18390ull
+#define F_RT_GET_SIZE_DELTA 0x3f18460ull
+#define F_RT_SET_SIZE_DELTA 0x3f18530ull
 #define STR_LEN 0x10
 #define STR_CHARS 0x14
 #define ARR_LEN 0x18
@@ -81,7 +81,7 @@ static int code_chars(uint64_t s, uint16_t *out, int max) {
 // UIViewBattleRoyaleFriendMatchEnterPassword.SetRoomNameText(string content): {+0x60 UIPartViewPasswordChar[] boxes},
 // UIPartViewPasswordChar {+0x28 TextMeshProUGUI}. The six one-character boxes become one text box: the first box is
 // widened over the place of all six, the others are switched off, and it shows the whole text.
-int rt_hook_46bf4a0(Cpu *c) {
+int rt_hook_46f75c0(Cpu *c) {
     uint64_t self = X(0), boxes = LD64(self + 0x60);
     uint16_t code[32], shown[40];
     int n = code_chars(X(1), code, 32), nb = boxes ? (int)LD32(boxes + ARR_LEN) : 0, m = 0;
@@ -122,7 +122,7 @@ int rt_hook_46bf4a0(Cpu *c) {
 }
 // UIViewBattleRoyaleFriendMatchEnterPassword.SetExplanationText(eTypeOfUse): {+0x68 TextMeshProUGUI explanation}.
 // The English text says "six-character".
-int rt_hook_46bf430(Cpu *c) {
+int rt_hook_46f7550(Cpu *c) {
     static __thread int inside;
     static const char from[] = "six-character", to[] = "12-character";
     if (inside) return 0;
@@ -164,7 +164,7 @@ static void clipboard_set(const uint16_t *s, int n) {
 // UIPasswordDisplayStatusModule.setupPasswordView(): {+0x10 bool visible, +0x18 UIPartViewMatchingPassword view};
 // the view: {+0x28 TextMeshProUGUI, +0x50 string cached password}. Runs when the lobby is set up and each time the
 // player shows or hides the code (R). It starts hidden (the game's default).
-int rt_hook_4637b40(Cpu *c) {
+int rt_hook_466dd10(Cpu *c) {
     uint64_t self = X(0), view = LD64(self + 0x18), s = view ? LD64(view + 0x50) : 0;
     int len = s ? (int)LD32(s + STR_LEN) : 0;
     if (len > 6 && len < 64) {
@@ -181,13 +181,13 @@ int rt_hook_4637b40(Cpu *c) {
 // module object (CharacterInputModule_SwitchForPassword) stays, and its per-frame MonitorCharacterInput, empty on the
 // console, reads the PC keyboard here: letters and digits append (upper case), Backspace deletes, Ctrl+V pastes.
 // CharacterInputModule_Base {+0x10 StringBuilder sbInputed}.
-#define F_CHOICES_WINDOWS 0x461cd20ull      // UIViewCtrl_EnterPassword.createChoicesModule_Windows()
-#define F_SB_LENGTH 0x3743960ull            // StringBuilder.get_Length()
-#define F_SB_APPEND 0x3744700ull            // StringBuilder.Append(string)
-#define F_SB_REMOVE 0x3744dc0ull            // StringBuilder.Remove(int start, int length)
-#define F_SB_CLEAR 0x3743cf0ull             // StringBuilder.Clear()
-#define F_ON_UPDATE_INPUT 0x47a6d00ull      // CharacterInputModule_Base.onUpdateInputStr()
-#define F_BUTTON_SET_TEXT 0x44ed430ull      // UIPartViewIndependentButton.SetText(string)
+#define F_CHOICES_WINDOWS 0x4652910ull      // UIViewCtrl_EnterPassword.createChoicesModule_Windows()
+#define F_SB_LENGTH 0x376f070ull            // StringBuilder.get_Length()
+#define F_SB_APPEND 0x376fe10ull            // StringBuilder.Append(string)
+#define F_SB_REMOVE 0x37704d0ull            // StringBuilder.Remove(int start, int length)
+#define F_SB_CLEAR 0x376f400ull             // StringBuilder.Clear()
+#define F_ON_UPDATE_INPUT 0x47e0e20ull      // CharacterInputModule_Base.onUpdateInputStr()
+#define F_BUTTON_SET_TEXT 0x451df60ull      // UIPartViewIndependentButton.SetText(string)
 #define CODE_MAX 12                         // characters of a PC room code
 static uint64_t g_typing_tick;
 static int g_code_len;                       // characters in the text box, as of the last frame it was read
@@ -222,7 +222,7 @@ static int sb_append(Cpu *c, uint64_t sb, int len, uint16_t ch) {
     return len + 1;
 }
 // CharacterInputModule_Base.MonitorCharacterInput(): called every frame while the screen accepts input.
-int rt_hook_47a6ce0(Cpu *c) {
+int rt_hook_47e0e00(Cpu *c) {
     static uint8_t down[256];
     uint64_t self = X(0), sb = LD64(self + 0x10), now = GetTickCount64();
     int fresh = now - g_typing_tick > 500, focus = window_focused(), changed = 0;
@@ -277,21 +277,21 @@ int rt_hook_47a6ce0(Cpu *c) {
     return 1;
 }
 // CharacterInputModule_SwitchForPassword.OpenKeyboard(): there is no keyboard to open, typing is always on.
-int rt_hook_47a6f20(Cpu *c) { (void)c; return 1; }
+int rt_hook_47e1040(Cpu *c) { (void)c; return 1; }
 // The game counts a password as complete at six characters: it then enables the Search button and presses it by
 // itself. A PC room code is complete at CODE_MAX characters.
 // UIViewCtrl_EnterPassword.SetEnableSearchBtn(bool isDisable)
-int rt_hook_461c360(Cpu *c) {
+int rt_hook_4651f50(Cpu *c) {
     if (rt_text_entry_active()) c->x[1] = g_code_len < CODE_MAX;
     return 0;
 }
 // UIViewCtrl_EnterPassword.ForceFocusOnDecide()
-int rt_hook_461c5b0(Cpu *c) {
+int rt_hook_46521a0(Cpu *c) {
     (void)c;
     return rt_text_entry_active() && g_code_len < CODE_MAX;
 }
 // CharacterInputModule_SwitchForPassword.SetStr(string): where the game's paste button delivers the clipboard text.
-int rt_hook_47a7000(Cpu *c) {
+int rt_hook_47e1120(Cpu *c) {
     uint64_t self = X(0), s = X(1), sb = LD64(self + 0x10);
     uint16_t buf[64];
     int n = 0, len = 0, sl = s ? (int)LD32(s + STR_LEN) : 0;
@@ -315,13 +315,13 @@ static void pc_layout(Cpu *c) {
     if (btn) rt_call(c, FN(F_BUTTON_SET_TEXT), 3, btn, new_str16(c, label, 14), 0ull);
 }
 // UIViewCtrl_EnterPassword.createChoicesModule_TouchScreenKeyboard(): use the PC layout.
-int rt_hook_461c8e0(Cpu *c) {
+int rt_hook_46524d0(Cpu *c) {
     pc_layout(c);
     return 1;
 }
 // UIViewCtrl_EnterPassword.setupChoicesGroupModule(): the console version builds the touch layout and then hides
 // the paste button; build the PC layout and leave the button.
-int rt_hook_461c8b0(Cpu *c) {
+int rt_hook_46524a0(Cpu *c) {
     pc_layout(c);
     return 1;
 }
@@ -332,13 +332,13 @@ int rt_hook_461c8b0(Cpu *c) {
 // ends in GUIUtility.systemCopyBuffer = the session code.
 // UIViewCtrl_BtlSettingsLobby_Operable {+0x68 choices module {+0x10 -> {+0x20 UIChoicesEventCaller_External}}};
 // UIViewBattleSettingsLobby {+0x50 copy button}.
-#define F_INIT_METADATA 0x44c0d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
-#define F_OBJECT_NEW 0x44c4a0ull            // il2cpp_codegen_object_new(klass)
-#define F_CLASS_GET_METHODS 0x4654b0ull     // il2cpp_class_get_methods(klass, void **iter)
-#define F_VIEW_SET_ACTIVE 0x44e53b0ull      // UIPartViewBase.SetActive(bool)
-#define F_REGISTERED_EVENT_CTOR 0x4579e80ull   // RegisteredEvent..ctor(object target, IntPtr method)
-#define F_SET_INDEPENDENT_BUTTON 0x457aca0ull  // UIChoicesEventCaller_External.SetIndependentButtonEvent(input, button, event, onPointerEnter, needDecideSE)
-#define M_CLASS_REGISTERED_EVENT 0x611f548ull
+#define F_INIT_METADATA 0x4506d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
+#define F_OBJECT_NEW 0x450aa0ull            // il2cpp_codegen_object_new(klass)
+#define F_CLASS_GET_METHODS 0x469ab0ull     // il2cpp_class_get_methods(klass, void **iter)
+#define F_VIEW_SET_ACTIVE 0x4515ef0ull      // UIPartViewBase.SetActive(bool)
+#define F_REGISTERED_EVENT_CTOR 0x45ac2e0ull   // RegisteredEvent..ctor(object target, IntPtr method)
+#define F_SET_INDEPENDENT_BUTTON 0x45ad140ull  // UIChoicesEventCaller_External.SetIndependentButtonEvent(input, button, event, onPointerEnter, needDecideSE)
+#define M_CLASS_REGISTERED_EVENT 0x6170730ull
 #define INPUT_CLIPBOARD_COPY 41
 static uint64_t find_method(Cpu *c, uint64_t klass, const char *name) {
     uint64_t iter = 0, m;
@@ -353,30 +353,30 @@ static uint64_t class_of_slot(Cpu *c, uint64_t slot_ptr) {
 }
 // The button is an empty pill in this build. Make it a small square icon button like the lobby's other ones and put
 // it at the left end of the password panel. The icon is Google's Material "content copy" (see icons\README.txt).
-#define F_GAMEOBJECT_CTOR 0x3ee0840ull      // GameObject..ctor(string name)
-#define F_GO_GET_TRANSFORM 0x3ee0150ull     // GameObject.get_transform()
-#define F_GO_ADD_COMPONENT 0x2462270ull     // GameObject.AddComponent<T>() (shared; MethodInfo selects T)
-#define F_T_SET_PARENT 0x3eefbe0ull         // Transform.SetParent(Transform, bool worldPositionStays)
-#define F_T_GET_POSITION 0x3eee800ull
-#define F_T_SET_POSITION 0x3eee8d0ull
-#define F_T_LOSSY_SCALE 0x3ef2bb0ull
-#define F_RT_GET_RECT 0x3eec4c0ull          // RectTransform.get_rect(): x, y, width, height in v0..v3
-#define F_TEX_CTOR 0x3ebd6d0ull             // Texture2D..ctor(int, int)
-#define F_LOAD_IMAGE 0x3f27ae0ull           // ImageConversion.LoadImage(Texture2D, byte[])
-#define F_SPRITE_CREATE 0x3ef6790ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
-#define F_IMAGE_SET_SPRITE 0x3fb00e0ull
-#define F_GRAPHIC_SET_RAYCAST 0x3fb8c20ull
-#define F_GRAPHIC_SET_COLOR 0x3fb8bc0ull     // Graphic.set_color(Color): four floats in v0..v3
-#define F_SZARRAY_NEW 0x44c230ull
-#define F_GCHANDLE_NEW 0x4657a0ull          // il2cpp_gchandle_new(obj, pinned)
-#define F_GCHANDLE_TARGET 0x4657f0ull
-#define M_CLASS_GAMEOBJECT 0x60c9e98ull
-#define M_CLASS_TEXTURE2D 0x60d0658ull
-#define M_CLASS_BYTE_ARR 0x60cf328ull
-#define M_METHOD_ADD_IMAGE 0x60ffb08ull     // GameObject.AddComponent<UnityEngine.UI.Image>
-#define F_OBJ_ALIVE 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
-#define F_GCHANDLE_FREE 0x465810ull
-#define F_OBJ_SET_HIDE_FLAGS 0x3ee66e0ull   // UnityEngine.Object::set_hideFlags
+#define F_GAMEOBJECT_CTOR 0x3f0c230ull      // GameObject..ctor(string name)
+#define F_GO_GET_TRANSFORM 0x3f0bb40ull     // GameObject.get_transform()
+#define F_GO_ADD_COMPONENT 0x246ce80ull     // GameObject.AddComponent<T>() (shared; MethodInfo selects T)
+#define F_T_SET_PARENT 0x3f1b5d0ull         // Transform.SetParent(Transform, bool worldPositionStays)
+#define F_T_GET_POSITION 0x3f1a1f0ull
+#define F_T_SET_POSITION 0x3f1a2c0ull
+#define F_T_LOSSY_SCALE 0x3f1e5a0ull
+#define F_RT_GET_RECT 0x3f17eb0ull          // RectTransform.get_rect(): x, y, width, height in v0..v3
+#define F_TEX_CTOR 0x3ee90c0ull             // Texture2D..ctor(int, int)
+#define F_LOAD_IMAGE 0x3f534d0ull           // ImageConversion.LoadImage(Texture2D, byte[])
+#define F_SPRITE_CREATE 0x3f22180ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
+#define F_IMAGE_SET_SPRITE 0x3fdbad0ull
+#define F_GRAPHIC_SET_RAYCAST 0x3fe4610ull
+#define F_GRAPHIC_SET_COLOR 0x3fe45b0ull     // Graphic.set_color(Color): four floats in v0..v3
+#define F_SZARRAY_NEW 0x450830ull
+#define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
+#define F_GCHANDLE_TARGET 0x469df0ull
+#define M_CLASS_GAMEOBJECT 0x611ac68ull
+#define M_CLASS_TEXTURE2D 0x6121658ull
+#define M_CLASS_BYTE_ARR 0x6120328ull
+#define M_METHOD_ADD_IMAGE 0x6150af0ull     // GameObject.AddComponent<UnityEngine.UI.Image>
+#define F_OBJ_ALIVE 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
+#define F_GCHANDLE_FREE 0x469e10ull
+#define F_OBJ_SET_HIDE_FLAGS 0x3f120d0ull   // UnityEngine.Object::set_hideFlags
 static const uint8_t k_copy_png[] = {
 #include "icons/content_copy_white.inc"
 };
@@ -427,14 +427,14 @@ static uint64_t copy_sprite(Cpu *c) {
 // field, left of the show/hide (eye) control, drawn as a bare dark icon like the eye. Everything stays inside the
 // game's own panel, so it shows and hides with it.
 #define PANEL_W 800.0f
-#define F_CHILD_COUNT 0x3ef2800ull
-#define F_GET_CHILD 0x3ef3020ull
-#define F_OBJ_NAME 0x3ee4e30ull
-#define F_RT_SET_ANCHOR_MIN 0x3eec660ull
-#define F_RT_SET_ANCHOR_MAX 0x3eec800ull
-#define F_RT_SET_PIVOT 0x3eecce0ull
-#define F_T_GET_PARENT 0x3eee6b0ull
-#define F_GO_ACTIVE_IN_HIER 0x3ee03e0ull
+#define F_CHILD_COUNT 0x3f1e1f0ull
+#define F_GET_CHILD 0x3f1ea10ull
+#define F_OBJ_NAME 0x3f10820ull
+#define F_RT_SET_ANCHOR_MIN 0x3f18050ull
+#define F_RT_SET_ANCHOR_MAX 0x3f181f0ull
+#define F_RT_SET_PIVOT 0x3f186d0ull
+#define F_T_GET_PARENT 0x3f1a0a0ull
+#define F_GO_ACTIVE_IN_HIER 0x3f0bdd0ull
 static uint64_t child_named(Cpu *c, uint64_t t, const char *name) {
     int n = t ? (int)rt_call(c, FN(F_CHILD_COUNT), 2, t, 0ull) : 0;
     for (int i = 0; i < n; i++) {
@@ -465,15 +465,15 @@ void rt_ui_press_anim(Cpu *c, uint64_t view);
 // password panel. The panel gets a Canvas of its own that sorts one step above the chat log's canvas, but only
 // while the lobby itself is in front (panel_layer_tick): overlays of the lobby (the chat wheel editor, How to
 // Play, the kick list) and dialogs are drawn between the lobby and the chat log and must cover the panel.
-#define F_GO_GET_COMPONENT 0x24623a0ull     // GameObject.GetComponent<T>() (shared; MethodInfo selects T)
-#define F_GO_FIND 0x3ee0bb0ull              // GameObject.Find(string) (static)
-#define F_CANVAS_SET_OVERRIDE_SORTING 0x413c440ull
-#define F_CANVAS_GET_SORTING_ORDER 0x413c4b0ull
-#define F_CANVAS_SET_SORTING_ORDER 0x413c500ull
-#define F_CANVAS_GET_ROOT 0x413c8c0ull
-#define M_METHOD_GO_GET_IMAGE 0x60f4ad8ull  // GameObject.GetComponent<UnityEngine.UI.Image>
-#define M_METHOD_GO_GET_CANVAS 0x60ce6c8ull // GameObject.GetComponent<UnityEngine.Canvas>
-#define M_METHOD_GO_ADD_CANVAS 0x60ce6e0ull // GameObject.AddComponent<UnityEngine.Canvas>
+#define F_GO_GET_COMPONENT 0x246cfb0ull     // GameObject.GetComponent<T>() (shared; MethodInfo selects T)
+#define F_GO_FIND 0x3f0c5a0ull              // GameObject.Find(string) (static)
+#define F_CANVAS_SET_OVERRIDE_SORTING 0x4167e30ull
+#define F_CANVAS_GET_SORTING_ORDER 0x4167ea0ull
+#define F_CANVAS_SET_SORTING_ORDER 0x4167ef0ull
+#define F_CANVAS_GET_ROOT 0x41682b0ull
+#define M_METHOD_GO_GET_IMAGE 0x6145ac0ull  // GameObject.GetComponent<UnityEngine.UI.Image>
+#define M_METHOD_GO_GET_CANVAS 0x611f6c8ull // GameObject.GetComponent<UnityEngine.Canvas>
+#define M_METHOD_GO_ADD_CANVAS 0x611f6e0ull // GameObject.AddComponent<UnityEngine.Canvas>
 static uint32_t g_panel_canvas_h;
 static int g_panel_order, g_panel_raised;
 static void panel_above_chat(Cpu *c, uint64_t panel_t) {
@@ -587,14 +587,14 @@ static void copy_code(uint64_t password_view) {
 }
 // Battle. UIViewCtrl_BtlSettingsLobby_Host.setupCopyRoomNameBtn(lobbyView): {+0x68 choices module {+0x10 ->
 // {+0x20 event caller}}}; UIViewBattleSettingsLobby {+0x48 password view, +0x50 copy button}.
-int rt_hook_461f3e0(Cpu *c) {
+int rt_hook_4654fd0(Cpu *c) {
     uint64_t self = X(0), view = X(1), module = LD64(self + 0x68), inner = module ? LD64(module + 0x10) : 0;
     if (!view) return 0;
     setup_copy_button(c, self, LD64(view + 0x50), inner ? LD64(inner + 0x20) : 0, LD64(view + 0x48), -90.0f);   // clear of the player list on the right
     return 1;
 }
 // UIViewCtrl_BtlSettingsLobby_Host.onCopyRoomNameBtn(...): {+0x28 lobby view}
-int rt_hook_461f790(Cpu *c) {
+int rt_hook_4655380(Cpu *c) {
     uint64_t view = LD64(X(0) + 0x28);
     copy_code(view ? LD64(view + 0x48) : 0);
     return 1;
@@ -602,17 +602,17 @@ int rt_hook_461f790(Cpu *c) {
 // Adventure. UIViewCtrl_AdvMultiMatching_Friend.SetupForHost(string sessionCode): {+0x20 view, +0x28 -> {+0x20
 // event caller}}; UIViewAdvMulti_Matching {+0x58 password view, +0x60 copy button}. The original ends by hiding
 // the copy button.
-int rt_hook_4610c90(Cpu *c) {
+int rt_hook_4646720(Cpu *c) {
     static __thread int inside;
     if (inside) return 0;
     uint64_t self = X(0), code = X(1);
-    inside = 1; c->pc = FN(0x4610c90ull); rt_dispatch(c); inside = 0;
+    inside = 1; c->pc = FN(0x4646720ull); rt_dispatch(c); inside = 0;
     uint64_t view = LD64(self + 0x20), m = LD64(self + 0x28);
     if (view && code && LD32(code + STR_LEN)) setup_copy_button(c, self, LD64(view + 0x60), m ? LD64(m + 0x20) : 0, LD64(view + 0x58), 0.0f);
     return 1;
 }
 // UIViewCtrl_AdvMultiMatching_Friend.onCopyRoomNameBtn(...)
-int rt_hook_4611470(Cpu *c) {
+int rt_hook_4646f00(Cpu *c) {
     uint64_t view = LD64(X(0) + 0x20);
     copy_code(view ? LD64(view + 0x58) : 0);
     return 1;
@@ -624,15 +624,15 @@ void mouse_diag_tick(Cpu *c) {
     if (on < 0) on = getenv("BR_MOUSE_LOG") != NULL;
     if (!on || GetTickCount64() < next) return;
     next = GetTickCount64() + 2000;
-    uint64_t mouse = rt_call(c, FN(0x3b5dc80ull), 1, 0ull), kb = rt_call(c, FN(0x3b5c450ull), 1, 0ull);   // Mouse.current, Keyboard.current
-    int mask = (int)rt_call(c, FN(0x4384a40ull), 1, 0ull);                                                 // AppInput.latestInputDeviceMask
+    uint64_t mouse = rt_call(c, FN(0x3b894e0ull), 1, 0ull), kb = rt_call(c, FN(0x3b87cb0ull), 1, 0ull);   // Mouse.current, Keyboard.current
+    int mask = (int)rt_call(c, FN(0x43b2ab0ull), 1, 0ull);                                                 // AppInput.latestInputDeviceMask
     float pos[2] = {0, 0};
     int pressed = -1;
     if (mouse) {
-        uint64_t position = rt_call(c, FN(0x3b5f080ull), 2, mouse, 0ull);                                  // Pointer.position
-        if (position) { rt_call(c, FN(0x311aa70ull), 2, position, 0ull); pos[0] = rt_getf(c, 0); pos[1] = rt_getf(c, 1); }
-        uint64_t left = rt_call(c, FN(0x3b5dbc0ull), 2, mouse, 0ull);
-        if (left) pressed = (int)(rt_call(c, FN(0x3b2a1c0ull), 2, left, 0ull) & 1);
+        uint64_t position = rt_call(c, FN(0x3b8a8e0ull), 2, mouse, 0ull);                                  // Pointer.position
+        if (position) { rt_call(c, FN(0x3141120ull), 2, position, 0ull); pos[0] = rt_getf(c, 0); pos[1] = rt_getf(c, 1); }
+        uint64_t left = rt_call(c, FN(0x3b89420ull), 2, mouse, 0ull);
+        if (left) pressed = (int)(rt_call(c, FN(0x3b55a20ull), 2, left, 0ull) & 1);
     }
     rt_log("mouse: device %s, keyboard %s, latest input device mask %d, position %.0f %.0f, left button %d", mouse ? "present" : "none",
            kb ? "present" : "none", mask, pos[0], pos[1], pressed);
@@ -643,7 +643,7 @@ static BOOL CALLBACK main_window(HWND h, LPARAM out) {
     if (IsWindowVisible(h) && !GetWindow(h, GW_OWNER)) { *(HWND *)out = h; return FALSE; }
     return TRUE;
 }
-#define F_T_SET_LOCAL_SCALE 0x3eef8c0ull
+#define F_T_SET_LOCAL_SCALE 0x3f1b2b0ull
 // The mouse for the UI, in window pixels from the bottom left (ui_mouse_frame, once a frame, at the end of the
 // frame): the cursor, whether it moved, and a left click, which stays pending through the next frame's updates until
 // something takes it (rt_ui_click_consume). BR_INPUT_LIVE "CLICK x y" and "MOVE x y" stand in for the real mouse.

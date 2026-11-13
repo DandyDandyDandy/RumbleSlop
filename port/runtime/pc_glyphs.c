@@ -16,20 +16,20 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_INIT_METADATA 0x44c0d0ull
-#define F_OBJECT_NEW 0x44c4a0ull
-#define F_SZARRAY_NEW 0x44c230ull
-#define F_GCHANDLE_NEW 0x4657a0ull
-#define F_GCHANDLE_TARGET 0x4657f0ull
-#define F_GCHANDLE_FREE 0x465810ull
-#define F_OBJ_ALIVE 0x3ee4c20ull
-#define F_OBJ_SET_HIDE_FLAGS 0x3ee66e0ull
-#define F_TEX_CTOR 0x3ebd6d0ull             // Texture2D..ctor(int, int)
-#define F_LOAD_IMAGE 0x3f27ae0ull           // ImageConversion.LoadImage(Texture2D, byte[])
-#define F_SPRITE_CREATE 0x3ef6790ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
-#define F_GET_ASSIGN_PAD 0x4387060ull       // AppInput.GetActionAssignGamePad(Action.eID) (static)
-#define M_CLASS_TEXTURE2D 0x60d0658ull
-#define M_CLASS_BYTE_ARR 0x60cf328ull
+#define F_INIT_METADATA 0x4506d0ull
+#define F_OBJECT_NEW 0x450aa0ull
+#define F_SZARRAY_NEW 0x450830ull
+#define F_GCHANDLE_NEW 0x469da0ull
+#define F_GCHANDLE_TARGET 0x469df0ull
+#define F_GCHANDLE_FREE 0x469e10ull
+#define F_OBJ_ALIVE 0x3f10610ull
+#define F_OBJ_SET_HIDE_FLAGS 0x3f120d0ull
+#define F_TEX_CTOR 0x3ee90c0ull             // Texture2D..ctor(int, int)
+#define F_LOAD_IMAGE 0x3f534d0ull           // ImageConversion.LoadImage(Texture2D, byte[])
+#define F_SPRITE_CREATE 0x3f22180ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
+#define F_GET_ASSIGN_PAD 0x43b50d0ull       // AppInput.GetActionAssignGamePad(Action.eID) (static)
+#define M_CLASS_TEXTURE2D 0x6121658ull
+#define M_CLASS_BYTE_ARR 0x6120328ull
 #define ARR_DATA 0x20
 #define STATE_ID 0x20                       // AppInput.State
 #define STATE_KIND 0x6c
@@ -115,8 +115,8 @@ static int set_kind(Cpu *c) {
     if (kind) ST32(state + STATE_KIND, kind);
     return 0;
 }
-int rt_hook_439ca40(Cpu *c) { return set_kind(c); }
-int rt_hook_439cb10(Cpu *c) { return set_kind(c); }
+int rt_hook_43caab0(Cpu *c) { return set_kind(c); }
+int rt_hook_43cab80(Cpu *c) { return set_kind(c); }
 
 // ------------------------------------------------------------------------------------------------ which picture
 // Wonder.DB.UI.ButtonIcon.eID
@@ -174,7 +174,7 @@ static int button_action_cell(Cpu *c, int icon) {
         {BI_LS_UP, 46}, {BI_LS_DOWN, 47}, {BI_LS_LEFT, 48}, {BI_LS_RIGHT, 49}, {BI_RS_UP, 51}, {BI_RS_DOWN, 52}, {BI_RS_LEFT, 53}, {BI_RS_RIGHT, 54},
         {BI_L, 20}, {BI_R, 21}, {BI_PLUS, 3}};
     static const uint32_t bit[32] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 0x1000, 0x8000, 0x2000, 0x4000, 0x10000, 0x20000, 0x40000, 0x80000,
-                                     0x100000, 0x200000, 0x400000, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8000000, 0x100000, 0x200000, 0};
+                                     0x103490, 0x202300, 0x4045f0, 0x800000, 0x1000000, 0x2000000, 0x4000000, 0x8055000, 0x103490, 0x202300, 0};
     if (icon == BI_STICK_L) return CELL_WASD;
     if (icon == BI_STICK_R || icon == BI_DPAD) return CELL_ARROWS;
     for (size_t i = 0; i < sizeof fixed / sizeof *fixed; i++)
@@ -189,7 +189,7 @@ static int button_action_cell(Cpu *c, int icon) {
 
 static __thread int t_action, t_kbicon;      // what the caller of GetSprite is drawing (0 = unknown)
 // UIIconSpriteManager_ControllerBtn.GetSprite(ButtonIcon.eID, ControllerKind.eID)
-int rt_hook_44fc140(Cpu *c) {
+int rt_hook_4543c80(Cpu *c) {
     int icon = (int)W(1), kind = (int)W(2), cell;
     static __thread int inside;
     if (inside) return 0;
@@ -199,12 +199,12 @@ int rt_hook_44fc140(Cpu *c) {
             uint64_t mgr = X(0);
             logged[icon] = 1;
             inside = 1;
-            uint64_t sp = rt_call(c, FN(0x44fc140ull), 4, mgr, (uint64_t)icon, 1ull, 0ull);
+            uint64_t sp = rt_call(c, FN(0x4543c80ull), 4, mgr, (uint64_t)icon, 1ull, 0ull);
             inside = 0;
             if (sp) {
-                rt_call(c, FN(0x3ef4d70ull), 2, sp, 0ull);
+                rt_call(c, FN(0x3f20760ull), 2, sp, 0ull);
                 float w = rt_getf(c, 2), h = rt_getf(c, 3);
-                rt_call(c, FN(0x3ef5090ull), 2, sp, 0ull);
+                rt_call(c, FN(0x3f20a80ull), 2, sp, 0ull);
                 rt_log("glyphs: the game's icon %d is %.0f x %.0f px at %.0f px per unit", icon, w, h, rt_getf(c, 0));
             }
             c->x[0] = mgr; c->x[1] = (uint64_t)icon; c->x[2] = (uint64_t)kind;
@@ -250,18 +250,18 @@ CONTEXT_HOOK(452fc30, 4, (int)(uint32_t)a1, 0)
 // port adds a sprite asset of its own for the atlas: a copy of the game's asset (same material and metrics), its
 // tables replaced by one sprite per atlas cell named br_<cell>, added as a fallback of the sprite assets the texts
 // use, and the tag functions answer the name br_<cell> for the port's kinds.
-#define F_INSTANTIATE 0x3ee58e0ull          // Object.Instantiate(Object) (static)
-#define F_OBJ_SET_NAME 0x3ee4f30ull
-#define F_STRING_NEW_UTF16 0x456994ull
-#define F_TMP_GET_SPRITE_ASSET 0x3e06c60ull // TMP_Text.spriteAsset
-#define F_TMP_DEFAULT_SPRITE_ASSET 0x3e23020ull   // TMP_Settings.defaultSpriteAsset (static)
-#define F_ADD_SPRITE_ASSET 0x3dd0dc0ull     // MaterialReferenceManager.AddSpriteAsset(int hashCode, TMP_SpriteAsset) (static)
-#define F_SIMPLE_HASH 0x3e27070ull          // TMP_TextUtilities.GetSimpleHashCode(string) (static)
-#define F_SEARCH_SPRITE 0x3e27800ull        // TMP_SpriteAsset.SearchForSpriteByHashCode(asset, int hash, bool fallbacks, out int index) (static)
-#define F_UPDATE_LOOKUP 0x3e26150ull        // TMP_SpriteAsset.UpdateLookupTables()
-#define F_MAT_SET_MAIN_TEX 0x3ea3400ull     // Material.mainTexture = Texture
-#define F_BUTTON_ICON_TAG 0x4517d50ull      // UITextEmojiDisplayModule.getbuttonIconSpriteTag(ButtonIcon.eID, ControllerKind)
-#define F_EMOJI_TAG 0x4517e70ull            // UITextEmojiDisplayModule.getEmojiTag(Action.eID, eDeviceMask, ControllerKind)
+#define F_INSTANTIATE 0x3f112d0ull          // Object.Instantiate(Object) (static)
+#define F_OBJ_SET_NAME 0x3f10920ull
+#define F_STRING_NEW_UTF16 0x45af94ull
+#define F_TMP_GET_SPRITE_ASSET 0x3e324c0ull // TMP_Text.spriteAsset
+#define F_TMP_DEFAULT_SPRITE_ASSET 0x3e4e880ull   // TMP_Settings.defaultSpriteAsset (static)
+#define F_ADD_SPRITE_ASSET 0x3dfc620ull     // MaterialReferenceManager.AddSpriteAsset(int hashCode, TMP_SpriteAsset) (static)
+#define F_SIMPLE_HASH 0x3e528d0ull          // TMP_TextUtilities.GetSimpleHashCode(string) (static)
+#define F_SEARCH_SPRITE 0x3e53060ull        // TMP_SpriteAsset.SearchForSpriteByHashCode(asset, int hash, bool fallbacks, out int index) (static)
+#define F_UPDATE_LOOKUP 0x3e519b0ull        // TMP_SpriteAsset.UpdateLookupTables()
+#define F_MAT_SET_MAIN_TEX 0x3ecedf0ull     // Material.mainTexture = Texture
+#define F_BUTTON_ICON_TAG 0x45490e0ull      // UITextEmojiDisplayModule.getbuttonIconSpriteTag(ButtonIcon.eID, ControllerKind)
+#define F_EMOJI_TAG 0x4549200ull            // UITextEmojiDisplayModule.getEmojiTag(Action.eID, eDeviceMask, ControllerKind)
 #define ASSET_HASH 0x1c                     // TMP_Asset / TMP_SpriteAsset
 #define ASSET_MATERIAL 0x20
 #define ASSET_SHEET 0xa8
@@ -271,8 +271,8 @@ CONTEXT_HOOK(452fc30, 4, (int)(uint32_t)a1, 0)
 #define LIST_ITEMS 0x10
 #define LIST_SIZE 0x18
 #define ARR_LEN 0x18
-#define F_LIST_CTOR 0x3396dc0ull            // List<object>..ctor() (shared; the MethodInfo names the class)
-#define M_LIST_SPRITE_ASSET_ADD 0x612b128ull   // List<TMP_SpriteAsset>.Add
+#define F_LIST_CTOR 0x33bf070ull            // List<object>..ctor() (shared; the MethodInfo names the class)
+#define M_LIST_SPRITE_ASSET_ADD 0x617c4c0ull   // List<TMP_SpriteAsset>.Add
 #define ASSET_FALLBACKS 0xd8                // TMP_SpriteAsset.fallbackSpriteAssets
 static uint32_t g_asset_h;
 static int g_asset_failed;
@@ -439,8 +439,8 @@ static int icon_tag(Cpu *c, uint64_t module, int icon, int kind) {
     return 1;
 }
 // UITextEmojiDisplayModule.getbuttonIconSpriteTag(ButtonIcon.eID, ControllerKind) and (eButton, ControllerKind)
-int rt_hook_4517d50(Cpu *c) { return icon_tag(c, X(0), (int)W(1), (int)W(2)); }
-int rt_hook_4518160(Cpu *c) {
+int rt_hook_45490e0(Cpu *c) { return icon_tag(c, X(0), (int)W(1), (int)W(2)); }
+int rt_hook_45494f0(Cpu *c) {
     static const uint8_t icon_of_bit[28] = {BI_UP, BI_DOWN, BI_LEFT, BI_RIGHT, BI_DUP, BI_DDOWN, BI_DLEFT, BI_DRIGHT, BI_LS_UP, BI_LS_DOWN, BI_LS_LEFT, BI_LS_RIGHT,
                                             BI_EAST, BI_SOUTH, BI_NORTH, BI_WEST, BI_L, BI_R, BI_ZL, BI_ZR, BI_STICK_L, BI_STICK_R, BI_PLUS, BI_MINUS,
                                             BI_RS_UP, BI_RS_DOWN, BI_RS_LEFT, BI_RS_RIGHT};
@@ -453,7 +453,7 @@ int rt_hook_4518160(Cpu *c) {
 // UITextEmojiDisplayModule.getEmojiTag(Action.eID, eDeviceMask, ControllerKind): the whole tag for an action. On
 // the keyboard that is the action's one key (the pad may have several buttons for it, which the original would
 // each turn into the same key).
-int rt_hook_4517e70(Cpu *c) {
+int rt_hook_4549200(Cpu *c) {
     static __thread int inside;
     if (inside) return 0;
     uint64_t module = X(0), a1 = X(1), a2 = X(2), a3 = X(3);
@@ -475,13 +475,13 @@ int rt_hook_4517e70(Cpu *c) {
 // matters: UIPartViewButtonBase.SetupButtonGuide(Action.eID, int controllerIdx) tells which action a button stands
 // for, its text is remembered, and UITextEmojiDisplayModule.updateText(string, eDeviceMask, ControllerKind) writes
 // the action's one key into such a text instead of translating its pad buttons.
-#define F_GET_GAMEOBJECT 0x3edc5c0ull
-#define F_GET_TRANSFORM 0x3edc570ull
-#define F_CHILD_COUNT 0x3ef2800ull
-#define F_GET_CHILD 0x3ef3020ull
-#define F_OBJ_NAME 0x3ee4e30ull
-#define F_GO_GET_COMPONENT_NAME 0x3edf400ull   // GameObject.GetComponent(string type)
-#define F_TMP_SET_TEXT 0x3e0caa0ull         // TMP_Text.SetText(string, bool)
+#define F_GET_GAMEOBJECT 0x3f07fb0ull
+#define F_GET_TRANSFORM 0x3f07f60ull
+#define F_CHILD_COUNT 0x3f1e1f0ull
+#define F_GET_CHILD 0x3f1ea10ull
+#define F_OBJ_NAME 0x3f10820ull
+#define F_GO_GET_COMPONENT_NAME 0x3f0adf0ull   // GameObject.GetComponent(string type)
+#define F_TMP_SET_TEXT 0x3e38300ull         // TMP_Text.SetText(string, bool)
 static struct { uint64_t text; int action; } g_button_text[64];
 static int g_button_text_next;
 static uint64_t find_text(Cpu *c, uint64_t t, int depth) {            // the transform named TextEmoji under t
@@ -498,7 +498,7 @@ static uint64_t find_text(Cpu *c, uint64_t t, int depth) {            // the tra
     }
     return 0;
 }
-int rt_hook_44e1e30(Cpu *c) {
+int rt_hook_4512980(Cpu *c) {
     uint64_t view = X(0), a1 = X(1), a2 = X(2), lr = c->x[30];
     if (view) {
         uint64_t t = find_text(c, rt_call(c, FN(F_GET_TRANSFORM), 2, view, 0ull), 3);
@@ -514,7 +514,7 @@ int rt_hook_44e1e30(Cpu *c) {
     }
     return 0;
 }
-int rt_hook_4516ca0(Cpu *c) {
+int rt_hook_4548030(Cpu *c) {
     uint64_t module = X(0), a1 = X(1), a2 = X(2), a3 = X(3), lr = c->x[30], text = LD64(module + 0x10);
     if (!kind_is_ours((int)(uint32_t)a3) || !text) return 0;
     // every text that may show a button of the port's kinds must know the port's sprite asset, also when none of

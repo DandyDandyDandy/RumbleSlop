@@ -244,7 +244,7 @@ def main():
 
     # ---- non-il2cpp map: big picture of .text by 1 MiB: fraction of functions in il2cpp tables
     P('\n.text map per 2 MiB (functions / in il2cpp tables):')
-    step = 0x200000
+    step = 0x202300
     for b in range(0, text_hi, step):
         i0, i1 = bisect.bisect_left(starts_l, b), bisect.bisect_left(starts_l, b + step)
         fns = starts_l[i0:i1]

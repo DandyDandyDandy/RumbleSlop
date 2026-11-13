@@ -5,9 +5,9 @@ the lift set of tools/closure_build.py (shipped as tables/lift_functions.tsv.gz)
 
 Every FDE function of these NSO ranges is taken whole (the plugins are driven through P/Invoke entry points and
 internal function-pointer tables, so reachability over direct branches would miss callbacks):
-  criware   0x473050-0x57b840   the CRIWARE native library (CRI Atom/Mana/FileSystem + the CriWare Unity plug-in glue).
-                                Ends before the fifteen maria-upload thunks at 0x57b840, which are host no-ops.
-  nn_glue   0x590200-0x590220, 0x590940-0x591190
+  criware   0x477650-0x57fe40   the CRIWARE native library (CRI Atom/Mana/FileSystem + the CriWare Unity plug-in glue).
+                                Ends before the fifteen maria-upload thunks at 0x57fe40, which are host no-ops.
+  nn_glue   0x594800-0x594820, 0x594f40-0x595790
                                 P/Invoke targets of nn.dll / nnUserPlugin.Runtime.dll: thin wrappers over nn::*
                                 imports. The nnUser vibration player between the two pieces (static
                                 nn::hid::VibrationPlayer objects and a timer thread) is left out: its four natives
@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE.parent))
 import paths  # noqa: E402
 
 CLOSURE = paths.UNITY / 'closure'      # closure.npz of tools/closure_build.py (a developer output)
-RANGES = [('criware', 0x473050, 0x57b840), ('nn_glue', 0x590200, 0x590220), ('nn_glue', 0x590940, 0x591190)]
+RANGES = [('criware', 0x477650, 0x57fe40), ('nn_glue', 0x594800, 0x594820), ('nn_glue', 0x594f40, 0x595790)]
 
 
 def main():

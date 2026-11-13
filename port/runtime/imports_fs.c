@@ -235,7 +235,7 @@ HOSTFN(_ZN2nn2fs17MountAddOnContentEPKciPvm) {
     RET(mount_host(STR(0), sub));
 }
 HOSTFN(_ZN2nn2fs9IsMountedEPKc) { RET(rt_fs_mounted(STR(0))); }
-HOSTFN(engine_is_mounted) {   // main+0x10f8ba0 (name, length): is "<name>:" a mounted file system
+HOSTFN(engine_is_mounted) {   // main+0x10fd1a0 (name, length): is "<name>:" a mounted file system
     char name[16] = {0};
     size_t n = X(1) < 15 ? X(1) : 15;
     memcpy(name, PTR(0), n);

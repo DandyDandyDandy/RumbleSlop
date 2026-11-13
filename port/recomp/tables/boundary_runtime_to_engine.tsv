@@ -1,25 +1,25 @@
 target	export_name	hint
-0xc7e240	_ZdlPv	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E
-0xc7fcc0	_Znwm	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E strings: ['Overloaded New']
-0xc7fff0	_Znam	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E strings: ['Overloaded New[]']
-0xc802f0	_ZdaPv	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E
-0x10f1c60		imports: memalign,_ZN2nn4diag6detail9AbortImplEv strings: ['cannot allocate system memory!']
-0x10f1c90		imports: _ZN2nn2os19GetCurrentStackInfoEPmS1_
-0x10f29d0	malloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEm
-0x10f29f0	free	imports: _ZN2nn3mem17StandardAllocator4FreeEPv
-0x10f2a10	calloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEm,memset
-0x10f2a60	realloc	imports: _ZN2nn3mem17StandardAllocator10ReallocateEPvm
-0x10f2a80	aligned_alloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEmm
-0x10f7fc0		
-0x10f8410		
-0x10f8ba0		imports: strncpy,_ZN2nn2fs9IsMountedEPKc
-0x10fc1b0		imports: _ZN2nn4nifm18IsNetworkAvailableEv,_ZN2nn2os11SignalEventEPNS0_9EventTypeE,_ZN2nn2os13GetSystemTickEv,_ZN2nn2os17ConvertToTimeSpanENS0_4TickE
-0x10fc310		
-0x10fc380		imports: _ZN2nn2os11SignalEventEPNS0_9EventTypeE
-0x10fc3f0		
-0x10fc470		
-0x10fc540		
-0x11aa4d0		imports: strncmp
-0x1c163f0		imports: _ZN2nn2os16GetCurrentThreadEv,_ZN2nn2os13SuspendThreadEPNS0_10ThreadTypeE
-0x1c16470		imports: _ZN2nn2os12ResumeThreadEPNS0_10ThreadTypeE
-0x1c164e0		imports: _ZN2nn2os16GetCurrentThreadEv,_ZN2nn2os21GetThreadSuspendCountEPKNS0_10ThreadTypeE,_ZN2nn2os16GetThreadContextEPNS0_24ThreadContextInfoAarch64EPKNS0_10ThreadTypeE
+0xc82840	_ZdlPv	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E
+0xc842c0	_Znwm	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E strings: ['Overloaded New']
+0xc845f0	_Znam	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E strings: ['Overloaded New[]']
+0xc848f0	_ZdaPv	imports: _ZNSt3__111__call_onceERVmPvPFvS2_E
+0x10f6260		imports: memalign,_ZN2nn4diag6detail9AbortImplEv strings: ['cannot allocate system memory!']
+0x10f6290		imports: _ZN2nn2os19GetCurrentStackInfoEPmS1_
+0x10f6fd0	malloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEm
+0x10f6ff0	free	imports: _ZN2nn3mem17StandardAllocator4FreeEPv
+0x10f7010	calloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEm,memset
+0x10f7060	realloc	imports: _ZN2nn3mem17StandardAllocator10ReallocateEPvm
+0x10f7080	aligned_alloc	imports: _ZN2nn3mem17StandardAllocator8AllocateEmm
+0x10fc5c0		
+0x10fca10		
+0x10fd1a0		imports: strncpy,_ZN2nn2fs9IsMountedEPKc
+0x11007b0		imports: _ZN2nn4nifm18IsNetworkAvailableEv,_ZN2nn2os11SignalEventEPNS0_9EventTypeE,_ZN2nn2os13GetSystemTickEv,_ZN2nn2os17ConvertToTimeSpanENS0_4TickE
+0x1100910		
+0x1100980		imports: _ZN2nn2os11SignalEventEPNS0_9EventTypeE
+0x11009f0		
+0x1100a70		
+0x1100b40		
+0x11aead0		imports: strncmp
+0x1c1a9f0		imports: _ZN2nn2os16GetCurrentThreadEv,_ZN2nn2os13SuspendThreadEPNS0_10ThreadTypeE
+0x1c1aa70		imports: _ZN2nn2os12ResumeThreadEPNS0_10ThreadTypeE
+0x1c1aae0		imports: _ZN2nn2os16GetCurrentThreadEv,_ZN2nn2os21GetThreadSuspendCountEPKNS0_10ThreadTypeE,_ZN2nn2os16GetThreadContextEPNS0_24ThreadContextInfoAarch64EPKNS0_10ThreadTypeE

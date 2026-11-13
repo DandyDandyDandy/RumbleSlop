@@ -125,7 +125,7 @@ HOSTFN(_Znwm) { RET(rt_malloc(X(0))); }
 HOSTALIAS(_Znam, _Znwm)
 HOSTFN(_ZdlPv) { rt_free(PTR(0)); }
 HOSTALIAS(_ZdaPv, _ZdlPv)
-HOSTFN(engine_gc_page_alloc) { void *p = rt_memalign(0x1000, X(0)); memset(p, 0, X(0)); RET(p); }   // main+0x10f1c60
+HOSTFN(engine_gc_page_alloc) { void *p = rt_memalign(0x1000, X(0)); memset(p, 0, X(0)); RET(p); }   // main+0x10f6260
 
 // ------------------------------------------------------------------------------------------------ string / memory
 HOSTFN(memcpy) { memcpy(PTR(0), PTR(1), X(2)); }

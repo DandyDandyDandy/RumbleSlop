@@ -11,7 +11,7 @@ isb = (w & 0x7c000000) == 0x14000000
 imm = (w & 0x3ffffff).astype(np.int64); imm = np.where(imm & (1 << 25), imm - (1 << 26), imm)
 tgt = np.where(isb, pc + imm * 4, -1)
 def region(a):
-    for nm, lo, hi in (('glue', 0x690, 0x3d3e90), ('gc', 0x3d3e90, 0x3e2640), ('rt', 0x3e2640, 0x46ff00), ('os', 0x46ff00, 0x473000), ('cri', 0x473000, 0x57c000), ('plug', 0x57c000, 0xc6e000), ('eng', 0xc6e000, 0x1f4a864), ('gen', 0x1f866b0, TS)):
+    for nm, lo, hi in (('glue', 0x690, 0x3d8480), ('gc', 0x3d8480, 0x3e6c30), ('rt', 0x3e6c30, 0x474500), ('os', 0x474500, 0x477600), ('cri', 0x477600, 0x57c000), ('plug', 0x57c000, 0xc6e000), ('eng', 0xc6e000, 0x1f4ee64), ('gen', 0x1f8acb0, TS)):
         if lo <= a < hi: return nm
     return 'other'
 def callers(a):
@@ -25,7 +25,7 @@ def strnote(lines):
         m = re.match(r'add (x\d+), (x\d+), #(0x[0-9a-f]+|\d+)$', l)
         if m and m.group(2) in pages:
             t = pages[m.group(2)] + int(m.group(3), 0)
-            if 0x483e000 <= t < 0x5dd4000:
+            if 0x483e000 <= t < 0x5e22000:
                 st = d[t:t+60].split(b'\0')[0]
                 if len(st) >= 3 and all(32 <= c < 127 for c in st): l += ' {%r}' % st.decode()
             else: l += ' {@%x}' % t

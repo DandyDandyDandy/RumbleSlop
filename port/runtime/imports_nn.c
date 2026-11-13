@@ -245,7 +245,7 @@ HOSTFN(_ZN2nn2os16GetCurrentThreadEv) { uint64_t tt; memcpy(&tt, ((RtThread *)c)
 HOSTFN(_ZN2nn2os11YieldThreadEv) { (void)c; SwitchToThread(); }
 HOSTFN(_ZN2nn2os11SleepThreadENS_8TimeSpanE) { Sleep(ns_to_ms((int64_t)X(0))); }
 HOSTFN(_ZN2nn2os19GetCurrentStackInfoEPmS1_) { RtThread *t = (RtThread *)c; ST64(X(0), t->stack_lo); ST64(X(1), t->stack_hi - t->stack_lo); }
-HOSTFN(engine_gc_stack_base) { RET(((RtThread *)c)->stack_hi); }   // main+0x10f1c90: stack address + size
+HOSTFN(engine_gc_stack_base) { RET(((RtThread *)c)->stack_hi); }   // main+0x10f6290: stack address + size
 
 // ------------------------------------------------------------------------------------------------ time / misc
 HOSTFN(_ZN2nn2os13GetSystemTickEv) { RET(rt_ticks()); }
@@ -307,9 +307,9 @@ HOSTFN(_ZN2nn4time11ToPosixTimeEPiPNS0_9PosixTimeEiRKNS0_12CalendarTimeE) {
 }
 
 // ------------------------------------------------------------------------------------------------ engine helpers
-HOSTFN(engine_flag_10f7fc0) { RET(0); }   // main+0x10f7fc0: engine-side boolean read by the path helper (result unused there)
+HOSTFN(engine_flag_10f7fc0) { RET(0); }   // main+0x10fc5c0: engine-side boolean read by the path helper (result unused there)
 
-// main+0x10f8410: current UTC time in 100 ns ticks since 0001-01-01 (the lifted caller subtracts the 1601 offset).
+// main+0x10fca10: current UTC time in 100 ns ticks since 0001-01-01 (the lifted caller subtracts the 1601 offset).
 HOSTFN(engine_datetime_ticks) {
     FILETIME ft; GetSystemTimeAsFileTime(&ft);
     RET(((uint64_t)ft.dwHighDateTime << 32 | ft.dwLowDateTime) + 504911232000000000ull);

@@ -8,7 +8,8 @@ Outputs: work/unity/closure/*.tsv, closure_report.txt, closure.npz (function tab
 Method (all static):
   functions  = .eh_frame_hdr FDE ranges; code without FDE (12 gaps: asm routines, PLT) is split at branch targets
   edges      = BL (always), B / b.cond / cbz / tbz whose target is outside the containing function
-  lift range = generated code (0x0-0x3d3e90, 0x1f866b0-end) + bdwgc + libil2cpp + baselib/os shim (0x3d3e90-0x473000)
+  lift range = generated code (0x0-0x3d8480, 0x1f8acb0-end) + bdwgc + libil2cpp + baselib/os shim (0x3d8480-0x477650)
+The addresses in this file are those of game version 2.20 (build id in port/paths.py).
   lift set L = closure of the roots over edges that stay inside the lift range, iterated with address-taken roots:
                (a) code addresses materialised by lifted code (adrp+add, adr, GOT loads),
                (b) every relocated pointer slot in rodata/data whose value is a function start inside the lift range
@@ -22,23 +23,23 @@ from closure_common import *
 # ---------------------------------------------------------------- region map (addresses from layout_report + string sampling)
 REGIONS = [  # (name, lo, hi, in_lift_range)
     ('crt', 0x0, 0x690, True),
-    ('gen_glue', 0x690, 0x3d3e90, True),            # invokers, adjustor thunks, unresolved-call thunks, (reverse) pinvoke wrappers
-    ('bdwgc', 0x3d3e90, 0x3e2640, True),
-    ('libil2cpp', 0x3e2640, 0x46ff00, True),        # includes il2cpp's zlib (0x3e2640-0x3e8000)
-    ('baselib_os', 0x46ff00, 0x473050, True),       # nn::os wrappers (semaphore/thread/timer/error) shared by il2cpp and the engine
-    ('criware', 0x473050, 0x57c000, False),
-    ('npln_plugins', 0x57c000, 0xc6e000, False),    # NPLN + gRPC + protobuf + OpenSSL + ngtcp2 + WebRTC + libc++ + Nintendo plugin glue (0x590200..)
-    ('engine', 0xc6e000, 0x1f4a864, False),         # Unity player (MemoryManager starts ~0xc7e000), FMOD, PhysX, curl, Switch platform layer
-    ('asm_nofde', 0x1f4a864, 0x1f82c1c, False),     # 229 KB without unwind info
-    ('plt', 0x1f82c1c, 0x1f866b0, False),
-    ('gen_methods', 0x1f866b0, 0x483dae8, True),
+    ('gen_glue', 0x690, 0x3d8480, True),            # invokers, adjustor thunks, unresolved-call thunks, (reverse) pinvoke wrappers
+    ('bdwgc', 0x3d8480, 0x3e6c30, True),
+    ('libil2cpp', 0x3e6c30, 0x474500, True),        # includes il2cpp's zlib (0x3e6c30-0x3ec5f0)
+    ('baselib_os', 0x474500, 0x477650, True),       # nn::os wrappers (semaphore/thread/timer/error) shared by il2cpp and the engine
+    ('criware', 0x477650, 0x580600, False),
+    ('npln_plugins', 0x580600, 0xc72600, False),    # NPLN + gRPC + protobuf + OpenSSL + ngtcp2 + WebRTC + libc++ + Nintendo plugin glue (0x594800..)
+    ('engine', 0xc72600, 0x1f4ee64, False),         # Unity player (MemoryManager starts ~0xc82600), FMOD, PhysX, curl, Switch platform layer
+    ('asm_nofde', 0x1f4ee64, 0x1f8721c, False),     # 229 KB without unwind info
+    ('plt', 0x1f8721c, 0x1f8acb0, False),
+    ('gen_methods', 0x1f8acb0, 0x48780a8, True),
 ]
 R_LO = np.array([r[1] for r in REGIONS], dtype=np.int64)
 R_NAME = [r[0] for r in REGIONS]
 R_LIFT = np.array([r[3] for r in REGIONS], dtype=bool)
-IL2CPP_INIT = 0x4652c0
-API_CLUSTER = (0x4652c0, 0x465d20)
-CODEGEN_REG_FN = 0x17b520
+IL2CPP_INIT = 0x4698c0
+API_CLUSTER = (0x4698c0, 0x46a320)
+CODEGEN_REG_FN = 0x17d350
 
 
 def fde_lsda(im):
@@ -125,7 +126,7 @@ def main():
         ext_b = b_t[(b_s < g0) | (b_s >= g1)]            # B from outside the gap = tail call into it
         tg = np.concatenate([bl_t, ext_b])
         pts = set([g0]) | set(np.unique(tg[(tg > g0) & (tg < g1)]).tolist())
-        if g0 <= 0x1f82c1c < g1:   # inside the PLT every 16-byte stub is its own function
+        if g0 <= 0x1f8721c < g1:   # inside the PLT every 16-byte stub is its own function
             pts = set([g0]) | {p for p in im.plt}
         pts = sorted(pts)
         for a, b in zip(pts, pts[1:] + [g1]):

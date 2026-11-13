@@ -123,16 +123,16 @@ for i in range(ic):
 P(f'\ninteropData: {ic} records @{it:#x}; {len(ia)} distinct function pointers, range {min(ia):#x}-{max(ia):#x}; all in .text: {all(x < text_hi for x in ia)}')
 
 # ---- registration plumbing
-f = 0x17b520
-got = q(0x60d8040)
-P(f'\ns_Il2CppCodegenRegistration @{f:#x}: x0=&g_CodeRegistration, x1=[GOT 0x60d8040]={got:#x} (MetadataRegistration={layout["metadata_registration"]["address"]}), x2=CodeGenOptions 0x4ac8360, tail-calls 0x44c0c0')
-P(f'  il2cpp_codegen_register @0x44c0c0 [{fsize(0x44c0c0)}b]: {dis(0x44c0c0, 64, 16)}')
+f = 0x17d350
+got = q(0x6129028)
+P(f'\ns_Il2CppCodegenRegistration @{f:#x}: x0=&g_CodeRegistration, x1=[GOT 0x6129028]={got:#x} (MetadataRegistration={layout["metadata_registration"]["address"]}), x2=CodeGenOptions 0x4b03ca0, tail-calls 0x4506c0')
+P(f'  il2cpp_codegen_register @0x4506c0 [{fsize(0x4506c0)}b]: {dis(0x4506c0, 64, 16)}')
 ia_arr = n.dt[25]
 P(f'  init_array {ia_arr:#x} entries: {n.dt[27] // 8}')
 
 # ---- Unity side caller of il2cpp_init: function with "IL2CPP Root Domain"
-for fa, label in ((0x1076a60, 'Unity scripting init (refs "IL2CPP Root Domain")'), (0x432440, 'refs "global-metadata.dat" (MetadataCache/MetadataLoader init)'),
-                  (0x46ce20, 'refs "mscorlib.dll" in libil2cpp (candidate il2cpp::vm::Runtime::Init)')):
+for fa, label in ((0x107b060, 'Unity scripting init (refs "IL2CPP Root Domain")'), (0x436a40, 'refs "global-metadata.dat" (MetadataCache/MetadataLoader init)'),
+                  (0x471420, 'refs "mscorlib.dll" in libil2cpp (candidate il2cpp::vm::Runtime::Init)')):
     P(f'\n{label} @{fa:#x} [{fsize(fa)}b]:')
     k = 0
     for ins in md.disasm(bytes(img[fa:fa + min(fsize(fa), 400)]), fa):

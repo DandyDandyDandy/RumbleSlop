@@ -36,19 +36,19 @@
 enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3 };
 enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define FN(off) (GUEST_BASE + (off))
-#define F_GET_VALUE_STR 0x4545080ull
-#define F_CHANGE_VALUE 0x45451e0ull
-#define F_SET_INIT_INDEX 0x4544f30ull
-#define F_CHECK_ACTIVE_LIST 0x452bab0ull
-#define F_SET_RESOLUTION 0x3e914e0ull       // UnityEngine.Screen::SetResolution(int, int, FullScreenMode)
-#define F_SET_TARGET_FRAME_RATE 0x3e7c7f0ull
-#define F_SET_VSYNC_COUNT 0x3e963f0ull       // UnityEngine.QualitySettings::set_vSyncCount(int)
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
-#define F_OBJECT_NEW 0x465940ull            // il2cpp_object_new(klass)
-#define F_GC_DISABLE 0x465710ull
-#define F_GC_ENABLE 0x465700ull
-#define F_LIST_ADD_WITH_RESIZE 0x3397800ull // List<object>::AddWithResize(item, MethodInfo *)
-#define LIST_OBJECT_CLASS_SLOT 0x6124c80ull // metadata slot CheckActiveChoicesItemList takes List<object> from
+#define F_GET_VALUE_STR 0x4575d40ull
+#define F_CHANGE_VALUE 0x4575ea0ull
+#define F_SET_INIT_INDEX 0x4575bf0ull
+#define F_CHECK_ACTIVE_LIST 0x455d030ull
+#define F_SET_RESOLUTION 0x3ebced0ull       // UnityEngine.Screen::SetResolution(int, int, FullScreenMode)
+#define F_SET_TARGET_FRAME_RATE 0x3ea81e0ull
+#define F_SET_VSYNC_COUNT 0x3ec1de0ull       // UnityEngine.QualitySettings::set_vSyncCount(int)
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_OBJECT_NEW 0x469f40ull            // il2cpp_object_new(klass)
+#define F_GC_DISABLE 0x469d10ull
+#define F_GC_ENABLE 0x469d00ull
+#define F_LIST_ADD_WITH_RESIZE 0x33bfab0ull // List<object>::AddWithResize(item, MethodInfo *)
+#define LIST_OBJECT_CLASS_SLOT 0x6175d40ull // metadata slot CheckActiveChoicesItemList takes List<object> from
 
 static const int UNITY_MODE[M_COUNT] = {3 /* Windowed */, 1 /* FullScreenWindow */, 0 /* ExclusiveFullScreen */};
 static const int FPS[] = {30, 60, 120, 144, -1};
@@ -174,7 +174,7 @@ static int role_count(int role) { return role == ROLE_RES ? g_nres : role == ROL
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
 
 // UnityEngine.Screen::set_fullScreenMode(FullScreenMode value): the game's saved value decides windowed or not.
-int rt_hook_3e913b0(Cpu *c) {
+int rt_hook_3ebcda0(Cpu *c) {
     init();
     int windowed = (uint32_t)c->x[0] == 3;
     static int first = 1;
@@ -189,7 +189,7 @@ int rt_hook_3e913b0(Cpu *c) {
 }
 
 // UnityEngine.Application::set_targetFrameRate(int): the game sets 60 or 30; the port's limit wins.
-int rt_hook_3e7c7f0(Cpu *c) {
+int rt_hook_3ea81e0(Cpu *c) {
     if (t_in_fps) return 0;
     init();
     c->x[0] = (uint64_t)(uint32_t)FPS[g_fps];
@@ -197,7 +197,7 @@ int rt_hook_3e7c7f0(Cpu *c) {
 }
 
 // UnityEngine.QualitySettings::set_vSyncCount(int): the game applies its own value with every quality change.
-int rt_hook_3e963f0(Cpu *c) {
+int rt_hook_3ec1de0(Cpu *c) {
     if (t_in_vsync) return 0;
     init();
     c->x[0] = (uint64_t)g_vsync;
@@ -210,7 +210,7 @@ int rt_hook_3e963f0(Cpu *c) {
 // reads it back right after and then runs the game at 30 frames per second with the 30 Hz physics mode
 // (TimeManager.ChangeFixedUpdateMode(3)), as on the console. Put the port's VSync value back before the game looks,
 // so that it always takes its 60 Hz path and the port's frame rate limit applies.
-int rt_hook_3e960c0(Cpu *c) {
+int rt_hook_3ec1ab0(Cpu *c) {
     static __thread int inside;
     if (inside || getenv("BR_KEEP_30")) return 0;      // BR_KEEP_30=1: leave the console behaviour (for comparison)
     init();
@@ -228,8 +228,8 @@ int rt_hook_3e960c0(Cpu *c) {
         if (!(said & (1 << level))) { said |= 1 << level; rt_log("display: quality level %d replaced by the main game's level 1", level); }
         c->x[0] = 1;
     }
-    inside = 1; call_orig(c, 0x3e960c0ull); inside = 0;
-    int was = (int32_t)rt_call(c, FN(0x3e963b0ull), 1, 0ull);        // QualitySettings.get_vSyncCount
+    inside = 1; call_orig(c, 0x3ec1ab0ull); inside = 0;
+    int was = (int32_t)rt_call(c, FN(0x3ec1da0ull), 1, 0ull);        // QualitySettings.get_vSyncCount
     apply_vsync(c);
     if (was != g_vsync) rt_log("display: quality level %d asks for vSyncCount %d; kept at %d", level, was, g_vsync);
     return 1;
@@ -237,7 +237,7 @@ int rt_hook_3e960c0(Cpu *c) {
 
 // setInitIndex(): initial picker index. For the game's row the original runs first (it reads the saved value).
 // For the added rows this is only reached from ResetValue(), i.e. "back to default".
-int rt_hook_4544f30(Cpu *c) {
+int rt_hook_4575bf0(Cpu *c) {
     if (t_in_init) return 0;
     init();
     uint64_t item = c->x[0];
@@ -260,8 +260,8 @@ int rt_hook_4544f30(Cpu *c) {
 }
 
 // CanBeSelectedToDecrease() / CanBeSelectedToIncrease(): bounds of each row's picker.
-int rt_hook_45450b0(Cpu *c) { init(); c->x[0] = (int32_t)LD32(c->x[0] + 0x20) > 0; return 1; }
-int rt_hook_4545120(Cpu *c) {
+int rt_hook_4575d70(Cpu *c) { init(); c->x[0] = (int32_t)LD32(c->x[0] + 0x20) > 0; return 1; }
+int rt_hook_4575de0(Cpu *c) {
     init();
     uint64_t item = c->x[0];
     c->x[0] = (int32_t)LD32(item + 0x20) < role_count(role_of(item)) - 1;
@@ -269,7 +269,7 @@ int rt_hook_4545120(Cpu *c) {
 }
 
 // ChangeValue(int index)
-int rt_hook_45451e0(Cpu *c) {
+int rt_hook_4575ea0(Cpu *c) {
     if (t_in_change) return 0;
     init();
     uint64_t item = c->x[0];
@@ -288,7 +288,7 @@ int rt_hook_45451e0(Cpu *c) {
 }
 
 // GetValueStr()
-int rt_hook_4545080(Cpu *c) {
+int rt_hook_4575d40(Cpu *c) {
     if (t_in_str) return 0;
     init();
     uint64_t item = c->x[0];
@@ -312,7 +312,7 @@ int rt_hook_4545080(Cpu *c) {
 }
 
 // UIOptionChoicesItemData::GetContentStr(): the row label; the added rows have their own.
-int rt_hook_4503980(Cpu *c) {
+int rt_hook_4534720(Cpu *c) {
     uint64_t item = c->x[0];
     if (!item || !g_sm_klass || LD64(item) != g_sm_klass) return 0;
     int role = role_of(item);
@@ -323,7 +323,7 @@ int rt_hook_4503980(Cpu *c) {
 
 // CheckActiveChoicesItemList(): returns the new List<object> of the page's rows. Insert the added rows after the
 // game's Screen Mode row.
-int rt_hook_452bab0(Cpu *c) {
+int rt_hook_455d030(Cpu *c) {
     if (t_in_list) return 0;
     init();
     t_in_list = 1; call_orig(c, F_CHECK_ACTIVE_LIST); t_in_list = 0;
@@ -372,17 +372,17 @@ int rt_hook_452bab0(Cpu *c) {
 // BR_FPS_LOG=1: Wonder.MultiPlatformManager::LateUpdate runs once per rendered frame on the main thread; every two
 // seconds log the measured frame rate and how fast the engine's clocks advance against the wall clock (1.00 means
 // game time runs at normal speed whatever the frame rate).
-#define F_TIME_GET_TIME 0x3eea630ull
-#define F_TIME_GET_FIXED_TIME 0x3eea6b0ull
-#define F_TIME_GET_FIXED_DELTA 0x3eea7f0ull
-#define F_TIME_GET_FRAME_COUNT 0x3eea9b0ull
+#define F_TIME_GET_TIME 0x3f16020ull
+#define F_TIME_GET_FIXED_TIME 0x3f160a0ull
+#define F_TIME_GET_FIXED_DELTA 0x3f161e0ull
+#define F_TIME_GET_FRAME_COUNT 0x3f163a0ull
 static float call_float(Cpu *c, uint64_t off) {
     rt_call(c, FN(off), 1, 0ull);
     float f;
     memcpy(&f, &c->v[0], sizeof f);
     return f;
 }
-int rt_hook_43a7850(Cpu *c) {
+int rt_hook_43d58c0(Cpu *c) {
     static int on = -1;
     static uint64_t t0, frames;
     static float time0, fixed0;
@@ -419,13 +419,13 @@ int rt_hook_43a7850(Cpu *c) {
     {
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
-        uint64_t cams = rt_call(c, FN(0x3e83900ull), 1, 0ull);      // Camera.allCameras
+        uint64_t cams = rt_call(c, FN(0x3eaf2f0ull), 1, 0ull);      // Camera.allCameras
         int n = cams ? (int32_t)LD32(cams + 0x18) : 0, moved = 0;
         for (int i = 0; i < n && i < 8; i++) {
             uint64_t cam = LD64(cams + 0x20 + 8ull * i);
             if (!cam) continue;
-            uint64_t tr = rt_call(c, FN(0x3edc570ull), 2, cam, 0ull);  // Component.get_transform
-            rt_call(c, FN(0x3eee800ull), 2, tr, 0ull);                 // Transform.get_position
+            uint64_t tr = rt_call(c, FN(0x3f07f60ull), 2, cam, 0ull);  // Component.get_transform
+            rt_call(c, FN(0x3f1a1f0ull), 2, tr, 0ull);                 // Transform.get_position
             float p[3];
             for (int k = 0; k < 3; k++) { uint32_t u = (uint32_t)c->v[k]; memcpy(&p[k], &u, 4); }
             if (p[0] != cam_prev[i][0] || p[1] != cam_prev[i][1] || p[2] != cam_prev[i][2]) moved = 1;
@@ -442,11 +442,11 @@ int rt_hook_43a7850(Cpu *c) {
         __uint128_t v0 = c->v[0];
         float t = call_float(c, F_TIME_GET_TIME), ft = call_float(c, F_TIME_GET_FIXED_TIME), fd = call_float(c, F_TIME_GET_FIXED_DELTA);
         uint32_t fc = (uint32_t)rt_call(c, FN(F_TIME_GET_FRAME_COUNT), 1, 0ull);
-        int eng_target = (int32_t)rt_call(c, FN(0x3e7c7b0ull), 1, 0ull), eng_vsync = (int32_t)rt_call(c, FN(0x3e963b0ull), 1, 0ull);
+        int eng_target = (int32_t)rt_call(c, FN(0x3ea81a0ull), 1, 0ull), eng_vsync = (int32_t)rt_call(c, FN(0x3ec1da0ull), 1, 0ull);
         DWORD fpid = 0;
         HWND fg = GetForegroundWindow();
         if (fg) GetWindowThreadProcessId(fg, &fpid);
-        int logic = (int32_t)rt_call(c, FN(0x43de5a0ull), 1, 0ull);   // Wonder.TimeManager.get_fixedUpdateMode: 1 = 60 Hz, 2 = 50 Hz, 3 = 30 Hz
+        int logic = (int32_t)rt_call(c, FN(0x440d6e0ull), 1, 0ull);   // Wonder.TimeManager.get_fixedUpdateMode: 1 = 60 Hz, 2 = 50 Hz, 3 = 30 Hz
         rt_log("fps: game logic mode %d (1 = 60 Hz, 3 = 30 Hz); engine reports targetFrameRate %d, vSyncCount %d; game window focused: %s", logic, eng_target, eng_vsync,
                fpid == GetCurrentProcessId() ? "yes" : "no");
         if (t0) {

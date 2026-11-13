@@ -15,10 +15,10 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_CHARA_GET_ITEM 0x43ccbd0ull       // ShopItemParamCharacter.GetItem(Def.Chara.eID): makes the item when it is missing
-#define F_CHARA_GET_ITEM2 0x43d1750ull      // ShopItemParamCharacter.GetItem(Def.Chara.eID, Def.Chara.Table)
-#define F_SHOP_ON_CREATE 0x43cb7f0ull       // SaveUserParam.ShopItemParam.OnCreate()
-#define F_SHOP_ON_AFTER_LOAD 0x43cb9a0ull   // SaveUserParam.ShopItemParam.OnAfterLoad()
+#define F_CHARA_GET_ITEM 0x43fbd10ull       // ShopItemParamCharacter.GetItem(Def.Chara.eID): makes the item when it is missing
+#define F_CHARA_GET_ITEM2 0x4400890ull      // ShopItemParamCharacter.GetItem(Def.Chara.eID, Def.Chara.Table)
+#define F_SHOP_ON_CREATE 0x43fa930ull       // SaveUserParam.ShopItemParam.OnCreate()
+#define F_SHOP_ON_AFTER_LOAD 0x43faae0ull   // SaveUserParam.ShopItemParam.OnAfterLoad()
 #define SHOP_CHARACTER 0x28                 // ShopItemParam.m_Character
 #define ITEM_CONDITION 0x10                 // ShopItemParamItemBase -> ShopItemConditionParam
 #define CONDITION_ID 0x10                   // ShopItemConditionParam.m_ConditionID
@@ -80,8 +80,8 @@ static int get_item(Cpu *c, uint64_t fn) {
     c->x[30] = lr;
     return 1;
 }
-int rt_hook_43ccbd0(Cpu *c) { return get_item(c, F_CHARA_GET_ITEM); }
-int rt_hook_43d1750(Cpu *c) { return get_item(c, F_CHARA_GET_ITEM2); }
+int rt_hook_43fbd10(Cpu *c) { return get_item(c, F_CHARA_GET_ITEM); }
+int rt_hook_4400890(Cpu *c) { return get_item(c, F_CHARA_GET_ITEM2); }
 
 static int shop_event(Cpu *c, uint64_t fn) {
     if (g_inside) return 0;
@@ -95,5 +95,5 @@ static int shop_event(Cpu *c, uint64_t fn) {
     c->x[30] = lr;
     return 1;
 }
-int rt_hook_43cb7f0(Cpu *c) { return shop_event(c, F_SHOP_ON_CREATE); }
-int rt_hook_43cb9a0(Cpu *c) { return shop_event(c, F_SHOP_ON_AFTER_LOAD); }
+int rt_hook_43fa930(Cpu *c) { return shop_event(c, F_SHOP_ON_CREATE); }
+int rt_hook_43faae0(Cpu *c) { return shop_event(c, F_SHOP_ON_AFTER_LOAD); }

@@ -2,120 +2,120 @@
 # The hook is a host function `int rt_hook_<offset>(Cpu *c)` in port/runtime; it returns 1 when it handled the call
 # (result in c->x[0]) and 0 to let the lifted body run.
 # port/runtime/display_opt.c: window resolution choices in the game's Screen Mode option
-3e913b0   UnityEngine.Screen::set_fullScreenMode
-4544f30   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::setInitIndex
-4545080   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::GetValueStr
-45450b0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToDecrease
-4545120   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToIncrease
-45451e0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::ChangeValue
-4503980   Wonder.UI.UIOptionChoicesItemData::GetContentStr
-452bab0   Wonder.UI.Option.UIOptionScrollModule::CheckActiveChoicesItemList
-3e7c7f0   UnityEngine.Application::set_targetFrameRate
-3e963f0   UnityEngine.QualitySettings::set_vSyncCount
-43a7850   Wonder.MultiPlatformManager::LateUpdate   (BR_FPS_LOG measurement)
+3ebcda0   UnityEngine.Screen::set_fullScreenMode
+4575bf0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::setInitIndex
+4575d40   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::GetValueStr
+4575d70   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToDecrease
+4575de0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToIncrease
+4575ea0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::ChangeValue
+4534720   Wonder.UI.UIOptionChoicesItemData::GetContentStr
+455d030   Wonder.UI.Option.UIOptionScrollModule::CheckActiveChoicesItemList
+3ea81e0   UnityEngine.Application::set_targetFrameRate
+3ec1de0   UnityEngine.QualitySettings::set_vSyncCount
+43d58c0   Wonder.MultiPlatformManager::LateUpdate   (BR_FPS_LOG measurement)
 # port/runtime/dlc_log.c: BR_DLC_LOG diagnostic
-437bfb0   Wonder.DlcImpl_Switch::IsInstalled
+43aa000   Wonder.DlcImpl_Switch::IsInstalled
 # port/runtime/chara_dump.c: BR_CHARA_DUMP diagnostic
-4831da0   Wonder.CharaComponentReference::Awake
+486d3d0   Wonder.CharaComponentReference::Awake
 # port/runtime/ultrawide.c: screens wider than 16:9
-414b3d0   UnityEngine.UI.CanvasScaler::Handle
-44fe8a0   Wonder.UI.UISystemViewManager::SetActiveOutOfRangeBlackView
-44ec140   Wonder.UI.UIRootCanvasCtrl::Setup
-3ec64c0   UnityEngine.RenderTexture::.ctor(int, int, int)
-44ec260   Wonder.UI.UIRootCanvasCtrl::Update
+4176dc0   UnityEngine.UI.CanvasScaler::Handle
+452f4b0   Wonder.UI.UISystemViewManager::SetActiveOutOfRangeBlackView
+451cc70   Wonder.UI.UIRootCanvasCtrl::Setup
+3ef1eb0   UnityEngine.RenderTexture::.ctor(int, int, int)
+451cd90   Wonder.UI.UIRootCanvasCtrl::Update
 # port/runtime/online.c: PC online play (rooms joined by code) behind the game's NPLN facades
-2262740   GCS1.Network.NPLN.NplnMatchmakingAPI::RequestMatchmaking
-2262910   GCS1.Network.NPLN.NplnMatchmakingAPI::RequestLeaveRoom
-2263240   GCS1.Network.NPLN.NplnAPIFacade::get_NetworkTime
-2263430   GCS1.Network.NPLN.NplnAPIFacade::get_ServerRTT
-2263440   GCS1.Network.NPLN.NplnAPIFacade::IsConnected
-2263560   GCS1.Network.NPLN.NplnAPIFacade::IsConnectionServer
-2263680   GCS1.Network.NPLN.NplnAPIFacade::get_IsMatchmaking
-2263830   GCS1.Network.NPLN.NplnAPIFacade::get_IsInRoom
-2263a70   GCS1.Network.NPLN.NplnAPIFacade::get_IsLocalNetwork
-2263bc0   GCS1.Network.NPLN.NplnAPIFacade::get_IsProcessing
-2263db0   GCS1.Network.NPLN.NplnAPIFacade::get_CurrentState
-2263ec0   GCS1.Network.NPLN.NplnAPIFacade::get_GameID
-2264110   GCS1.Network.NPLN.NplnAPIFacade::Disconnect
-22641c0   GCS1.Network.NPLN.NplnAPIFacade::Cancel
-227f940   GCS1.Network.NPLN.SessionAPI::SendInternal(byte, byte[], bool, ReceiverGroup)
-227fb50   GCS1.Network.NPLN.SessionAPI::SendInternal(byte, byte[], PeerID, bool)
-227fda0   GCS1.Network.NPLN.SessionAPI::SendStreamUnreliable(byte[])
-227ffa0   GCS1.Network.NPLN.SessionAPI::SendStreamUnreliable(byte[], PeerID[])
-22801b0   GCS1.Network.NPLN.SessionAPI::get_CanParticipate
-22802c0   GCS1.Network.NPLN.SessionAPI::SetCanParticipateAsync
-2280410   GCS1.Network.NPLN.SessionAPI::get_LocalPeerID
-2280520   GCS1.Network.NPLN.SessionAPI::get_MasterPeerID
-2280630   GCS1.Network.NPLN.SessionAPI::RequestPromoteToMasterAsync
-2280700   GCS1.Network.NPLN.SessionAPI::get_Peers
-2280830   GCS1.Network.NPLN.SessionAPI::GetRtt
-2280c80   GCS1.Network.NPLN.SessionAPI::get_RoomID
+226a130   GCS1.Network.NPLN.NplnMatchmakingAPI::RequestMatchmaking
+226a300   GCS1.Network.NPLN.NplnMatchmakingAPI::RequestLeaveRoom
+226ac30   GCS1.Network.NPLN.NplnAPIFacade::get_NetworkTime
+226ae20   GCS1.Network.NPLN.NplnAPIFacade::get_ServerRTT
+226ae30   GCS1.Network.NPLN.NplnAPIFacade::IsConnected
+226af50   GCS1.Network.NPLN.NplnAPIFacade::IsConnectionServer
+226b070   GCS1.Network.NPLN.NplnAPIFacade::get_IsMatchmaking
+226b220   GCS1.Network.NPLN.NplnAPIFacade::get_IsInRoom
+226b460   GCS1.Network.NPLN.NplnAPIFacade::get_IsLocalNetwork
+226b5b0   GCS1.Network.NPLN.NplnAPIFacade::get_IsProcessing
+226b7a0   GCS1.Network.NPLN.NplnAPIFacade::get_CurrentState
+226b8b0   GCS1.Network.NPLN.NplnAPIFacade::get_GameID
+226bb00   GCS1.Network.NPLN.NplnAPIFacade::Disconnect
+226bbb0   GCS1.Network.NPLN.NplnAPIFacade::Cancel
+2287330   GCS1.Network.NPLN.SessionAPI::SendInternal(byte, byte[], bool, ReceiverGroup)
+2287540   GCS1.Network.NPLN.SessionAPI::SendInternal(byte, byte[], PeerID, bool)
+2287790   GCS1.Network.NPLN.SessionAPI::SendStreamUnreliable(byte[])
+2287990   GCS1.Network.NPLN.SessionAPI::SendStreamUnreliable(byte[], PeerID[])
+2287ba0   GCS1.Network.NPLN.SessionAPI::get_CanParticipate
+2287cb0   GCS1.Network.NPLN.SessionAPI::SetCanParticipateAsync
+2287e00   GCS1.Network.NPLN.SessionAPI::get_LocalPeerID
+2287f10   GCS1.Network.NPLN.SessionAPI::get_MasterPeerID
+2288020   GCS1.Network.NPLN.SessionAPI::RequestPromoteToMasterAsync
+22880f0   GCS1.Network.NPLN.SessionAPI::get_Peers
+2288220   GCS1.Network.NPLN.SessionAPI::GetRtt
+2288670   GCS1.Network.NPLN.SessionAPI::get_RoomID
 # port/runtime/online_ui.c: PC room codes in the game's code screens
-46bf4a0   Wonder.UI.MainMenu.BattleRoyale.UIViewBattleRoyaleFriendMatchEnterPassword::SetRoomNameText
-4637b40   Wonder.UI.MainMenu.UIPasswordDisplayStatusModule::setupPasswordView
-2272270   GCS1.Network.NPLN.NplnRoomFinder::FindAsync
+46f75c0   Wonder.UI.MainMenu.BattleRoyale.UIViewBattleRoyaleFriendMatchEnterPassword::SetRoomNameText
+466dd10   Wonder.UI.MainMenu.UIPasswordDisplayStatusModule::setupPasswordView
+2279c60   GCS1.Network.NPLN.NplnRoomFinder::FindAsync
 # port/runtime/display_opt.c: no 30 fps quality levels
-3e960c0   UnityEngine.QualitySettings::SetQualityLevel(int)
-47a6ce0   Wonder.CharacterInput.CharacterInputModule_Base::MonitorCharacterInput
-47a6f20   Wonder.CharacterInput.CharacterInputModule_SwitchForPassword::OpenKeyboard
-461c8e0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::createChoicesModule_TouchScreenKeyboard
-461c8b0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::setupChoicesGroupModule
-46bf430   Wonder.UI.MainMenu.BattleRoyale.UIViewBattleRoyaleFriendMatchEnterPassword::SetExplanationText
-461c360   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::SetEnableSearchBtn
-461c5b0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::ForceFocusOnDecide
-47a7000   Wonder.CharacterInput.CharacterInputModule_SwitchForPassword::SetStr
-461f3e0   Wonder.UI.ViewCtrl.UIViewCtrl_BtlSettingsLobby_Host::setupCopyRoomNameBtn
-461f790   Wonder.UI.ViewCtrl.UIViewCtrl_BtlSettingsLobby_Host::onCopyRoomNameBtn
-4610c90   Wonder.UI.ViewCtrl.UIViewCtrl_AdvMultiMatching_Friend::SetupForHost
-4611470   Wonder.UI.ViewCtrl.UIViewCtrl_AdvMultiMatching_Friend::onCopyRoomNameBtn
+3ec1ab0   UnityEngine.QualitySettings::SetQualityLevel(int)
+47e0e00   Wonder.CharacterInput.CharacterInputModule_Base::MonitorCharacterInput
+47e1040   Wonder.CharacterInput.CharacterInputModule_SwitchForPassword::OpenKeyboard
+46524d0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::createChoicesModule_TouchScreenKeyboard
+46524a0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::setupChoicesGroupModule
+46f7550   Wonder.UI.MainMenu.BattleRoyale.UIViewBattleRoyaleFriendMatchEnterPassword::SetExplanationText
+4651f50   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::SetEnableSearchBtn
+46521a0   Wonder.UI.ViewCtrl.UIViewCtrl_EnterPassword::ForceFocusOnDecide
+47e1120   Wonder.CharacterInput.CharacterInputModule_SwitchForPassword::SetStr
+4654fd0   Wonder.UI.ViewCtrl.UIViewCtrl_BtlSettingsLobby_Host::setupCopyRoomNameBtn
+4655380   Wonder.UI.ViewCtrl.UIViewCtrl_BtlSettingsLobby_Host::onCopyRoomNameBtn
+4646720   Wonder.UI.ViewCtrl.UIViewCtrl_AdvMultiMatching_Friend::SetupForHost
+4646f00   Wonder.UI.ViewCtrl.UIViewCtrl_AdvMultiMatching_Friend::onCopyRoomNameBtn
 # port/runtime/playstyle_ui.c: play-style screen without the eShop button and the Local Communication card
-455d620   Wonder.UI.Choices.UIChoicesGroupModule_TwoDimension_Param::.ctor
-451da20   Wonder.UI.TitleLoop.UIViewSelectPlayStyle::SetPlayStyleSelectMain
-4521150   Wonder.UI.TitleLoop.UIStateTitle::onCallEShop
-45076b0   Wonder.UI.UIStateBase::RequestStateTransition   (skips the friends-or-random screens of Online Play)
+458b250   Wonder.UI.Choices.UIChoicesGroupModule_TwoDimension_Param::.ctor
+454ef20   Wonder.UI.TitleLoop.UIViewSelectPlayStyle::SetPlayStyleSelectMain
+4552670   Wonder.UI.TitleLoop.UIStateTitle::onCallEShop
+45384e0   Wonder.UI.UIStateBase::RequestStateTransition   (skips the friends-or-random screens of Online Play)
 # port/runtime/tutorial_skip.c: first start asks before the opening movie and the tutorial
-4421e60   Wonder.Util+Movie::RequestMgMovieToTutorial
+4452e90   Wonder.Util+Movie::RequestMgMovieToTutorial
 # port/runtime/name_ui.c: online display name button and text box
-454a1b0   Wonder.UI.Choices.UIUserInputDetector::SetIndependentButtonAction
-4549be0   Wonder.UI.Choices.UIUserInputDetector::MonitorInputOnUpdate
-44e02b0   Wonder.UI.UIViewDialog::SetDialogText
+457b1f0   Wonder.UI.Choices.UIUserInputDetector::SetIndependentButtonAction
+457ac20   Wonder.UI.Choices.UIUserInputDetector::MonitorInputOnUpdate
+4510f70   Wonder.UI.UIViewDialog::SetDialogText
 # port/runtime/pc_input.c: keyboard and mouse buttons as the game's own input devices
-4395740   Wonder.AppInput+ActionAssignKeyboard::KeyDef
-4395810   Wonder.AppInput+ActionAssignKeyboard::KeyArrayDef
-43958e0   Wonder.AppInput+ActionAssignKeyboard::AnalogKeyDef
-4395060   Wonder.AppInput+ActionAssignMouse::ButtonDef
-4395dd0   Wonder.AppInput+ActionAssignDatum::.ctor (seven overloads)
-4395e70   Wonder.AppInput+ActionAssignDatum::.ctor
-4395f00   Wonder.AppInput+ActionAssignDatum::.ctor
-4396040   Wonder.AppInput+ActionAssignDatum::.ctor
-4396170   Wonder.AppInput+ActionAssignDatum::.ctor
-43962b0   Wonder.AppInput+ActionAssignDatum::.ctor
-43963e0   Wonder.AppInput+ActionAssignDatum::.ctor
-439a4c0   Wonder.AppInput+State::checkAction
-439ace0   Wonder.AppInput+State::ActionAnalogValue
-4387310   Wonder.AppInput::Update
-4387af0   Wonder.AppInput::FixedUpdate
-44ec770   Wonder.UI.UIPartViewButtonBase::SetMouseAction
-44d7970   Wonder.UI.UIStateOptionKeyConfigEdit::exec
-45429f0   Wonder.UI.Option.UIOptionChoicesItemData_KeyConfig::SetKeyConfigEditButton
+43c37b0   Wonder.AppInput+ActionAssignKeyboard::KeyDef
+43c3880   Wonder.AppInput+ActionAssignKeyboard::KeyArrayDef
+43c3950   Wonder.AppInput+ActionAssignKeyboard::AnalogKeyDef
+43c30d0   Wonder.AppInput+ActionAssignMouse::ButtonDef
+43c3e40   Wonder.AppInput+ActionAssignDatum::.ctor (seven overloads)
+43c3ee0   Wonder.AppInput+ActionAssignDatum::.ctor
+43c3f70   Wonder.AppInput+ActionAssignDatum::.ctor
+43c40b0   Wonder.AppInput+ActionAssignDatum::.ctor
+43c41e0   Wonder.AppInput+ActionAssignDatum::.ctor
+43c4320   Wonder.AppInput+ActionAssignDatum::.ctor
+43c4450   Wonder.AppInput+ActionAssignDatum::.ctor
+43c8530   Wonder.AppInput+State::checkAction
+43c8d50   Wonder.AppInput+State::ActionAnalogValue
+43b5380   Wonder.AppInput::Update
+43b5b60   Wonder.AppInput::FixedUpdate
+451d2a0   Wonder.UI.UIPartViewButtonBase::SetMouseAction
+4508710   Wonder.UI.UIStateOptionKeyConfigEdit::exec
+4572a10   Wonder.UI.Option.UIOptionChoicesItemData_KeyConfig::SetKeyConfigEditButton
 # port/runtime/pc_glyphs.c: button glyphs for the device in use
-439ca40   Wonder.AppInput+State::CopyToActiveLayer
-439cb10   Wonder.AppInput+State::CopyToInactiveLayer
-44fc140   Wonder.UI.InputIcon.UIIconSpriteManager_ControllerBtn::GetSprite(ButtonIcon.eID, ControllerKind.eID)
-4512c00   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForInputAction::getControllerBtnSprite
-4512460   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForDB::getControllerBtnSprite_Main
-4512560   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForDB::getControllerBtnSprite_Sub
-44421b0   Wonder.UIPartViewBtnGuideFixed_ForInputAction::Setup
-452fc10   Wonder.UI.Option.UIPartView_KeyConfig_SelectableBtn::SetButton
-452fc30   Wonder.UI.Option.UIPartView_KeyConfig_SelectableBtn::SetUp
-453f8e0   Wonder.UI.Option.UIOptionChoicesItemData_KeyConfig::ResetValue
-4517d50   Wonder.UI.Text.UITextEmojiDisplayModule::getbuttonIconSpriteTag(ButtonIcon.eID, ControllerKind.eID)
-4518160   Wonder.UI.Text.UITextEmojiDisplayModule::getbuttonIconSpriteTag(eButton, ControllerKind.eID)
-4517e70   Wonder.UI.Text.UITextEmojiDisplayModule::getEmojiTag
-44e1e30   Wonder.UI.UIPartViewButtonBase::SetupButtonGuide
-4516ca0   Wonder.UI.Text.UITextEmojiDisplayModule::updateText
-43ccbd0   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID)   (delisted.c)
-43d1750   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
-43cb7f0   Wonder.SaveUserParam+ShopItemParam::OnCreate
-43cb9a0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
-44f12d0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (scroll bar dragging, pc_input.c)
+43caab0   Wonder.AppInput+State::CopyToActiveLayer
+43cab80   Wonder.AppInput+State::CopyToInactiveLayer
+4543c80   Wonder.UI.InputIcon.UIIconSpriteManager_ControllerBtn::GetSprite(ButtonIcon.eID, ControllerKind.eID)
+4543800   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForInputAction::getControllerBtnSprite
+45432c0   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForDB::getControllerBtnSprite_Main
+45432f0   Wonder.UI.InputIcon.UIBtnGuideDisplayModule_ForDB::getControllerBtnSprite_Sub
+44735f0   Wonder.UIPartViewBtnGuideFixed_ForInputAction::Setup
+45643d0   Wonder.UI.Option.UIPartView_KeyConfig_SelectableBtn::SetButton
+45643f0   Wonder.UI.Option.UIPartView_KeyConfig_SelectableBtn::SetUp
+456fe00   Wonder.UI.Option.UIOptionChoicesItemData_KeyConfig::ResetValue
+45490e0   Wonder.UI.Text.UITextEmojiDisplayModule::getbuttonIconSpriteTag(ButtonIcon.eID, ControllerKind.eID)
+45494f0   Wonder.UI.Text.UITextEmojiDisplayModule::getbuttonIconSpriteTag(eButton, ControllerKind.eID)
+4549200   Wonder.UI.Text.UITextEmojiDisplayModule::getEmojiTag
+4512980   Wonder.UI.UIPartViewButtonBase::SetupButtonGuide
+4548030   Wonder.UI.Text.UITextEmojiDisplayModule::updateText
+43fbd10   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID)   (delisted.c)
+4400890   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
+43fa930   Wonder.SaveUserParam+ShopItemParam::OnCreate
+43faae0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
+45220f0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (scroll bar dragging, pc_input.c)

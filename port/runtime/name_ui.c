@@ -19,51 +19,51 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
-#define F_INIT_METADATA 0x44c0d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
-#define F_OBJECT_NEW 0x44c4a0ull
-#define F_SZARRAY_NEW 0x44c230ull
-#define F_GCHANDLE_NEW 0x4657a0ull          // il2cpp_gchandle_new(obj, pinned)
-#define F_GCHANDLE_TARGET 0x4657f0ull
-#define F_GCHANDLE_FREE 0x465810ull
-#define F_GET_GAMEOBJECT 0x3edc5c0ull       // UnityEngine.Component::get_gameObject
-#define F_GET_TRANSFORM 0x3edc570ull        // UnityEngine.Component::get_transform
-#define F_SET_ACTIVE 0x3ee0320ull           // UnityEngine.GameObject::SetActive(bool)
-#define F_GO_ACTIVE_SELF 0x3ee0390ull
-#define F_GO_GET_COMPONENT 0x24623a0ull     // GameObject.GetComponent<T>() (shared; MethodInfo selects T)
-#define F_GO_GET_COMPONENT_NAME 0x3edf400ull   // GameObject.GetComponent(string type)
-#define F_OBJ_NAME 0x3ee4e30ull             // UnityEngine.Object::get_name
-#define F_OBJ_ALIVE 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
-#define F_OBJ_SET_HIDE_FLAGS 0x3ee66e0ull
-#define F_INSTANTIATE 0x3ee5e70ull          // Object.Instantiate(Object original, Transform parent, bool worldSpace) (static)
-#define F_T_GET_PARENT 0x3eee6b0ull
-#define F_CHILD_COUNT 0x3ef2800ull
-#define F_GET_CHILD 0x3ef3020ull
-#define F_RT_GET_ANCHORED_POS 0x3eec8d0ull
-#define F_RT_SET_ANCHORED_POS 0x3eec9a0ull
-#define F_RT_SET_SIZE_DELTA 0x3eecb40ull
-#define F_RT_SET_ANCHOR_MIN 0x3eec660ull
-#define F_RT_SET_ANCHOR_MAX 0x3eec800ull
-#define F_RT_SET_PIVOT 0x3eecce0ull
-#define F_BUTTON_SET_TEXT 0x44e0bc0ull      // UIPartViewSelectableButton.SetText(string)
-#define F_LAYER_CURRENT 0x4394b70ull       // AppInput.Layer.current (static)
-#define F_GO_FIND 0x3ee0bb0ull              // GameObject.Find(string) (static)
-#define F_RETURN_BTN_SHOW 0x44e1d90ull      // UIViewStandingReturnButton.PlayInAnimAndActivate(float normalizedTime, int controllerIdx)
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_INIT_METADATA 0x4506d0ull         // il2cpp_codegen_initialize_runtime_metadata(uintptr_t *slot)
+#define F_OBJECT_NEW 0x450aa0ull
+#define F_SZARRAY_NEW 0x450830ull
+#define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
+#define F_GCHANDLE_TARGET 0x469df0ull
+#define F_GCHANDLE_FREE 0x469e10ull
+#define F_GET_GAMEOBJECT 0x3f07fb0ull       // UnityEngine.Component::get_gameObject
+#define F_GET_TRANSFORM 0x3f07f60ull        // UnityEngine.Component::get_transform
+#define F_SET_ACTIVE 0x3f0bd10ull           // UnityEngine.GameObject::SetActive(bool)
+#define F_GO_ACTIVE_SELF 0x3f0bd80ull
+#define F_GO_GET_COMPONENT 0x246cfb0ull     // GameObject.GetComponent<T>() (shared; MethodInfo selects T)
+#define F_GO_GET_COMPONENT_NAME 0x3f0adf0ull   // GameObject.GetComponent(string type)
+#define F_OBJ_NAME 0x3f10820ull             // UnityEngine.Object::get_name
+#define F_OBJ_ALIVE 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
+#define F_OBJ_SET_HIDE_FLAGS 0x3f120d0ull
+#define F_INSTANTIATE 0x3f11860ull          // Object.Instantiate(Object original, Transform parent, bool worldSpace) (static)
+#define F_T_GET_PARENT 0x3f1a0a0ull
+#define F_CHILD_COUNT 0x3f1e1f0ull
+#define F_GET_CHILD 0x3f1ea10ull
+#define F_RT_GET_ANCHORED_POS 0x3f182c0ull
+#define F_RT_SET_ANCHORED_POS 0x3f18390ull
+#define F_RT_SET_SIZE_DELTA 0x3f18530ull
+#define F_RT_SET_ANCHOR_MIN 0x3f18050ull
+#define F_RT_SET_ANCHOR_MAX 0x3f181f0ull
+#define F_RT_SET_PIVOT 0x3f186d0ull
+#define F_BUTTON_SET_TEXT 0x45117c0ull      // UIPartViewSelectableButton.SetText(string)
+#define F_LAYER_CURRENT 0x43c2be0ull       // AppInput.Layer.current (static)
+#define F_GO_FIND 0x3f0c5a0ull              // GameObject.Find(string) (static)
+#define F_RETURN_BTN_SHOW 0x45128e0ull      // UIViewStandingReturnButton.PlayInAnimAndActivate(float normalizedTime, int controllerIdx)
 #define RETURN_BTN_STATE 0x4c               // UIViewStandingReturnButton.m_DisplayState: 0 hidden, 1 shown
 #define DET_LAYER 0x28                      // UIUserInputDetector.targetLayer
 #define BTN_GUIDE 0x50                      // UIPartViewButtonBase.m_ButtonGuideView
-#define F_TEX_CTOR 0x3ebd6d0ull             // Texture2D..ctor(int, int)
-#define F_LOAD_IMAGE 0x3f27ae0ull           // ImageConversion.LoadImage(Texture2D, byte[])
-#define F_SPRITE_CREATE 0x3ef6790ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
-#define F_IMAGE_SET_SPRITE 0x3fb00e0ull
-#define F_SET_BUTTON_ACTION 0x454a1b0ull    // UIUserInputDetector.SetIndependentButtonAction(input, button, onPointerEnter)
-#define F_ADD_ANY_INPUT 0x454a720ull        // UIUserInputDetector.AddAnyUserInputList(input)
-#define F_OPEN_SYSTEM_DIALOG 0x44b4860ull   // GameStateManager.OpenSystemDialog(string) (static) -> SubGameStateHandle
-#define F_SET_DIALOG_TEXT 0x44e02b0ull      // UIViewDialog.SetDialogText(string)
-#define F_UPDATE_LOCAL_PEER 0x466b530ull    // MatchingPeersInfo.UpdateLocalPeerInfo() (static)
-#define M_CLASS_TEXTURE2D 0x60d0658ull
-#define M_CLASS_BYTE_ARR 0x60cf328ull
-#define M_METHOD_GO_GET_IMAGE 0x60f4ad8ull  // GameObject.GetComponent<UnityEngine.UI.Image>
+#define F_TEX_CTOR 0x3ee90c0ull             // Texture2D..ctor(int, int)
+#define F_LOAD_IMAGE 0x3f534d0ull           // ImageConversion.LoadImage(Texture2D, byte[])
+#define F_SPRITE_CREATE 0x3f22180ull        // Sprite.Create(Texture2D, Rect, Vector2 pivot)
+#define F_IMAGE_SET_SPRITE 0x3fdbad0ull
+#define F_SET_BUTTON_ACTION 0x457b1f0ull    // UIUserInputDetector.SetIndependentButtonAction(input, button, onPointerEnter)
+#define F_ADD_ANY_INPUT 0x457b7c0ull        // UIUserInputDetector.AddAnyUserInputList(input)
+#define F_OPEN_SYSTEM_DIALOG 0x44e4770ull   // GameStateManager.OpenSystemDialog(string) (static) -> SubGameStateHandle
+#define F_SET_DIALOG_TEXT 0x4510f70ull      // UIViewDialog.SetDialogText(string)
+#define F_UPDATE_LOCAL_PEER 0x46964f0ull    // MatchingPeersInfo.UpdateLocalPeerInfo() (static)
+#define M_CLASS_TEXTURE2D 0x6121658ull
+#define M_CLASS_BYTE_ARR 0x6120328ull
+#define M_METHOD_GO_GET_IMAGE 0x6145ac0ull  // GameObject.GetComponent<UnityEngine.UI.Image>
 #define STR_LEN 0x10
 #define STR_CHARS 0x14
 #define ARR_DATA 0x20
@@ -263,7 +263,7 @@ static void make_button(Cpu *c, uint64_t det, uint64_t registered, const char *b
 }
 // UIUserInputDetector.SetIndependentButtonAction(eUserInput, UIPartViewIndependentButton, onPointerEnter): every
 // button a screen registers passes here. BR_NAME_LOG=1 logs them.
-int rt_hook_454a1b0(Cpu *c) {
+int rt_hook_457b1f0(Cpu *c) {
     uint64_t a[9], lr = c->x[30], det = X(0), btn = X(2);
     if (g_log < 0) g_log = getenv("BR_NAME_LOG") != NULL;
     if (!btn) return 0;
@@ -349,7 +349,7 @@ static void box_open(Cpu *c) {
     rt_log("name ui: text box opened (dialog view %s)", g_box.view_h ? "found" : "NOT found");
 }
 // UIViewDialog.SetDialogText(string): remembers the dialog view our text box is shown in.
-int rt_hook_44e02b0(Cpu *c) {
+int rt_hook_4510f70(Cpu *c) {
     if (!g_box.expect_view || g_box.view_h) return 0;
     uint64_t a0 = X(0), a1 = X(1), a2 = X(2), lr = c->x[30];
     g_box.view_h = (uint32_t)rt_call(c, FN(F_GCHANDLE_NEW), 2, a0, 0ull);

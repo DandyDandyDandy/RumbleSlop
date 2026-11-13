@@ -6,12 +6,12 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_IS_INSTALLED 0x437bfb0ull   // Wonder.DlcImpl_Switch::IsInstalled
-#define F_NAME 0x4792320ull           // Wonder.DB.Dlc.Kind.Record::Name
-#define F_NX_INDEX 0x4792410ull       // Wonder.DB.Dlc.Kind.Record::NxIndex
+#define F_IS_INSTALLED 0x43aa000ull   // Wonder.DlcImpl_Switch::IsInstalled
+#define F_NAME 0x47cbc50ull           // Wonder.DB.Dlc.Kind.Record::Name
+#define F_NX_INDEX 0x47cbd50ull       // Wonder.DB.Dlc.Kind.Record::NxIndex
 
 static __thread int t_in;
-int rt_hook_437bfb0(Cpu *c) {
+int rt_hook_43aa000(Cpu *c) {
     static int on = -1;
     static unsigned char seen[4096];
     if (on < 0) { const char *e = getenv("BR_DLC_LOG"); on = e && *e && *e != '0'; }

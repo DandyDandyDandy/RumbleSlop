@@ -13,19 +13,19 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_GET_RENDERER_LIST 0x4831d20ull   // Wonder.CharaComponentReference::get_rendererList -> List<Renderer>
-#define F_GET_GAMEOBJECT 0x3edc5c0ull      // UnityEngine.Component::get_gameObject
-#define F_ACTIVE_IN_HIER 0x3ee03e0ull      // UnityEngine.GameObject::get_activeInHierarchy
-#define F_OBJ_ALIVE 0x3ee4c20ull           // UnityEngine.Object::op_Implicit (static)
-#define F_OBJ_NAME 0x3ee4e30ull            // UnityEngine.Object::get_name
-#define F_R_ENABLED 0x3e9a370ull           // UnityEngine.Renderer::get_enabled
-#define F_R_SHARED_MATS 0x3e9ae70ull       // UnityEngine.Renderer::get_sharedMaterials
-#define F_SMR_SHARED_MESH 0x3eacad0ull     // UnityEngine.SkinnedMeshRenderer::get_sharedMesh
-#define F_MESH_VERTS 0x3eafcb0ull          // UnityEngine.Mesh::get_vertexCount
-#define F_MESH_SUBS 0x3eb0140ull           // UnityEngine.Mesh::get_subMeshCount
-#define F_MAT_GET_TEXTURE 0x3ea3310ull     // UnityEngine.Material::GetTexture(int nameID)
-#define F_PROPERTY_TO_ID 0x3e99350ull      // UnityEngine.Shader::PropertyToID (static)
-#define F_STRING_NEW_UTF16 0x456994ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
+#define F_GET_RENDERER_LIST 0x486d350ull   // Wonder.CharaComponentReference::get_rendererList -> List<Renderer>
+#define F_GET_GAMEOBJECT 0x3f07fb0ull      // UnityEngine.Component::get_gameObject
+#define F_ACTIVE_IN_HIER 0x3f0bdd0ull      // UnityEngine.GameObject::get_activeInHierarchy
+#define F_OBJ_ALIVE 0x3f10610ull           // UnityEngine.Object::op_Implicit (static)
+#define F_OBJ_NAME 0x3f10820ull            // UnityEngine.Object::get_name
+#define F_R_ENABLED 0x3ec5d60ull           // UnityEngine.Renderer::get_enabled
+#define F_R_SHARED_MATS 0x3ec6860ull       // UnityEngine.Renderer::get_sharedMaterials
+#define F_SMR_SHARED_MESH 0x3ed84c0ull     // UnityEngine.SkinnedMeshRenderer::get_sharedMesh
+#define F_MESH_VERTS 0x3edb6a0ull          // UnityEngine.Mesh::get_vertexCount
+#define F_MESH_SUBS 0x3edbb30ull           // UnityEngine.Mesh::get_subMeshCount
+#define F_MAT_GET_TEXTURE 0x3eced00ull     // UnityEngine.Material::GetTexture(int nameID)
+#define F_PROPERTY_TO_ID 0x3ec4d40ull      // UnityEngine.Shader::PropertyToID (static)
+#define F_STRING_NEW_UTF16 0x45af94ull      // il2cpp::vm::String::NewUtf16(const Il2CppChar *, int32_t)
 
 typedef struct { uint64_t obj; int frames, dumps; } Entry;
 static Entry g_e[64];
@@ -86,7 +86,7 @@ static void dump(Cpu *c, Entry *e) {
     }
 }
 
-int rt_hook_4831da0(Cpu *c) {   // CharaComponentReference::Awake
+int rt_hook_486d3d0(Cpu *c) {   // CharaComponentReference::Awake
     if (!g_want) { g_want = getenv("BR_CHARA_DUMP"); if (!g_want) g_want = ""; }
     if (*g_want)
         for (int i = 0; i < 64; i++)

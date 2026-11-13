@@ -4,7 +4,7 @@ import sys, bisect, numpy as np, collections
 sys.path.insert(0, TOOLS)
 import fn
 t = fn.tgt
-m = (t >= 0x3e2640) & (t < 0x473000)
+m = (t >= 0x3e6c30) & (t < 0x477600)
 src = np.nonzero(m)[0] * 4
 tg = t[m]
 u, inv = np.unique(tg, return_inverse=True)

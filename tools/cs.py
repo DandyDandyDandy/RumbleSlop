@@ -335,7 +335,7 @@ def dis(a, mx=4000):
             tg = int(m3.group(2), 16)
             if not lo <= tg < hi:
                 nm = names.get(tg, '')
-                if tg in (0x44c0d0,):
+                if tg in (0x4506d0,):
                     continue
                 note = '   ; ' + (nm or '?')
         if ins.mnemonic in ('strb',) and re.search(r'\[x\d+, #0x[0-9a-f]+\]$', t) and any(r in t for r in pages) and 'w8' in t:
@@ -347,7 +347,7 @@ def dis(a, mx=4000):
         m4 = re.match(r'mov w2, (wzr|#(0x[0-9a-f]+|\d+))$', t)
         if m4:
             pend = 0 if m4.group(1) == 'wzr' else int(m4.group(2), 0)
-        if t.startswith('bl #0x45561c'):
+        if t.startswith('bl #0x459c1c'):
             note = '   ; interface-slot lookup (slot in w2 above, interface class in x1)'
         print('   %x  %s%s' % (ins.address, t, note))
 

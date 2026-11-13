@@ -34,42 +34,42 @@
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
-#define F_OBJ_ALIVE 0x3ee4c20ull           // UnityEngine.Object::op_Implicit (static)
-#define F_OBJ_NAME 0x3ee4e30ull            // UnityEngine.Object::get_name
-#define F_GET_GAMEOBJECT 0x3edc5c0ull      // UnityEngine.Component::get_gameObject
-#define F_GET_TRANSFORM 0x3edc570ull       // UnityEngine.Component::get_transform
-#define F_GO_TRANSFORM 0x3ee0150ull        // UnityEngine.GameObject::get_transform
-#define F_ACTIVE_IN_HIER 0x3ee03e0ull      // UnityEngine.GameObject::get_activeInHierarchy
-#define F_SET_ACTIVE 0x3ee0320ull          // UnityEngine.GameObject::SetActive(bool)
-#define F_SCREEN_W 0x3e91150ull
-#define F_SCREEN_H 0x3e91190ull
-#define F_SET_RESOLUTION 0x3e914e0ull      // UnityEngine.Screen::SetResolution(int, int, FullScreenMode)
-#define F_CAM_ALL 0x3e83900ull             // UnityEngine.Camera::get_allCameras (static) -> Camera[]
-#define F_CAM_RECT 0x3e80930ull            // Rect results come back in v0..v3
-#define F_CAM_PIXEL_RECT 0x3e80ad0ull
-#define F_CAM_TARGET 0x3e80db0ull
-#define F_CAM_DEPTH 0x3e7ea40ull
-#define F_CANVAS_RENDER_MODE 0x413bd40ull
-#define F_CANVAS_IS_ROOT 0x413be00ull
-#define F_CANVAS_PIXEL_RECT 0x413be50ull
-#define F_CANVAS_WORLD_CAMERA 0x413cd00ull
-#define F_CANVAS_SCALE_FACTOR 0x413bf20ull
-#define F_CHILD_COUNT 0x3ef2800ull         // UnityEngine.Transform
-#define F_GET_CHILD 0x3ef3020ull
-#define F_T_PARENT 0x3eee6b0ull
-#define F_T_POSITION 0x3eee800ull
-#define F_T_LOSSY_SCALE 0x3ef2bb0ull
-#define F_RT_RECT 0x3eec4c0ull             // UnityEngine.RectTransform
-#define F_RT_GET_ANCHOR_MIN 0x3eec590ull
-#define F_RT_SET_ANCHOR_MIN 0x3eec660ull
-#define F_RT_GET_ANCHOR_MAX 0x3eec730ull
-#define F_RT_SET_ANCHOR_MAX 0x3eec800ull
-#define F_RT_GET_ANCHORED_POS 0x3eec8d0ull
-#define F_RT_SET_ANCHORED_POS 0x3eec9a0ull
-#define F_RT_GET_SIZE_DELTA 0x3eeca70ull
-#define F_RT_SET_SIZE_DELTA 0x3eecb40ull
+#define F_OBJ_ALIVE 0x3f10610ull           // UnityEngine.Object::op_Implicit (static)
+#define F_OBJ_NAME 0x3f10820ull            // UnityEngine.Object::get_name
+#define F_GET_GAMEOBJECT 0x3f07fb0ull      // UnityEngine.Component::get_gameObject
+#define F_GET_TRANSFORM 0x3f07f60ull       // UnityEngine.Component::get_transform
+#define F_GO_TRANSFORM 0x3f0bb40ull        // UnityEngine.GameObject::get_transform
+#define F_ACTIVE_IN_HIER 0x3f0bdd0ull      // UnityEngine.GameObject::get_activeInHierarchy
+#define F_SET_ACTIVE 0x3f0bd10ull          // UnityEngine.GameObject::SetActive(bool)
+#define F_SCREEN_W 0x3ebcb40ull
+#define F_SCREEN_H 0x3ebcb80ull
+#define F_SET_RESOLUTION 0x3ebced0ull      // UnityEngine.Screen::SetResolution(int, int, FullScreenMode)
+#define F_CAM_ALL 0x3eaf2f0ull             // UnityEngine.Camera::get_allCameras (static) -> Camera[]
+#define F_CAM_RECT 0x3eac320ull            // Rect results come back in v0..v3
+#define F_CAM_PIXEL_RECT 0x3eac4c0ull
+#define F_CAM_TARGET 0x3eac7a0ull
+#define F_CAM_DEPTH 0x3eaa430ull
+#define F_CANVAS_RENDER_MODE 0x4167730ull
+#define F_CANVAS_IS_ROOT 0x41677f0ull
+#define F_CANVAS_PIXEL_RECT 0x4167840ull
+#define F_CANVAS_WORLD_CAMERA 0x41686f0ull
+#define F_CANVAS_SCALE_FACTOR 0x4167910ull
+#define F_CHILD_COUNT 0x3f1e1f0ull         // UnityEngine.Transform
+#define F_GET_CHILD 0x3f1ea10ull
+#define F_T_PARENT 0x3f1a0a0ull
+#define F_T_POSITION 0x3f1a1f0ull
+#define F_T_LOSSY_SCALE 0x3f1e5a0ull
+#define F_RT_RECT 0x3f17eb0ull             // UnityEngine.RectTransform
+#define F_RT_GET_ANCHOR_MIN 0x3f17f80ull
+#define F_RT_SET_ANCHOR_MIN 0x3f18050ull
+#define F_RT_GET_ANCHOR_MAX 0x3f18120ull
+#define F_RT_SET_ANCHOR_MAX 0x3f181f0ull
+#define F_RT_GET_ANCHORED_POS 0x3f182c0ull
+#define F_RT_SET_ANCHORED_POS 0x3f18390ull
+#define F_RT_GET_SIZE_DELTA 0x3f18460ull
+#define F_RT_SET_SIZE_DELTA 0x3f18530ull
 
-static uint64_t g_scalers[64];             // BR_SCREEN_DUMP: the CanvasScalers handled this frame (rt_hook_414b3d0)
+static uint64_t g_scalers[64];             // BR_SCREEN_DUMP: the CanvasScalers handled this frame (rt_hook_4176dc0)
 static int g_nscalers, g_dump_collect;
 static uint64_t g_t0;
 
@@ -101,16 +101,16 @@ static void set_v2(Cpu *c, uint64_t fn, uint64_t o, float x, float y) {   // Vec
 }
 
 // ------------------------------------------------------------------------------------------- black side images
-#define F_SET_BLACK_VIEW 0x44fe8a0ull
-#define F_SINGLETON_EXISTS 0x28544d0ull    // Framework.SingletonBase<T>::get_Exists (MethodInfo in x0)
-#define F_SINGLETON_GET 0x28542d0ull       // Framework.SingletonBase<T>::get_Instance (MethodInfo in x0)
-#define SLOT_SYSVIEW_EXISTS 0x6120458ull   // metadata slots SetActiveOutOfRangeBlackView passes to the two above
-#define SLOT_SYSVIEW_GET 0x6123be8ull
+#define F_SET_BLACK_VIEW 0x452f4b0ull
+#define F_SINGLETON_EXISTS 0x28671d0ull    // Framework.SingletonBase<T>::get_Exists (MethodInfo in x0)
+#define F_SINGLETON_GET 0x2866fd0ull       // Framework.SingletonBase<T>::get_Instance (MethodInfo in x0)
+#define SLOT_SYSVIEW_EXISTS 0x61714c0ull   // metadata slots SetActiveOutOfRangeBlackView passes to the two above
+#define SLOT_SYSVIEW_GET 0x6174c58ull
 static __thread int t_in_black;
 
 // Wonder.UI.UISystemViewManager::SetActiveOutOfRangeBlackView(bool): the view is four black images around the 16:9
 // area (top, bottom, left, right), which can only show on a screen that is not 16:9; switch them off for good.
-int rt_hook_44fe8a0(Cpu *c) {
+int rt_hook_452f4b0(Cpu *c) {
     if (t_in_black) return 0;
     t_in_black = 1; c->pc = FN(F_SET_BLACK_VIEW); rt_dispatch(c); t_in_black = 0;
     if (c->eh_unwinding) return 1;
@@ -141,20 +141,20 @@ static int g_restore_frames;
 // canvases, whose SafeMargin is stretched over the canvas; those are marked here, in the object's padding bytes
 // (+0x59 "HUD canvas", +0x5a "re-anchored"; the last field is the bool at +0x58), and re-anchored from the
 // object's own Update while the screen is wide. Other callers that pass false (the fade canvas) stay full screen.
-#define MAINGAME_INIT_LO 0x45eba10ull      // Wonder.UI.MainGame.UIManager_MainGame+<initAsync>d__13::MoveNext
-#define MAINGAME_INIT_HI 0x45ebb50ull
-#define F_VIEWPORT_TYPE 0x4412b30ull       // Wonder.Util+Camera::GetViewPortType (static): 1 = one full-screen view
+#define MAINGAME_INIT_LO 0x46218d0ull      // Wonder.UI.MainGame.UIManager_MainGame+<initAsync>d__13::MoveNext
+#define MAINGAME_INIT_HI 0x4621a10ull
+#define F_VIEWPORT_TYPE 0x4443a80ull       // Wonder.Util+Camera::GetViewPortType (static): 1 = one full-screen view
 static float g_hud_orig[4][2];             // SafeMargin's own anchors, position and size (the same in every HUD canvas)
 static int g_hud_orig_set;
 
-int rt_hook_44ec140(Cpu *c) {
+int rt_hook_451cc70(Cpu *c) {
     uint64_t ra = c->x[30] - GUEST_BASE;
     if (!(c->x[1] & 1) && ra >= MAINGAME_INIT_LO && ra < MAINGAME_INIT_HI) { ST8(c->x[0] + 0x59, 1); ST8(c->x[0] + 0x5a, 0); }
     return 0;
 }
 
 // Wonder.UI.UIRootCanvasCtrl::Update()
-int rt_hook_44ec260(Cpu *c) {
+int rt_hook_451cd90(Cpu *c) {
     uint64_t ctrl = c->x[0];
     if (!LD8(ctrl + 0x59)) return 0;
     int applied = LD8(ctrl + 0x5a);
@@ -241,7 +241,7 @@ static void widen_walk(Cpu *c, uint64_t t, int depth) {
 }
 
 // UnityEngine.UI.CanvasScaler::Handle(): runs every frame for every enabled scaler.
-int rt_hook_414b3d0(Cpu *c) {
+int rt_hook_4176dc0(Cpu *c) {
     uint64_t s = c->x[0];
     if (g_dump_collect && g_nscalers < 64) g_scalers[g_nscalers++] = s;      // for this frame's BR_SCREEN_DUMP only
     if (!g_wide && !g_tall && g_restore_frames <= 0) return 0;
@@ -258,9 +258,9 @@ int rt_hook_414b3d0(Cpu *c) {
 // UnityEngine.RenderTexture::.ctor(int width, int height, int depth): the menus' blurred backdrop
 // (UIViewMainMenuBottomBlur::EnableImage / createTexture) renders a camera into a fixed 1920x1080 texture and shows
 // it in a full-screen image. Give the texture the screen's aspect ratio, so the resized image is not stretched.
-#define BLUR_LO 0x44dabe0ull
-#define BLUR_HI 0x44dae00ull
-int rt_hook_3ec64c0(Cpu *c) {
+#define BLUR_LO 0x450b9f0ull
+#define BLUR_HI 0x450bc40ull
+int rt_hook_3ef1eb0(Cpu *c) {
     uint64_t ra = c->x[30] - GUEST_BASE;
     if (ra < BLUR_LO || ra >= BLUR_HI || (uint32_t)c->x[1] != 1920 || (uint32_t)c->x[2] != 1080) return 0;
     uint64_t sx[31];
@@ -309,11 +309,11 @@ static void dump(Cpu *c) {
         uint64_t tt = rt_call(c, FN(F_CAM_TARGET), 2, cam, 0ull);
         rt_call(c, FN(F_CAM_DEPTH), 2, cam, 0ull);
         float depth = vf(c, 0);
-        rt_call(c, FN(0x3e7e030ull), 2, cam, 0ull);              // Camera.get_fieldOfView (vertical, degrees)
+        rt_call(c, FN(0x3ea9a20ull), 2, cam, 0ull);              // Camera.get_fieldOfView (vertical, degrees)
         float fov = vf(c, 0);
-        rt_call(c, FN(0x3e7eb00ull), 2, cam, 0ull);              // Camera.get_aspect
+        rt_call(c, FN(0x3eaa4f0ull), 2, cam, 0ull);              // Camera.get_aspect
         float aspect = vf(c, 0);
-        int physical = (int)(rt_call(c, FN(0x3e7fae0ull), 2, cam, 0ull) & 1), fit = (int)rt_call(c, FN(0x3e80680ull), 2, cam, 0ull);
+        int physical = (int)(rt_call(c, FN(0x3eab4d0ull), 2, cam, 0ull) & 1), fit = (int)rt_call(c, FN(0x3eac070ull), 2, cam, 0ull);
         rt_log("screen: camera %-40s depth %5.1f rect %.3f %.3f %.3f %.3f  pixels %.0f %.0f %.0f %.0f  target %s  fov %.2f aspect %.3f physical %d gate fit %d",
                name_of(c, cam, a, sizeof a), depth, r[0], r[1], r[2], r[3], p[0], p[1], p[2], p[3], tt ? name_of(c, tt, b, sizeof b) : "screen",
                fov, aspect, physical, fit);
@@ -341,9 +341,9 @@ void ultrawide_request_dump(void) { g_dump_request = 1; }   // dump cameras and 
 // Camera.gateFit of physical cameras that draw to the screen: Vertical (1) on a wide screen, back to Horizontal
 // (2) otherwise for the ones this changed (found again by the fit they have). Looked at twice a second:
 // Camera.allCameras makes a new array each time.
-#define F_CAM_USE_PHYSICAL 0x3e7fae0ull    // UnityEngine.Camera::get_usePhysicalProperties
-#define F_CAM_GET_GATE_FIT 0x3e80680ull
-#define F_CAM_SET_GATE_FIT 0x3e806d0ull
+#define F_CAM_USE_PHYSICAL 0x3eab4d0ull    // UnityEngine.Camera::get_usePhysicalProperties
+#define F_CAM_GET_GATE_FIT 0x3eac070ull
+#define F_CAM_SET_GATE_FIT 0x3eac0c0ull
 static void gate_fit_tick(Cpu *c) {
     static uint64_t next;
     static int changed;

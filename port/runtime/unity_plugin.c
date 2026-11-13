@@ -1,5 +1,5 @@
 // The engine side of Unity's native plug-in interface for plug-ins statically linked into main (CRIWARE).
-// main+0x1104f40 is the engine's UnityRegisterRenderingPlugin(UnityPluginLoad, UnityPluginUnload); the Switch engine
+// main+0x1109540 is the engine's UnityRegisterRenderingPlugin(UnityPluginLoad, UnityPluginUnload); the Switch engine
 // is not lifted, so the host calls UnityPluginLoad itself with a guest-visible IUnityInterfaces whose only interface
 // is IUnityGraphics. GetRenderer answers kUnityGfxRendererNull: no native rendering path exists yet (the CRI Mana
 // plug-in's NVN texture path needs a Vulkan counterpart; see the port notes).
@@ -32,7 +32,7 @@ static void if_get_split(Cpu *c) {
 }
 static void if_register(Cpu *c) { (void)c; }
 
-HOSTFN(engine_register_plugin) {   // main+0x1104f40 (load, unload)
+HOSTFN(engine_register_plugin) {   // main+0x1109540 (load, unload)
     uint64_t load = X(0);
     if (!g_interfaces[0]) {
         g_interfaces[0] = rt_syn_alloc(if_get, "IUnityInterfaces::GetInterface", NULL);
