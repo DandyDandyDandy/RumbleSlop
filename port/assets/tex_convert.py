@@ -87,11 +87,13 @@ def astc_to_bc7(data):
     key = None
     if CACHE:
         key = os.path.join(CACHE, hashlib.sha1(data).hexdigest())
-        if os.path.exists(key):
+        try:
             with open(key, 'rb') as f:
                 r = f.read()
             if len(r) == len(data):
                 return r
+        except OSError:      # not stored yet, or another worker is storing this very texture right now
+            pass
     import texture2ddecoder, etcpak
     n = len(data) // 16
     k = min(n, 256)
