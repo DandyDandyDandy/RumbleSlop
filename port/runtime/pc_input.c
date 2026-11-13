@@ -103,8 +103,10 @@ static uint64_t g_kbm_tick;                   // last time a key or mouse button
 uint64_t pc_kbm_last_input(void) { return g_kbm_tick; }
 
 static int window_focused(void) {
+    extern int rt_no_real_input(void);
     DWORD pid = 0;
     HWND w = GetForegroundWindow();
+    if (rt_no_real_input()) return 0;
     if (w) GetWindowThreadProcessId(w, &pid);
     return pid == GetCurrentProcessId();
 }

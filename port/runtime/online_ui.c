@@ -207,8 +207,10 @@ int rt_text_entry_active(void) { return GetTickCount64() - g_typing_tick < 200; 
 void rt_text_entry_keepalive(void) { g_typing_tick = GetTickCount64(); }   // name_ui.c's text box, once a frame
 
 static int window_focused(void) {
+    extern int rt_no_real_input(void);
     DWORD pid = 0;
     HWND w = GetForegroundWindow();
+    if (rt_no_real_input()) return 0;
     if (w) GetWindowThreadProcessId(w, &pid);
     return pid == GetCurrentProcessId();
 }

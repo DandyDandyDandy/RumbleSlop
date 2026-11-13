@@ -32,10 +32,17 @@ static uint32_t g_hold_type;
 static uint64_t g_reads;
 
 static int key(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+// BR_NO_REAL_INPUT=1 (tests): the real keyboard, mouse and controllers are ignored, so a game driven by
+// BR_INPUT_LIVE is not disturbed by whoever is using the PC meanwhile.
+int rt_no_real_input(void) {
+    static int v = -1;
+    if (v < 0) v = getenv("BR_NO_REAL_INPUT") != NULL;
+    return v;
+}
 static int focused(void) {
     HWND w = GetForegroundWindow();
     DWORD pid = 0;
-    if (!w) return 0;
+    if (!w || rt_no_real_input()) return 0;
     GetWindowThreadProcessId(w, &pid);
     return pid == GetCurrentProcessId();
 }
@@ -158,7 +165,7 @@ static void devices_refresh(void) {
         int n = 0;
         for (int i = 0; i < 4; i++) {
             if (g_xconn[i] || now >= g_xprobe[i]) {
-                g_xconn[i] = XInputGetState((DWORD)i, &g_xs[i]) == ERROR_SUCCESS;
+                g_xconn[i] = !rt_no_real_input() && XInputGetState((DWORD)i, &g_xs[i]) == ERROR_SUCCESS;
                 if (!g_xconn[i]) g_xprobe[i] = now + 1000;
             }
             if (g_xconn[i] && n < MAX_PADS) g_dev[n++].xinput = i;
