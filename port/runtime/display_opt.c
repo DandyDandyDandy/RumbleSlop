@@ -75,11 +75,7 @@ static int is_steam_deck(void) {
     return !strcmp(maker, "Valve") && (!strcmp(product, "Jupiter") || !strcmp(product, "Galileo"));
 }
 static void cfg_path(char *out, size_t n) {
-    char exe[MAX_PATH];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    char *s = strrchr(exe, '\\');
-    if (s) s[1] = 0;
-    snprintf(out, n, "%sport_display%s.txt", exe, g_deck ? "_deck" : "");
+    snprintf(out, n, "%sport_display%s.txt", rt_user_dir(), g_deck ? "_deck" : "");
 }
 static void add_res(int w, int h) {
     for (int i = 0; i < g_nres; i++)

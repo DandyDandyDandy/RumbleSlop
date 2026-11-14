@@ -174,7 +174,7 @@ static void read_config(NpConfig *cfg) {
     char path[600], line[200];
     memset(cfg, 0, sizeof *cfg);
     cfg->upnp = 1;
-    snprintf(path, sizeof path, "%sport_net.txt", rt_exe_dir());
+    snprintf(path, sizeof path, "%sport_net.txt", rt_user_dir());
     FILE *f = fopen(path, "r");
     if (!f) return;
     while (fgets(line, sizeof line, f)) {

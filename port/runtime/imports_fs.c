@@ -203,7 +203,8 @@ HOSTFN(_ZN2nn2fs13ReadDirectoryEPlPNS0_14DirectoryEntryENS0_15DirectoryHandleEl)
 }
 HOSTFN(_ZN2nn2fs14CloseDirectoryENS0_15DirectoryHandleE) { Dir *d = PTR(0); if (d) { free(d->e); free(d); } }
 
-// Mounts. Save data of the one local user lives in <exe dir>save\, temporary storage in <exe dir>temp\. Commit has
+// Mounts. Save data of the one local user lives in <user dir>save\, temporary storage in <user dir>temp\
+// (rt_user_dir: the profile's Saved Games folder, or the game folder when portable). Commit has
 // nothing to do (files are written in place). Add-on content <index> is the folder <exe dir>dlc\<index>
 // (see aoc_scan in imports_plat.c); most packs are unlock keys with an empty file system.
 static uint32_t mount_host(const char *name, const char *sub) {
@@ -212,8 +213,9 @@ static uint32_t mount_host(const char *name, const char *sub) {
     // BR_PROFILE=<suffix>: a second copy of the game on the same PC keeps its own save and temp folders (save<suffix>\)
     const char *prof = getenv("BR_PROFILE");
     int own = prof && *prof && strlen(prof) < 16 && !strpbrk(prof, "\\/:.") && (!strcmp(sub, "save") || !strcmp(sub, "temp"));
-    snprintf(dir, sizeof dir, "%s%s%s\\", rt_exe_dir(), sub, own ? prof : "");
-    if (own) CreateDirectoryA(dir, NULL);
+    int user = !strcmp(sub, "save") || !strcmp(sub, "temp");
+    snprintf(dir, sizeof dir, "%s%s%s\\", user ? rt_user_dir() : rt_exe_dir(), sub, own ? prof : "");
+    if (own || user) CreateDirectoryA(dir, NULL);
     rt_fs_mount(name, dir);
     return 0;
 }

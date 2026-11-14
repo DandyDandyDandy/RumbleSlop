@@ -58,10 +58,12 @@ are not repeated. When it says it is finished:
    online play).
 
 Afterwards the `build` folder and the files in `input` are not needed any more: `setup.cmd --clean` deletes
-`build`. The `game` folder is self-contained and can be moved anywhere.
+`build`. The `game` folder can be moved anywhere.
 
-Saves are in `game\save`. Settings the port adds are small text files next to the exe (`port_display.txt`,
-`port_keys.txt`, `port_name.txt`, `port_net.txt`).
+Saves and the settings the port adds (`port_display.txt`, `port_keys.txt`, `port_name.txt`, `port_net.txt`) are in
+`Saved Games\RumbleSlop` in your user folder. To keep them inside the game folder instead (a portable game), put an
+empty file `portable.txt` next to `RumbleSlop.exe` before the first start. A game folder that already has a `save`
+folder keeps using it.
 
 ## Playing
 

@@ -83,12 +83,8 @@ extern void rt_input_inject_a(int ms);      // imports_hid.c
 static char g_name[33];
 static int g_name_loaded;
 static void name_path(char *out, size_t n) {
-    char exe[MAX_PATH];
     const char *prof = getenv("BR_PROFILE");
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    char *s = strrchr(exe, '\\');
-    if (s) s[1] = 0;
-    snprintf(out, n, "%sport_name%s.txt", exe, prof ? prof : "");
+    snprintf(out, n, "%sport_name%s.txt", rt_user_dir(), prof ? prof : "");
 }
 // The player's name, UTF-8, at most 32 bytes: the saved one, else BR_NICKNAME, else "Player".
 const char *rt_player_name(void) {

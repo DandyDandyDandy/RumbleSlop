@@ -470,12 +470,8 @@ int rt_hook_43c4320(Cpu *c) { return datum(c); }
 int rt_hook_43c4450(Cpu *c) { return datum(c); }
 
 static void keys_path(char *out, size_t n) {
-    char exe[MAX_PATH];
     const char *prof = getenv("BR_PROFILE");
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    char *s = strrchr(exe, '\\');
-    if (s) s[1] = 0;
-    snprintf(out, n, "%sport_keys%s.txt", exe, prof ? prof : "");
+    snprintf(out, n, "%sport_keys%s.txt", rt_user_dir(), prof ? prof : "");
 }
 // The file: one line per changed action, "<action id> <key name> [<key name> ...]" (or "<action id> none").
 static void bindings_load(void) {

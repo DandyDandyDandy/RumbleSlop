@@ -30,6 +30,7 @@ void rt_fatal_c(Cpu *c, const char *fmt, ...) __attribute__((noreturn, format(pr
 void rt_backtrace(Cpu *c);
 const char *rt_guest_name(uint64_t pc, char *buf, int size);   // "0x70.. (main+0x.. Type::Method+0x..)"
 const char *rt_exe_dir(void);                // directory of the player executable, with trailing backslash
+const char *rt_user_dir(void);               // where save data and the port's settings files are kept (trailing backslash)
 const char *rt_data_dir(void);               // <exe dir>\<Name>_Data\ (trailing backslash)
 void rt_log_init(void);
 void rt_ring_note(uint64_t addr);            // last-functions ring (fnprof)

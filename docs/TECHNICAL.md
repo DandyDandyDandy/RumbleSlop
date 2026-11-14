@@ -404,6 +404,18 @@ port, not by native speakers. Seen in Japanese: the quit question and the Displa
 characters in the game's fonts), a Windows in another language, the row help texts (still none), the game's own
 untranslated PC words ("Windowed", "MIDDLE" in Japanese).
 
+### Where the player's files are (`rt_user_dir`, `log.c`)
+
+Save data (`save\`, `temp\`) and the port's settings files (`port_display.txt`, `port_keys.txt`, `port_name.txt`,
+`port_net.txt`) are in `rt_user_dir()`: `%USERPROFILE%\Saved Games\<Name>\` for a game folder that has no save yet.
+The game folder itself is used ("portable") when a `save\` folder or a file `portable.txt` is next to the exe, when
+`BR_PROFILE` names a test profile, or with `BR_PORTABLE=1`; `BR_PORTABLE=0` forces the profile folder. So a game
+folder made before this existed keeps its saves where they are, and an empty file `portable.txt` put next to the
+exe before the first start makes a new one portable. The log line "user files: ..." tells which. Logs, add-on
+content and everything the setup made stay in the game folder. Seen: `BR_PORTABLE=0` starts a new save under
+Saved Games; an existing game folder logs "portable". Not tried: a game folder that really has no save (only
+the forced mode), a profile path with characters outside the system code page.
+
 ### Play-style screen (`playstyle_ui.c`)
 
 "Select Your Playstyle!" has no Nintendo eShop button and no Local Communication card on PC. The cards come from

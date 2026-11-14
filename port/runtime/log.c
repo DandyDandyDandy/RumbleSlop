@@ -1,10 +1,17 @@
 // Log file, fatal errors, guest backtraces with symbol names.
 #include <windows.h>
 #include <tlhelp32.h>
+#include <initguid.h>
+#include <knownfolders.h>
+#include <shlobj.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rt.h"
+
+#ifndef GAME_NAME
+#define GAME_NAME "RumbleSlop"
+#endif
 
 int rt_trace;
 volatile int g_fnprof;
@@ -19,6 +26,40 @@ static char g_exe_dir[MAX_PATH], g_data_dir[MAX_PATH];
 static uint64_t g_log_lines, g_log_max = 2000000;
 
 const char *rt_exe_dir(void) { return g_exe_dir; }
+// Where the player's own files are kept (save data, the port's settings files), with a trailing backslash.
+// A PC game keeps them in the user's profile: %USERPROFILE%\Saved Games\<Name>. The game folder itself is
+// used instead ("portable") when a save\ folder or a file portable.txt is already next to the exe (so a game
+// folder made before this existed, or one that is meant to be carried around, stays as it is), when
+// BR_PROFILE names a test profile, or with BR_PORTABLE=1. BR_PORTABLE=0 forces the profile folder.
+const char *rt_user_dir(void) {
+    static char dir[MAX_PATH + 64];
+    static volatile LONG state;                  // 0 not decided, 1 deciding, 2 done
+    if (state == 2) return dir;
+    while (InterlockedCompareExchange(&state, 1, 0) == 1) Sleep(1);
+    if (state == 2) return dir;
+    char probe[MAX_PATH + 32];
+    const char *force = getenv("BR_PORTABLE"), *prof = getenv("BR_PROFILE");
+    int portable = prof && *prof;
+    snprintf(probe, sizeof probe, "%ssave", g_exe_dir);
+    if (GetFileAttributesA(probe) != INVALID_FILE_ATTRIBUTES) portable = 1;
+    snprintf(probe, sizeof probe, "%sportable.txt", g_exe_dir);
+    if (GetFileAttributesA(probe) != INVALID_FILE_ATTRIBUTES) portable = 1;
+    if (force && *force) portable = *force != '0';
+    PWSTR saved = NULL;
+    if (!portable && SHGetKnownFolderPath(&FOLDERID_SavedGames, KF_FLAG_CREATE, NULL, &saved) == S_OK && saved) {
+        char base[MAX_PATH];
+        if (WideCharToMultiByte(CP_ACP, 0, saved, -1, base, sizeof base, NULL, NULL) > 0) {
+            snprintf(dir, sizeof dir, "%s\\%s\\", base, GAME_NAME);
+            CreateDirectoryA(dir, NULL);
+            if (GetFileAttributesA(dir) == INVALID_FILE_ATTRIBUTES) dir[0] = 0;
+        }
+    }
+    if (saved) CoTaskMemFree(saved);
+    if (!dir[0]) snprintf(dir, sizeof dir, "%s", g_exe_dir);
+    rt_log("user files: %s%s", dir, portable ? " (portable: the game folder)" : "");
+    state = 2;
+    return dir;
+}
 const char *rt_data_dir(void) { return g_data_dir; }
 
 void rt_log_init(void) {
