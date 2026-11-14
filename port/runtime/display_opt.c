@@ -425,6 +425,7 @@ int rt_hook_43d58c0(Cpu *c) {
         extern void pc_input_tick(Cpu *c);
         extern void test_aids_tick(Cpu *c);
         extern void interp_tick(Cpu *c);
+        extern void pc_shell_tick(Cpu *c);
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
         chara_dump_tick(c);
@@ -437,6 +438,7 @@ int rt_hook_43d58c0(Cpu *c) {
         name_ui_tick(c);
         pc_input_tick(c);
         interp_tick(c);
+        pc_shell_tick(c);
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     if (!on) return 0;

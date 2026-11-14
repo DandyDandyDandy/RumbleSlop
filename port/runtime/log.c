@@ -380,7 +380,14 @@ __attribute__((noreturn)) static void die(const char *msg) {
     if (InterlockedExchange(&dying, 1)) Sleep(INFINITE);
     if (g_log && g_log != stderr) fflush(g_log);
     fprintf(stderr, "RumbleSlop: %s\n", msg);
-    if (getenv("BR_FATAL_BOX")) MessageBoxA(NULL, msg, "RumbleSlop", MB_OK | MB_ICONERROR);
+    // A player gets a message; a scripted run (BR_NO_REAL_INPUT, or BR_FATAL_BOX=0) must not wait for a click.
+    const char *box = getenv("BR_FATAL_BOX"), *test = getenv("BR_NO_REAL_INPUT");
+    if (box ? *box != '0' : !(test && *test && *test != '0')) {
+        static char text[2600];
+        snprintf(text, sizeof text, "The game has stopped because of an error.\n\n%.1800s\n\nDetails are in the file port.log in the game folder:\n%s",
+                 msg, rt_exe_dir());
+        MessageBoxA(NULL, text, GAME_NAME, MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+    }
     if (getenv("BR_FATAL_BREAK")) DebugBreak();
     TerminateProcess(GetCurrentProcess(), 70);
     for (;;) Sleep(1000);

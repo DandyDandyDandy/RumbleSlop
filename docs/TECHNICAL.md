@@ -366,6 +366,24 @@ Testing
   (`A`, `2:LSU 1500`, `TYPE ABC`). The first-time tutorial pop-ups stop appearing once the save has seen them, so
   scripted navigation must look at the screen instead of assuming them.
 
+### Quit, pointer, icon, error message (`pc_shell.c`, `window.c`, `port\launcher`)
+
+* **Quit.** The game has no way out. Backing out of the play-style screen (B, Esc, the Back button:
+  `UIStateTitle.onCancel_SelectPlayStyle`, which used to return to the "press any button" logo) opens the game's
+  Yes/No dialog with "Quit the game?", focus on No; Yes calls the engine's `Application.Quit`. The game's code
+  never names that function, so it is taken from the engine's internal-call table (`rt_icall_host(name)` gives the
+  engine's Win64 function of any internal call, also `Cursor.set_visible` below). `BR_NO_QUIT_DIALOG=1` keeps
+  the old behaviour. Seen: No stays, Yes ends the process.
+* **Pointer.** Hidden while the pad or the keyboard gave the last input, shown when the mouse moves
+  (`pc_mouse_mode`). Seen in the log only ("cursor: hidden"); not judged by eye.
+* **Pads and focus.** A controller is not read while another program is in front (`poll` in `imports_hid.c`;
+  the keyboard always behaved so). Scripted input is not affected.
+* **Icon and version.** `port\launcher\build_launcher.py` builds the exe with `launcher.rc`: icon resource 103
+  (`icon.ico`, drawn by `make_icon.py`: the port's own picture) and a version block with the game version.
+  `window.c` gives the window the same icon. `build_launcher.py --copy` replaces the exe in the game folder.
+* **Errors.** A FATAL shows a message box that names `port.log`, unless the run is scripted
+  (`BR_NO_REAL_INPUT`) or `BR_FATAL_BOX=0`. Not triggered since the change (no fault at hand).
+
 ### Play-style screen (`playstyle_ui.c`)
 
 "Select Your Playstyle!" has no Nintendo eShop button and no Local Communication card on PC. The cards come from

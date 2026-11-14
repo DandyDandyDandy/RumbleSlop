@@ -218,6 +218,7 @@ static void poll(Pad *p, uint32_t id) {
     int positional = positional_layout();
     devices_refresh();
     int have = id < (uint32_t)g_ndev, xi = have ? g_dev[id].xinput : -2;
+    if (!focused()) xi = -2;                 // a pad does nothing while another program is in front
     if (xi >= 0) {
         XINPUT_STATE xs = g_xs[xi];
         WORD w = xs.Gamepad.wButtons;

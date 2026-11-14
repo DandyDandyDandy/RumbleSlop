@@ -199,6 +199,7 @@ static void call_set_f(Cpu *c, uint64_t fn, uint64_t o, float v) { c->x[0] = o; 
 
 // The mouse is the device used last (moved over the window, clicked, wheel): lists stay where the mouse put them.
 static int mouse_mode(void) { return g_mouse_tick && g_mouse_tick >= g_key_tick && g_mouse_tick >= rt_pad_last_input(0); }
+int pc_mouse_mode(void) { return mouse_mode(); }      // pc_shell.c: the pointer is shown only then
 
 int rt_hook_418aba0(Cpu *c) {                // UnityEngine.UI.ScrollRect.LateUpdate: this list is in use
     uint64_t sr = X(0), lr = c->x[30];

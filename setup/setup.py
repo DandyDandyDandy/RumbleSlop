@@ -160,8 +160,7 @@ def step_link():
     run('link', PY, paths.PORT / 'runtime' / 'build_runtime.py', '--no-copy')
     if not (paths.OBJ / 'GameAssembly.dll').exists():
         raise Fail('GameAssembly.dll was not linked; see build\\logs\\link.log')
-    run('link', paths.llvm('clang'), '-O2', '-municode', '-mwindows', f'-DGAME_NAME_W=L"{paths.NAME}"',
-        paths.PORT / 'launcher' / 'launcher.c', '-o', paths.OBJ / f'{paths.NAME}.exe', '-static')
+    run('link', PY, paths.PORT / 'launcher' / 'build_launcher.py')      # the exe, with icon and version information
 
 
 def step_assets():

@@ -25,6 +25,12 @@ void window_title_tick(void) {
     GetClassNameW(w, cls, 64);
     if (wcscmp(cls, L"UnityWndClass")) return;   // a dialog or the text box, not the game window
     SetWindowTextW(w, L"" GAME_NAME);
+    // the program icon (resource 103 of the exe, port\launcher\launcher.rc) in the title bar and the task bar
+    HINSTANCE exe = GetModuleHandleW(NULL);
+    HICON big = LoadImageW(exe, MAKEINTRESOURCEW(103), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+    HICON small = LoadImageW(exe, MAKEINTRESOURCEW(103), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+    if (big) SendMessageW(w, WM_SETICON, ICON_BIG, (LPARAM)big);
+    if (small) SendMessageW(w, WM_SETICON, ICON_SMALL, (LPARAM)small);
     done = 1;
     rt_log("window: title set to %s", GAME_NAME);
 }

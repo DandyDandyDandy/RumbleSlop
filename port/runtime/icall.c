@@ -269,6 +269,16 @@ void rt_icall_report(void) {
            (unsigned long long)g_n_icalls, (unsigned long long)g_n_nosig, (unsigned long long)added, (unsigned long long)missing);
 }
 
+// The engine's own function behind an internal call (also one the game never uses), or NULL. Win64 calling
+// convention; the name is as the engine registers it, without the parameter list.
+void *rt_icall_host(const char *name) {
+    AcquireSRWLockShared(&g_icall_lock);
+    Icall *e = icall_find(name, strlen(name));
+    void *h = e ? e->host : NULL;
+    ReleaseSRWLockShared(&g_icall_lock);
+    return h;
+}
+
 // The engine gets its own function back; an icall implemented inside the lifted runtime gets a host-callable stub.
 EXPORT void *il2cpp_resolve_icall(const char *name) {
     Cpu *c = api_enter("il2cpp_resolve_icall");
