@@ -1,7 +1,5 @@
 // Test aids driven through BR_INPUT_LIVE (imports_hid.c), for checks that would otherwise need a stage to be played:
 //   GOAL    the local player's ball enters the stage's first goal now (the game's own goal handler is called)
-//   BANANAS until the stage ends, code that asks test_aids_all_bananas() is told every banana has been taken
-//           (the fork's bonus-stage rule asks; the game's own count is not changed)
 // The request is taken up by the per-frame hook (display_opt.c), on the game's main thread.
 // BR_UNLOAD_EVERY=<frames>: Resources.UnloadUnusedAssets is called every that many frames (the engine's sweep of
 // unused assets, which stops the world and walks the managed heap, normally runs only between scenes; this makes
@@ -25,19 +23,16 @@
 #define LIST_SIZE 0x18
 #define ARR_DATA 0x20
 
-static volatile LONG g_goal, g_bananas;
+static volatile LONG g_goal;
 
 void test_aids_request(const char *what) {
     if (!strcmp(what, "GOAL")) InterlockedExchange(&g_goal, 1);
-    if (!strcmp(what, "BANANAS")) InterlockedExchange(&g_bananas, 1);
 }
 
 static uint64_t item(uint64_t list, int i) {
     uint64_t items = list ? LD64(list + LIST_ITEMS) : 0;
     return items && i < (int)LD32(list + LIST_SIZE) ? LD64(items + ARR_DATA + 8 * (uint64_t)i) : 0;
 }
-
-int test_aids_all_bananas(void) { return InterlockedExchange(&g_bananas, 0) != 0; }      // one answer per request
 
 void test_aids_tick(Cpu *c) {   // once per frame; the caller preserves the registers
     static int every = -1, frame;
