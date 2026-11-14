@@ -120,7 +120,10 @@
 4400890   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
 43fa930   Wonder.SaveUserParam+ShopItemParam::OnCreate
 43faae0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
-45220f0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (scroll bar dragging, pc_input.c)
+45220f0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (lists do not follow the focus while the mouse is used, pc_input.c)
+45594c0   Wonder.UI.Scroll.UICalcContentPosModule_Base::OnUpdate
+455a260   Wonder.UI.Scroll.UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical::Update
+418aba0   UnityEngine.UI.ScrollRect::LateUpdate   (the lists the wheel and a scroll-bar drag move, pc_input.c)
 4690da0   Wonder.BattleStarter::OnRecvPrepareAdvGame   (test switch BR_START_STAGE)
 47042b0   Wonder.UI.MainMenu.Adventure.UIStateAdvMultiSetting_Offline::<setupInnerFSM>b__9_3   (test switch BR_START_STAGE)
 454d230   Wonder.UI.SceneChange.UIStateArgTransitionToMainGameScene::.ctor   (test switch BR_START_STAGE)

@@ -10,16 +10,17 @@
 //     same gates as the pad (valid state, active layer, device mask, the chat wheel's blocked actions);
 //   * keys are identified as the game does (UnityEngine.InputSystem.Key, a physical key position), read with
 //     GetAsyncKeyState through the scan code, so WASD stays where it is on any keyboard layout.
-//   * the mouse wheel moves through lists: one notch is a tap of the Up or Down arrow key, which the menus
-//     already understand. Not while a stage is being played, where those keys steer;
-//   * a list's scroll bar can be dragged: the lists scroll with the focused item, so a drag is turned into the
-//     same arrow-key taps, one per item's worth of bar length.
+//   * the mouse wheel scrolls the list under the cursor and a list's scroll bar can be dragged; both move the
+//     list itself (UnityEngine.UI.ScrollRect), not the focus. While the mouse is the device used last, the lists
+//     do not follow the focused item, as in the game's own PC code. On a screen without a list a wheel notch is
+//     a tap of the Up or Down arrow key. Not while a stage is being played, where those keys steer.
 // The keyboard belongs to player 1. The player's own bindings are in <exe dir>\port_keys<BR_PROFILE>.txt.
 // Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "rt.h"
 
 #define FN(off) (GUEST_BASE + (off))
@@ -141,45 +142,217 @@ static BOOL CALLBACK wheel_window(HWND h, LPARAM out) {
 }
 void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches); }      // BR_INPUT_LIVE "WHEEL <n>"
 
-// ---- dragging a scroll bar. The game's lists are Wonder.UI.UIPartViewBaseVirtualScrollRect views over a
-// UnityEngine.UI.ScrollRect; the bar only shows where the list is. The view that updated last is remembered
-// (its Update is hooked); a press on its bar, or within GRAB_PX beside it, starts a drag.
+// ---- lists. Every list of the game sits in a UnityEngine.UI.ScrollRect; the game's own code moves its content
+// towards the focused item (three Update functions, which the game's PC code switches off while the mouse is the
+// device used last: the port takes that decision, see mouse_mode). The mouse moves the ScrollRect itself:
+//   * the wheel scrolls the list under the cursor (or the only list on screen) by WHEEL_PART of its height a notch,
+//     eased over a few frames;
+//   * a press on the scroll bar, or within GRAB_PX beside it, drags the handle: the list is where the handle is.
+// The ScrollRects are known from their LateUpdate (hooked); a GC handle keeps each object valid for the host.
 #define F_OBJ_ALIVE_ 0x3f10610ull            // UnityEngine.Object::op_Implicit (static)
-#define F_SCROLLRECT_VBAR 0x41885e0ull       // UnityEngine.UI.ScrollRect::get_verticalScrollbar
-#define VSR_ITEM_COUNT 0x58                  // UIPartViewBaseVirtualScrollRect.itemCount
-#define VSR_SCROLL_RECT 0x78                 // .m_ScrollRect
+#define F_GCHANDLE_NEW_ 0x469da0ull
+#define F_GCHANDLE_FREE_ 0x469e10ull
+#define F_GET_TRANSFORM_ 0x3f07f60ull        // UnityEngine.Component::get_transform
+#define F_T_IS_CHILD_OF 0x3f1e670ull         // UnityEngine.Transform::IsChildOf(Transform)
+#define F_RT_ANCHORED_POS 0x3f182c0ull       // UnityEngine.RectTransform::get_anchoredPosition
+#define F_SR_VIEW_RECT 0x4188a40ull          // UnityEngine.UI.ScrollRect::get_viewRect
+#define F_SR_GET_VNORM 0x418b650ull          // ::get_verticalNormalizedPosition (1 = top)
+#define F_SR_SET_VNORM 0x418b7f0ull
+#define F_SR_GET_HNORM 0x418b530ull          // ::get_horizontalNormalizedPosition (0 = left)
+#define F_SR_SET_HNORM 0x418b7d0ull
+#define F_SCROLLBAR_DIRECTION 0x41857c0ull   // UnityEngine.UI.Scrollbar::get_direction (3 = top to bottom)
+#define SR_CONTENT 0x20                      // ScrollRect: m_Content, m_Horizontal, m_Vertical, m_VerticalScrollbar
+#define SR_HORIZONTAL 0x28
+#define SR_VERTICAL 0x29
+#define SR_VBAR 0x50
+#define SR_CONTENT_EXTENT 0x94               // m_ContentBounds.extents (x, y): half the content's size
+#define SR_VIEW_EXTENT 0xac                  // m_ViewBounds.extents
 #define GRAB_PX 14.0f
-static uint64_t g_list_view, g_list_tick;    // the list view seen last by its Update hook (a managed pointer, used the same frame only)
-int rt_hook_45220f0(Cpu *c) {                // UIPartViewBaseVirtualScrollRect.Update
-    g_list_view = c->x[0];
-    g_list_tick = GetTickCount64();
+#define WHEEL_PART 0.22f
+#define WHEEL_EASE 16.0f
+#define MAX_LISTS 12
+typedef struct {
+    uint64_t sr;
+    uint32_t handle, seen;                   // GC handle; the frame its LateUpdate ran last
+    int cur, axis, has_bar;                  // on screen this frame; 1 scrolls vertically, 2 horizontally, 0 fits
+    float view[4], bar[4];                   // viewport and scroll bar on screen: x, y, width, height
+} List;
+static List g_lists[MAX_LISTS];
+static uint32_t g_list_frame;
+static int g_list_count;                      // lists on screen that can scroll
+static uint64_t g_drag_sr;                    // the list whose bar is being dragged
+static uint64_t g_mouse_tick, g_key_tick;     // last use of the mouse on the UI / of a keyboard key
+extern uint64_t rt_pad_last_input(uint32_t id);
+extern int rt_ui_mouse(float *x, float *y, int *down);
+extern int rt_ui_mouse_moved(void);
+extern void rt_ui_mouse_touch(void);
+extern int rt_ui_rect(Cpu *c, uint64_t view, float r[4]);
+extern void rt_ui_click_consume(void);
+
+static float ldf(uint64_t a) { uint32_t u = LD32(a); float f; memcpy(&f, &u, 4); return f; }
+static void stf(uint64_t a, float f) { uint32_t u; memcpy(&u, &f, 4); ST32(a, u); }
+static int alive(Cpu *c, uint64_t o) { return o && (rt_call(c, FN(F_OBJ_ALIVE_), 2, o, 0ull) & 1); }
+static int in_rect(const float r[4], float x, float y, float pad) { return x >= r[0] - pad && x <= r[0] + r[2] + pad && y >= r[1] && y <= r[1] + r[3]; }
+static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+static float call_f(Cpu *c, uint64_t fn, uint64_t o) { rt_call(c, FN(fn), 2, o, 0ull); return rt_getf(c, 0); }
+static void call_set_f(Cpu *c, uint64_t fn, uint64_t o, float v) { c->x[0] = o; c->x[1] = 0; rt_setf(c, 0, v); rt_call_regs(c, FN(fn)); }
+
+// The mouse is the device used last (moved over the window, clicked, wheel): lists stay where the mouse put them.
+static int mouse_mode(void) { return g_mouse_tick && g_mouse_tick >= g_key_tick && g_mouse_tick >= rt_pad_last_input(0); }
+
+int rt_hook_418aba0(Cpu *c) {                // UnityEngine.UI.ScrollRect.LateUpdate: this list is in use
+    uint64_t sr = X(0), lr = c->x[30];
+    int free_slot = -1;
+    for (int i = 0; i < MAX_LISTS; i++) {
+        if (g_lists[i].sr == sr && g_lists[i].handle) { g_lists[i].seen = g_list_frame; return 0; }
+        if (!g_lists[i].handle && free_slot < 0) free_slot = i;
+    }
+    if (free_slot < 0 || !sr) return 0;
+    memset(&g_lists[free_slot], 0, sizeof g_lists[0]);
+    g_lists[free_slot].handle = (uint32_t)rt_call(c, FN(F_GCHANDLE_NEW_), 2, sr, 0ull);
+    g_lists[free_slot].sr = sr;
+    g_lists[free_slot].seen = g_list_frame;
+    c->x[0] = sr; c->x[30] = lr;
     return 0;
 }
-static void drag_tick(Cpu *c) {
-    extern int rt_ui_mouse(float *x, float *y, int *down);
-    extern int rt_ui_rect(Cpu *c, uint64_t view, float r[4]);
-    static int dragging, was_down;
-    static float last_y, rest;
-    float x, y, r[4];
-    int down = 0, inside = rt_ui_mouse(&x, &y, &down), fresh = down && !was_down;
-    uint64_t view = g_list_view;
+// The three functions that move a list's content towards the focused item's place (`target`, a Vector2). With the
+// mouse in use they are left out, and the place is kept equal to where the list is, so nothing jumps when a key or
+// the pad takes over: the list then moves when the focus does.
+static int list_follow(Cpu *c, uint64_t sr, uint64_t target) {
+    uint64_t self = X(0), lr = c->x[30];
+    if (!mouse_mode() || !sr) return 0;
+    uint64_t content = LD64(sr + SR_CONTENT);
+    if (content) {
+        rt_call(c, FN(F_RT_ANCHORED_POS), 2, content, 0ull);
+        stf(target, rt_getf(c, 0)); stf(target + 4, rt_getf(c, 1));
+    }
+    c->x[0] = self; c->x[30] = lr;
+    return 1;
+}
+int rt_hook_45220f0(Cpu *c) { return list_follow(c, LD64(X(0) + 0x78), X(0) + 0x68); }   // UIPartViewBaseVirtualScrollRect.Update
+int rt_hook_45594c0(Cpu *c) { return list_follow(c, LD64(X(0) + 0x10), X(0) + 0x1c); }   // Scroll.UICalcContentPosModule_Base.OnUpdate
+int rt_hook_455a260(Cpu *c) { return list_follow(c, LD64(X(0) + 0x28), X(0) + 0x54); }   // Scroll.UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical.Update
+
+// 1 when the button is an item of a list and the point is outside what the list shows: the part of an item that
+// is cut off at the list's edge is not there for the mouse.
+static int list_hides(Cpu *c, uint64_t view, float x, float y) {
+    for (int i = 0; i < MAX_LISTS; i++) {
+        List *l = &g_lists[i];
+        if (!l->handle || !l->cur || in_rect(l->view, x, y, 0)) continue;
+        if (!alive(c, l->sr)) continue;
+        uint64_t content = LD64(l->sr + SR_CONTENT);
+        if (!alive(c, content)) continue;
+        if (rt_call(c, FN(F_T_IS_CHILD_OF), 3, rt_call(c, FN(F_GET_TRANSFORM_), 2, view, 0ull), content, 0ull) & 1) return 1;
+    }
+    return 0;
+}
+static List *list_of(uint64_t sr) {
+    for (int i = 0; i < MAX_LISTS; i++)
+        if (g_lists[i].handle && g_lists[i].cur && g_lists[i].sr == sr) return &g_lists[i];
+    return NULL;
+}
+// Handle length as a part of the bar, and whether the bar runs top to bottom.
+static float bar_size(Cpu *c, List *l, int *reverse) {
+    float content = ldf(l->sr + SR_CONTENT_EXTENT + 4), view = ldf(l->sr + SR_VIEW_EXTENT + 4);
+    *reverse = (int)rt_call(c, FN(F_SCROLLBAR_DIRECTION), 2, LD64(l->sr + SR_VBAR), 0ull) == 3;
+    return content > 0 ? clamp01(view / content) : 1;
+}
+static void lists_tick(Cpu *c) {              // once a frame, after the mouse was read (online_ui.c)
+    static int was_down, settle;
+    static float grab, anim_left;
+    static uint64_t anim_sr, last;
+    float x, y;
+    int down = 0, inside = rt_ui_mouse(&x, &y, &down), fresh = down && !was_down, log = getenv("BR_DRAG_LOG") != NULL;
+    uint64_t now = GetTickCount64();
+    float dt = last ? (float)(now - last) / 1000.0f : 0;
+    List *over = NULL, *single = NULL;
     was_down = down;
-    g_list_view = 0;                              // only a view that updates this frame is used
-    if (fresh && getenv("BR_DRAG_LOG")) rt_log("drag: press at %.0f %.0f inside %d view %d age %d", x, y, inside, view != 0, (int)(GetTickCount64() - g_list_tick));
-    if (!down || !inside || g_wheel_blocked) { dragging = 0; return; }
-    if (!view || GetTickCount64() - g_list_tick > 200 || !(rt_call(c, FN(F_OBJ_ALIVE_), 2, view, 0ull) & 1)) { dragging = 0; return; }
-    uint64_t sr = LD64(view + VSR_SCROLL_RECT);
-    uint64_t bar = sr && (rt_call(c, FN(F_OBJ_ALIVE_), 2, sr, 0ull) & 1) ? rt_call(c, FN(F_SCROLLRECT_VBAR), 2, sr, 0ull) : 0;
-    if (!bar || !(rt_call(c, FN(F_OBJ_ALIVE_), 2, bar, 0ull) & 1) || !rt_ui_rect(c, bar, r) || r[3] < 8) { dragging = 0; return; }
-    if (fresh && getenv("BR_DRAG_LOG")) rt_log("drag: bar %.0f %.0f %.0f %.0f items %d", r[0], r[1], r[2], r[3], (int)LD32(view + VSR_ITEM_COUNT));
-    if (fresh && x >= r[0] - GRAB_PX && x <= r[0] + r[2] + GRAB_PX && y >= r[1] && y <= r[1] + r[3]) { dragging = 1; last_y = y; rest = 0; }
-    if (!dragging) return;
-    int items = (int)LD32(view + VSR_ITEM_COUNT);
-    float step = r[3] / (float)(items > 1 ? items : 1);
-    rest += y - last_y;                           // y grows upwards; up = towards the first item
-    last_y = y;
-    while (rest >= step) { InterlockedExchangeAdd(&g_wheel, 1); rest -= step; }
-    while (rest <= -step) { InterlockedExchangeAdd(&g_wheel, -1); rest += step; }
+    last = now;
+    if (dt > 0.1f) dt = 0.1f;
+    if (rt_ui_mouse_moved() || (fresh && inside)) g_mouse_tick = now;
+    g_list_count = 0;
+    for (int i = 0; i < MAX_LISTS; i++) {
+        List *l = &g_lists[i];
+        if (!l->handle) continue;
+        l->cur = 0;
+        if (!alive(c, l->sr) || g_list_frame - l->seen > 600) {     // destroyed, or switched off for a while
+            rt_call(c, FN(F_GCHANDLE_FREE_), 1, (uint64_t)l->handle);
+            l->handle = 0; l->sr = 0;
+            continue;
+        }
+        if (l->seen != g_list_frame) continue;
+        uint64_t vr = rt_call(c, FN(F_SR_VIEW_RECT), 2, l->sr, 0ull);
+        if (!alive(c, vr) || !rt_ui_rect(c, vr, l->view)) continue;
+        l->cur = 1;
+        float hid_x = 2 * (ldf(l->sr + SR_CONTENT_EXTENT) - ldf(l->sr + SR_VIEW_EXTENT));
+        float hid_y = 2 * (ldf(l->sr + SR_CONTENT_EXTENT + 4) - ldf(l->sr + SR_VIEW_EXTENT + 4));
+        l->axis = (LD32(l->sr + SR_VERTICAL) & 0xff) && hid_y > 1 ? 1 : (LD32(l->sr + SR_HORIZONTAL) & 0xff) && hid_x > 1 ? 2 : 0;
+        uint64_t bar = LD64(l->sr + SR_VBAR);
+        l->has_bar = l->axis == 1 && alive(c, bar) && rt_ui_rect(c, bar, l->bar) && l->bar[3] >= 8;
+        if (!l->axis) continue;
+        g_list_count++;
+        single = l;
+        if (inside && (in_rect(l->view, x, y, 0) || (l->has_bar && in_rect(l->bar, x, y, GRAB_PX))) &&
+            (!over || l->view[2] * l->view[3] < over->view[2] * over->view[3])) over = l;
+    }
+    g_list_frame++;
+    if (g_wheel_blocked) { g_drag_sr = 0; anim_sr = 0; return; }
+
+    if (!down || !inside) g_drag_sr = 0;
+    if (fresh && inside) {                       // a press on a scroll bar takes hold of the handle
+        for (int i = 0; i < MAX_LISTS; i++) {
+            List *l = &g_lists[i];
+            int reverse;
+            if (!l->handle || !l->cur || !l->has_bar || !in_rect(l->bar, x, y, GRAB_PX)) continue;
+            float size = bar_size(c, l, &reverse), norm = clamp01(call_f(c, F_SR_GET_VNORM, l->sr));
+            float from = (reverse ? 1 - norm : norm) * (1 - size), at = (y - l->bar[1]) / l->bar[3];
+            grab = at >= from && at <= from + size ? at - from : size / 2;      // beside the handle: it jumps under the cursor
+            g_drag_sr = l->sr;
+            anim_sr = 0;
+            rt_ui_click_consume();
+            if (log) rt_log("drag: bar %.0f %.0f %.0f %.0f handle %.2f at %.2f, press at %.2f", l->bar[0], l->bar[1], l->bar[2], l->bar[3], size, from, at);
+            break;
+        }
+    }
+    if (g_drag_sr) {
+        List *l = list_of(g_drag_sr);
+        int reverse;
+        float size = l && l->has_bar ? bar_size(c, l, &reverse) : 1;
+        if (!l || !l->has_bar) g_drag_sr = 0;
+        else if (size < 0.999f) {
+            float norm = clamp01(((y - l->bar[1]) / l->bar[3] - grab) / (1 - size));
+            call_set_f(c, F_SR_SET_VNORM, l->sr, reverse ? 1 - norm : norm);
+            g_mouse_tick = now;
+        }
+    }
+
+    LONG n = g_list_count ? InterlockedExchange(&g_wheel, 0) : 0;       // without a list the notches are key taps (sample)
+    List *t = over ? over : g_list_count == 1 ? single : NULL;
+    if (n && t && !g_drag_sr) {
+        if (anim_sr != t->sr) { anim_sr = t->sr; anim_left = 0; }
+        anim_left += (float)n * WHEEL_PART;
+        if (anim_left > 3) anim_left = 3;
+        if (anim_left < -3) anim_left = -3;
+        g_mouse_tick = now;
+        if (log) rt_log("wheel: %d on a list (%s), axis %d", (int)n, over ? "under the cursor" : "the only one", t->axis);
+    }
+    if (anim_sr) {
+        List *l = list_of(anim_sr);
+        if (!l || !l->axis) { anim_sr = 0; anim_left = 0; }
+        else {
+            int v = l->axis == 1;
+            float step = anim_left * (1 - expf(-dt * WHEEL_EASE));
+            float view = 2 * ldf(l->sr + SR_VIEW_EXTENT + (v ? 4 : 0)), hid = 2 * ldf(l->sr + SR_CONTENT_EXTENT + (v ? 4 : 0)) - view;
+            if (anim_left > -0.004f && anim_left < 0.004f) { step = anim_left; anim_sr = 0; }
+            anim_left -= step;
+            float norm = call_f(c, v ? F_SR_GET_VNORM : F_SR_GET_HNORM, l->sr);
+            float to = clamp01(norm + (v ? step : -step) * view / (hid > 1 ? hid : 1));
+            if ((to <= 0 || to >= 1) && to == clamp01(norm)) { anim_sr = 0; anim_left = 0; }     // at the end of the list
+            call_set_f(c, v ? F_SR_SET_VNORM : F_SR_SET_HNORM, l->sr, to);
+            settle = 3;
+        }
+    }
+    if (settle > 0) { settle--; rt_ui_mouse_touch(); }                 // the item now under the cursor gets the focus
 }
 static void wheel_tick(Cpu *c) {              // once a frame, on the thread that owns the window
     if (!g_wheel_old_proc) {
@@ -188,7 +361,7 @@ static void wheel_tick(Cpu *c) {              // once a frame, on the thread tha
         if (w) g_wheel_old_proc = (WNDPROC)SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)wheel_proc);
     }
     g_wheel_blocked = (int)rt_call(c, FN(F_MAIN_GAME_STATE), 1, 0ull) == 4;
-    drag_tick(c);
+    lists_tick(c);
 }
 
 void pc_input_test_key(const char *name, int ms) {
@@ -216,10 +389,10 @@ static void sample(KeySet *s) {
         if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) s->mouse |= 16;
     }
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
-    {                                           // the wheel: the next waiting notch becomes an arrow-key tap
+    {                                           // the wheel on a screen without a list: the next waiting notch becomes an arrow-key tap
         static uint64_t next;
         if (g_wheel_blocked || text) InterlockedExchange(&g_wheel, 0);
-        else if (g_wheel && now >= next) {
+        else if (g_wheel && !g_list_count && now >= next) {
             LONG n = g_wheel;
             if (n > 8 || n < -8) n = InterlockedExchange(&g_wheel, n > 0 ? 8 : -8) > 0 ? 8 : -8;     // a spin does not queue for seconds
             InterlockedExchangeAdd(&g_wheel, n > 0 ? -1 : 1);
@@ -237,7 +410,7 @@ static void sample(KeySet *s) {
         s->prev[k] = s->cur[k];
         s->cur[k] = (uint8_t)down;
         s->repeat[k] = 0;
-        if (down && !s->prev[k]) { s->repeat[k] = 1; s->timer[k] = g_repeat_start; g_kbm_tick = now; }
+        if (down && !s->prev[k]) { s->repeat[k] = 1; s->timer[k] = g_repeat_start; g_kbm_tick = g_key_tick = now; }
         else if (down) {
             s->timer[k] -= dt;
             if (s->timer[k] <= 0) { s->repeat[k] = 1; s->timer[k] += g_repeat_interval; if (s->timer[k] < 0) s->timer[k] = 0; }
@@ -499,6 +672,7 @@ extern int rt_ui_click_pending(void);       // online_ui.c
 extern void rt_ui_click_consume(void);
 extern int rt_ui_mouse_moved(void);
 extern float rt_ui_hit(Cpu *c, uint64_t view, int hover);
+extern void rt_ui_point(int hover, float *x, float *y);
 extern void rt_ui_press_anim(Cpu *c, uint64_t view);
 extern uint64_t name_ui_after_monitor(Cpu *c, uint64_t det, uint64_t r);
 static struct { uint64_t view; uint32_t handle; } g_buttons[MAX_BUTTONS];
@@ -538,7 +712,8 @@ static uint64_t button_at(Cpu *c, uint64_t det, int hover) {
         uint64_t v = g_buttons[i].view, ma = v ? LD64(v + VIEW_MOUSE_ACTION) : 0;
         if (!ma || LD64(ma + MA_DETECTOR) != det) continue;
         if (!(rt_call(c, FN(F_OBJ_ALIVE), 2, v, 0ull) & 1)) continue;
-        float area = rt_ui_hit(c, v, hover);
+        float area = rt_ui_hit(c, v, hover), x, y;
+        if (area > 0 && (rt_ui_point(hover, &x, &y), list_hides(c, v, x, y))) continue;
         if (area > 0 && (!best || area < best_area)) { best = v; best_area = area; }
     }
     return best;
@@ -573,6 +748,7 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
         }
         return r;
     }
+    if (g_drag_sr) return r;                                         // a scroll bar is being dragged
     uint64_t v = button_at(c, det, 1);                               // the cursor moved: focus follows it
     if (v && v != g_hover_view && (LD32(LD64(v + VIEW_MOUSE_ACTION) + MA_SELECTABLE) & 0xff)) {
         g_hover_view = v;

@@ -665,7 +665,10 @@ static void ui_mouse_frame(void) {
     g_mouse_down = g_test_hold || (down && window_focused());
     EnumThreadWindows(GetCurrentThreadId(), main_window, (LPARAM)&w);
     if (!w || !GetClientRect(w, &cr)) return;
-    if (g_test_click || g_test_move || g_test_hold) { p.x = g_test_x; p.y = g_test_y; edge = g_test_click; g_test_click = g_test_move = 0; }
+    static int test_cursor;                                         // a scripted cursor stays where the test put it
+    extern int rt_no_real_input(void);
+    if (g_test_click || g_test_move || g_test_hold) { p.x = g_test_x; p.y = g_test_y; edge = g_test_click; g_test_click = g_test_move = 0; test_cursor = 1; }
+    else if (test_cursor && rt_no_real_input()) { p.x = g_test_x; p.y = g_test_y; }
     else if (!window_focused() || !GetCursorPos(&p) || !ScreenToClient(w, &p)) { g_mouse_inside = 0; return; }
     float x = (float)p.x, y = (float)(cr.bottom - p.y);
     g_mouse_inside = p.x >= 0 && p.y >= 0 && p.x < cr.right && p.y < cr.bottom;
@@ -679,6 +682,10 @@ int rt_ui_click_pending(void) { return g_click; }
 int rt_ui_mouse(float *x, float *y, int *down) { *x = g_mouse_x; *y = g_mouse_y; *down = g_mouse_down; return g_mouse_inside; }
 void rt_ui_click_consume(void) { g_click = 0; }
 int rt_ui_mouse_moved(void) { return g_mouse_moved; }
+// What is under the cursor changed without the cursor moving (a list was scrolled): hover is tested again.
+void rt_ui_mouse_touch(void) { if (g_mouse_inside) g_mouse_moved = 1; }
+// The point rt_ui_hit tests: the cursor (hover = 1) or the pending click.
+void rt_ui_point(int hover, float *x, float *y) { *x = hover ? g_mouse_x : g_click_x; *y = hover ? g_mouse_y : g_click_y; }
 // The element's rectangle on screen; 0 when it is not shown.
 static int ui_rect(Cpu *c, uint64_t view, float r[4]) {
     float pos[4], rect[4], scale[4];

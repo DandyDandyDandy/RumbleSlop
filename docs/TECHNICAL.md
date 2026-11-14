@@ -417,7 +417,21 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   `OnPointerEnter`, which moves the focus), and a click on the standing Back button is reported as Cancel. A
   screen that is not polling (dialog on top, fade) is therefore not clickable. This covers menu entries, cards,
   list rows, option arrows, dialog buttons and the corner buttons (eye, copy, name, Change Character, ...).
-  Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera), the wheel.
+  Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera).
+* **Lists: wheel, scroll bar, hover.** Every list is a `UnityEngine.UI.ScrollRect` whose content the game moves
+  towards the focused item, in three functions (`UIPartViewBaseVirtualScrollRect.Update`,
+  `UICalcContentPosModule_Base.OnUpdate`, `UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical.Update`). The
+  game's PC code leaves them out while `AppInput.latestInputDeviceMask` is Mouse (4), which nothing sets in this
+  build; the port decides itself (`mouse_mode`: the cursor moved, a click or the wheel came after the last key
+  and pad input) and skips the three functions, keeping their target equal to where the list is. So hovering a
+  row at the edge of a list focuses it without scrolling, and the list follows the focus again with the first key
+  or pad press. `ScrollRect.LateUpdate` is hooked to know the lists on screen (GC handles). The wheel scrolls the
+  list under the cursor, or the only one, through `verticalNormalizedPosition` (`WHEEL_PART` of the visible
+  height a notch, eased; horizontal lists sideways); a press on the scroll bar or within 14 px beside it drags
+  the handle one to one, a press beside the handle brings it under the cursor. After a scroll the hover test runs
+  again, so the row under the cursor has the focus. The part of a row cut off by the list's edge is not
+  clickable (`list_hides`). On a screen without a scrolling list a notch is still a tap of the Up / Down arrow
+  key. `BR_DRAG_LOG=1` logs each wheel use and bar press. Known gap: a list behind a dialog still takes the wheel.
 * **Glyphs.** The game draws glyphs per controller kind (`Wonder.DB.Input.ControllerKind`: Switch kinds, PS4 8,
   XboxOne 9, Steam 10, PS5 11) and redraws them when a player's kind changes
   (`UIInputDeviceSwitchingDetector`); the build only has Switch pictures (64 px sprites). The port sets the kind
