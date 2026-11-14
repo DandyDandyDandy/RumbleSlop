@@ -41,6 +41,7 @@
 #define M_CLASS_MULTIPLAY 0x60d0a98ull      // GCS1.Network.MultiplayAPI
 #define M_CLASS_PEERID_ARR 0x60d2a40ull     // GCS1.Network.PeerID[]
 #define M_CLASS_BYTE_ARR 0x60cf328ull       // byte[]
+#define M_CLASS_STREAM_DISPATCHER 0x60d4418ull   // GCS1.Network.NetworkStreamDispatcher {static +0 int DispatchRatePerSec, +4 int DivideGroupCount}
 #define M_METHOD_FROM_RESULT_BOOL 0x60d3bc0ull
 // object layouts
 #define SM_STATIC_INSTANCE 0x30
@@ -57,6 +58,8 @@ static Np *g_np;
 static int g_state;                          // what the game is shown; changes only in hooks and in online_tick
 static int g_online;                         // "ready to use internet" was announced and not yet "disconnected"
 static double g_frame_time;                  // network time of this frame, seconds
+static int g_purpose;                        // RoomPurpose of the room being entered: 1 Adventure, 2 Battle
+static int g_adv_hz = 30;                    // port_net.txt adventure_rate=: position updates per second in Adventure rooms
 
 void np_logf(const char *fmt, ...) {
     char b[400];
@@ -150,6 +153,23 @@ static void went_offline(Cpu *c) {
     }
 }
 
+// How often the game sends its position streams (NetworkStreamDispatcher.LateUpdate). The game's own values are
+// 10 per second in 3 groups: a send every 33 ms, each to every third peer, which with the frame grid comes to 7 or 8
+// updates a second per peer. That suits a Battle with 16 players; an Adventure room has at most 4, so there every
+// send goes to all peers, adventure_rate times a second (30 unless set; 10 to 60, 0 = the game's own values).
+// The receiver (OnlinePlayerBall.SetNetworkPos) extrapolates from position, velocity and send time and blends
+// over 0.2 s whatever the rate, and each player only sets its own sending, so mixed settings work together.
+// The dispatcher sends on the first frame later than 1000 / rate ms (whole ms) after the last send: the rate
+// written is 4/3 of the wanted one, which puts that span 3/4 of the way to the frame that should send at 60 fps.
+static void set_stream_rate(Cpu *c) {
+    int hz = g_purpose == 1 ? g_adv_hz : 0;
+    uint64_t st = statics(c, M_CLASS_STREAM_DISPATCHER);
+    ST32(st, hz ? (uint32_t)(hz * 4 / 3) : 10u);
+    ST32(st + 4, hz ? 1u : 3u);
+    if (hz) rt_log("online: %d position updates a second to each player", hz);
+    else rt_log("online: position updates at the game's own rate");
+}
+
 static void read_config(NpConfig *cfg) {
     char path[600], line[200];
     memset(cfg, 0, sizeof *cfg);
@@ -165,6 +185,7 @@ static void read_config(NpConfig *cfg) {
         if (!strcmp(line, "port")) cfg->port = (uint16_t)atoi(v);
         else if (!strcmp(line, "upnp")) cfg->upnp = atoi(v) != 0;
         else if (!strcmp(line, "public_ip")) snprintf(cfg->public_ip, sizeof cfg->public_ip, "%s", v);
+        else if (!strcmp(line, "adventure_rate")) { int r = atoi(v); g_adv_hz = r <= 0 ? 0 : r < 10 ? 10 : r > 60 ? 60 : r; }
     }
     fclose(f);
 }
@@ -187,6 +208,7 @@ void online_tick(Cpu *c) {
             g_frame_time = network_seconds();
             np_code(g_np, code, sizeof code);
             set_session_code(c, code);
+            set_stream_rate(c);
             rt_log("online: in a room as %016llx%s%s", (unsigned long long)np_local_id(g_np), code[0] ? ", code " : "", code);
             uint64_t s = sm(c), list = LD64(s + SM_ONLINE_OBSERVERS);
             if (!g_online) {
@@ -238,6 +260,7 @@ int rt_hook_2262740(Cpu *c) {
     g_state = ST_IDLE;
     if (!strcmp(name, "FriendHostMatchmakingContext")) {             // {+0x10 int SubUserCount, +0x14 RoomPurpose}
         rt_log("online: creating a room (purpose %d)", (int)LD32(ctx + 0x14));
+        g_purpose = (int)LD32(ctx + 0x14);
         g_state = ST_CONNECTING;
         np_host(g_np, (int)LD32(ctx + 0x14), &cfg);
     } else if (!strcmp(name, "ShortSessionIdMatchmakingContext")) {  // {+0x10 string id, +0x18 int SubUserCount, +0x1c RoomPurpose}
@@ -250,6 +273,7 @@ int rt_hook_2262740(Cpu *c) {
             code[i + 1] = 0;
         }
         rt_log("online: joining a room by code (purpose %d)", (int)LD32(ctx + 0x1c));
+        g_purpose = (int)LD32(ctx + 0x1c);
         g_state = ST_CONNECTING;
         np_join(g_np, code, (int)LD32(ctx + 0x1c), &cfg);
     } else

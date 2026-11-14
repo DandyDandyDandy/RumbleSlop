@@ -206,6 +206,14 @@ How it is put together:
   port has to be forwarded by hand and `public_ip=` set. Windows Firewall asks once to allow the game.
   Settings file `game\port_net.txt` (optional): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`. Guests need the same
   `port=` as the creator.
+* Position updates: the game sends each player's position stream (`NetworkStreamDispatcher`: 10 a second in 3
+  groups of peers) about 9 times a second to each peer, which suits a Battle with 16 players. In an Adventure room
+  (at most 4 players) the port writes the dispatcher's two static values when the room is entered, so every send
+  goes to all peers 30 to 40 times a second depending on the frame rate (`set_stream_rate` in `online.c`; measured
+  with `BR_NET_LOG=1`, two instances: 35 a second received against 9.2). Battle rooms keep the game's values.
+  `adventure_rate=` in `port_net.txt` sets it (10 to 60, default 30; 0 = the game's values). Each player sets only
+  its own sending, and the receiver extrapolates from position, velocity and send time, so players with different
+  settings can share a room.
 * UI (`online_ui.c`): the code is typed straight into the game's own screen, with no pop-up. The game contains a PC
   layout for that screen (`createChoicesModule_Windows`: Search button and a paste button, no "open keyboard"
   button), which the hooks select; the console input module's empty per-frame `MonitorCharacterInput` reads the
