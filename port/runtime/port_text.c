@@ -24,6 +24,8 @@ static const Text g_text[] = {
      "Sincronização vertical"},
     {"Smooth Motion", "なめらかな動き", "Mouvement fluide", "Movimento fluido", "Flüssige Bewegung", "Movimiento fluido", "流畅动作", "流暢動作",
      "부드러운 움직임", "Movimento suave"},
+    {"Dole Collaboration", "Doleコラボ", "Collaboration Dole", "Collaborazione Dole", "Dole-Kollaboration", "Colaboración con Dole", "Dole联动",
+     "Dole聯動", "Dole 컬래버레이션", "Colaboração Dole"},
     {"On", "オン", "Activé", "Sì", "An", "Sí", "开", "開", "켜기", "Ativado"},
     {"Off", "オフ", "Désactivé", "No", "Aus", "No", "关", "關", "끄기", "Desativado"},
     {"Borderless", "ボーダーレス", "Sans bordure", "Senza bordi", "Randlos", "Sin bordes", "无边框", "無邊框", "테두리 없음", "Sem bordas"},

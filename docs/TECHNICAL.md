@@ -589,6 +589,16 @@ folder shared with a desktop PC keeps both machines' choices. Changes made in Op
 not change the screen mode there. When the Display page is built the game's saved windowed / full screen value is
 made to agree with the port's mode, so the Screen Mode row's own text is right.
 
+Dole Collaboration (Options > General, last row; Off by default, `dole=` in `port_display.txt`). Game 2.20 ended
+the collaboration: its look (the Dole logo under the start of a stage, bananas with the Dole sticker, the Dole
+deck chairs and signs of the main menu) is shown only while a selected character wears a Dole item. The game keeps
+that in one flag, `RuntimeParam.mainGame.isDoleCollabActive`, set from
+`Util.CharaCustomize.IsExistDoleItemSelectedChara` and `IsExistDoleItemCoordinate` whenever characters or outfits
+change. Both are hooked and answer with the row: On shows the look whatever is worn, Off never. A change also
+writes the flag, so the main menu and the next stage follow at once. The row is one more copy of the Screen Mode
+row object, appended to the page that has the Show Tips row. `BR_OPT_LOG=1` logs the row classes of every Options
+page as it is built.
+
 When adding more rows or options, read the file's header comment first: it lists the object layouts the hooks
 rely on.
 
