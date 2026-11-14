@@ -3,6 +3,9 @@
 //   BANANAS until the stage ends, code that asks test_aids_all_bananas() is told every banana has been taken
 //           (the fork's bonus-stage rule asks; the game's own count is not changed)
 // The request is taken up by the per-frame hook (display_opt.c), on the game's main thread.
+// BR_UNLOAD_EVERY=<frames>: Resources.UnloadUnusedAssets is called every that many frames (the engine's sweep of
+// unused assets, which stops the world and walks the managed heap, normally runs only between scenes; this makes
+// a fault in it show up within minutes).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +19,7 @@
 #define F_PLAYER_BALL 0x42c80b0ull          // Wonder.MgPlayer::get_ball -> PhysicsBall
 #define F_GOAL_ENTER 0x4301e40ull           // Wonder.MgGoalColi::OnTriggerEnterPlayer(PhysicsBall)
 #define F_OBJ_ALIVE 0x3ee4c20ull            // UnityEngine.Object::op_Implicit (static)
+#define F_UNLOAD_UNUSED 0x3eda530ull        // UnityEngine.Resources::UnloadUnusedAssets (static)
 #define PLAYER_IS_LOCAL 0x1b8               // MgPlayer.m_IsLocal
 #define LIST_ITEMS 0x10
 #define LIST_SIZE 0x18
@@ -36,6 +40,9 @@ static uint64_t item(uint64_t list, int i) {
 int test_aids_all_bananas(void) { return InterlockedExchange(&g_bananas, 0) != 0; }      // one answer per request
 
 void test_aids_tick(Cpu *c) {   // once per frame; the caller preserves the registers
+    static int every = -1, frame;
+    if (every < 0) { const char *e = getenv("BR_UNLOAD_EVERY"); every = e ? atoi(e) : 0; }
+    if (every > 0 && ++frame % every == 0) rt_call(c, FN(F_UNLOAD_UNUSED), 1, 0ull);
     if (!InterlockedExchange(&g_goal, 0)) return;
     uint64_t stage = rt_call(c, FN(F_MAIN_GAME_STAGE), 1, 0ull);
     uint64_t players = rt_call(c, FN(F_PLAYER_LIST), 1, 0ull);

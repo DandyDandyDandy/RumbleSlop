@@ -120,6 +120,7 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_DESKTOP_SIZE=<w>x<h>` | Test: pretend the desktop has this size. With `SteamDeck=1` (the variable Steam itself sets on a Deck) and `1280x800` the port behaves as on a Steam Deck. |
 | `BR_SCREEN_DUMP=<s>,<s>...` | At those times: every camera (rect, target) and every UI canvas (scaler settings, pixel rect); also logs each UI element the wide-screen code widens. `BR_SCREEN_TREE=<depth>` adds the active UI objects under each canvas with their pixel boxes. |
 | `BR_SCREEN_RESIZE=<s>:<w>x<h>,...` | Switches to a window of that size at those times (tests a resolution change without the menu). |
+| `BR_UNLOAD_EVERY=<frames>` | Test: calls `Resources.UnloadUnusedAssets` every that many frames (stress for the engine's unused-asset sweep, which otherwise runs only between scenes). |
 | `BR_NO_REAL_INPUT=1` | The real keyboard, mouse and controllers are ignored (a scripted test is not disturbed by someone using the PC; dragging the game's window still stalls it). |
 | `BR_INPUT_LIVE=<file>` | Lines `<BUTTON> [hold ms]` appended to the file while the game runs are pressed one after the other (drives a running game from a test). Also `TYPE <text>` (into the open text box; `<` Backspace, `!` Esc in the name box), `KEY <name> [ms]` (a keyboard key, named as in `UnityEngine.InputSystem.Key`), `CLICK <x> <y>` / `MOVE <x> <y>` (left click at / cursor moved to a window pixel, from the top left), `WHEEL <n>` (mouse wheel notches, negative = down), `HOLD <x> <y>` / `RELEASE` (left button held at a window pixel while `MOVE` lines drag it, then let go), `DUMP` (the `BR_SCREEN_DUMP` output now), `BANANAS` (for the fork's bonus stages: counts as every banana taken) and `GOAL` (the local player's ball enters the stage's first goal: the game's own goal handler is called, so results, progress and what follows a stage can be checked without playing it; `test_aids.c`). Both input files also take `LSU LSD LSL LSR` (left stick fully up / down / left / right). |
 | `BR_PROFILE=<suffix>` | A second copy of the game on the same PC uses `save<suffix>\` and `temp<suffix>\` (give it `BR_LOG` and `-logFile` of its own too). |
@@ -150,7 +151,14 @@ the execution policy blocks script files, run it as
   collector thread can take while the world is stopped must be covered in `gc_stop_world` (heap gate, process
   heap, object table, big-block table and log are).
 * **No null checks.** The game is built without IL2CPP null checks, so a managed null dereference is a hard
-  access violation logged as FATAL in `port.log`, not a `NullReferenceException`.
+  access violation logged as FATAL in `port.log`, not a `NullReferenceException`. There are no array bounds
+  checks either: an index past the end silently writes into the next heap object, and the fault comes later,
+  typically in the engine's unused-asset sweep between scenes (`il2cpp::vm::Liveness`, on the main thread and
+  the engine's `AGCThread` workers at once, which is by design), when it follows the damaged object.
+* **Crash report.** A fault in lifted code logs all guest registers, the eight words behind each register that
+  points at memory (with the class name where the first word is a class pointer, and one level further for
+  x19..x28), the host stack, and every other guest thread: suspended or not, registered with the collector or
+  not, and where it is. A class pointer that differs from its neighbours' in one byte is an out-of-bounds write.
 * **Audio** (`imports_audio.c`). The game appends 5 ms buffers and keeps three queued. Buffers are released by a
   wall clock at the exact real-time rate and the PCM is copied into a ring that a feeder thread plays through
   waveOut in 10 ms blocks. Do not tie releases to waveOut completions (they arrive in 10 ms steps and halve the

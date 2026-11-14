@@ -20,6 +20,7 @@
 #define F_SHOP_ON_CREATE 0x43cb7f0ull       // SaveUserParam.ShopItemParam.OnCreate()
 #define F_SHOP_ON_AFTER_LOAD 0x43cb9a0ull   // SaveUserParam.ShopItemParam.OnAfterLoad()
 #define SHOP_CHARACTER 0x28                 // ShopItemParam.m_Character
+#define CHARACTER_DICT 0x10                 // ShopItemParamCharacter.m_Dict
 #define ITEM_CONDITION 0x10                 // ShopItemParamItemBase -> ShopItemConditionParam
 #define CONDITION_ID 0x10                   // ShopItemConditionParam.m_ConditionID
 #define CONDITION_NOT_HAVE 3
@@ -88,7 +89,10 @@ static int shop_event(Cpu *c, uint64_t fn) {
     uint64_t lr = c->x[30], self = c->x[0];
     g_inside = 1;
     rt_call(c, FN(fn), 2, self, c->x[1]);
+    // A new save: OnCreate makes m_Character without its dictionary (GetItem would read through null); the
+    // dictionary is filled by the OnAfterLoad that follows, which passes here again.
     uint64_t list = self ? LD64(self + SHOP_CHARACTER) : 0;
+    if (list && !LD64(list + CHARACTER_DICT)) list = 0;
     for (size_t i = 0; list && i < sizeof g_charas / sizeof *g_charas; i++)
         settle(g_charas[i], rt_call(c, FN(F_CHARA_GET_ITEM), 3, list, (uint64_t)g_charas[i], 0ull));
     g_inside = 0;
