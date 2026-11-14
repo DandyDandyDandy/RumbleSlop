@@ -29,11 +29,13 @@
 // +0x38 item table, +0x40 save element (value at +0x10), +0x48 List<int> of mode values, +0x50 initial index.
 // List<T>: items array +0x10 (elements from +0x20, capacity +0x18), size +0x18, version +0x1c.
 #include <windows.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "rt.h"
 
-enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3 };
+enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_SMOOTH = 5 };
 enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define FN(off) (GUEST_BASE + (off))
 #define F_GET_VALUE_STR 0x4575d40ull
@@ -54,7 +56,7 @@ static const int UNITY_MODE[M_COUNT] = {3 /* Windowed */, 1 /* FullScreenWindow 
 static const int FPS[] = {30, 60, 120, 144, -1};
 #define NFPS ((int)(sizeof FPS / sizeof *FPS))
 
-static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_deck;
+static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_smooth = 1, g_deck;
 static uint64_t g_sm_klass;
 static INIT_ONCE g_once = INIT_ONCE_STATIC_INIT;
 static __thread int t_in_str, t_in_change, t_in_init, t_in_list, t_in_fps, t_in_vsync;
@@ -113,6 +115,7 @@ static BOOL CALLBACK init_once(PINIT_ONCE o, PVOID p, PVOID *ctx) {
         else if (sscanf(line, "width=%d", &v) == 1) w = v;
         else if (sscanf(line, "height=%d", &v) == 1) h = v;
         else if (sscanf(line, "vsync=%d", &v) == 1) g_vsync = v < 0 ? 0 : v > 4 ? 4 : v;   // the menu only sets 0 or 1
+        else if (sscanf(line, "smooth=%d", &v) == 1) g_smooth = v != 0;
         else if (sscanf(line, "fps=%d", &v) == 1)
             for (int i = 0; i < NFPS; i++)
                 if (FPS[i] == v) g_fps = i;
@@ -129,7 +132,7 @@ static void save_cfg(void) {
     char path[MAX_PATH + 32];
     cfg_path(path, sizeof path);
     FILE *f = fopen(path, "w");
-    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync); fclose(f); }
+    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\nsmooth=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_smooth); fclose(f); }
 }
 
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
@@ -169,8 +172,8 @@ static int game_index(uint64_t item, int want_window) {
         if (((int32_t)LD32(items + 0x20 + 4ull * i) == MODE_VALUE_WINDOW) == !!want_window) return i;
     return want_window ? 1 : 0;
 }
-static int role_index(int role) { return role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
-static int role_count(int role) { return role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
+static int role_index(int role) { return role == ROLE_SMOOTH ? g_smooth : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
+static int role_count(int role) { return role == ROLE_SMOOTH ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
 
 // UnityEngine.Screen::set_fullScreenMode(FullScreenMode value): the game's saved value decides windowed or not.
@@ -246,6 +249,7 @@ int rt_hook_4575bf0(Cpu *c) {
     if (role == ROLE_RES) { g_k = g_def_k; save_cfg(); apply_display(c); ST32(item + 0x50, g_k); return 1; }
     if (role == ROLE_FPS) { g_fps = 1; save_cfg(); apply_fps(c); ST32(item + 0x50, g_fps); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = 1; save_cfg(); apply_vsync(c); ST32(item + 0x50, g_vsync); return 1; }
+    if (role == ROLE_SMOOTH) { g_smooth = 1; save_cfg(); ST32(item + 0x50, g_smooth); return 1; }
     t_in_init = 1; call_orig(c, F_SET_INIT_INDEX); t_in_init = 0;
     if (c->eh_unwinding) return 1;
     if (g_deck) {      // the port's setting decides; make the game's saved value agree, so the row's own text does
@@ -279,6 +283,7 @@ int rt_hook_4575ea0(Cpu *c) {
     if (role == ROLE_RES) { g_k = idx; save_cfg(); apply_display(c); return 1; }
     if (role == ROLE_FPS) { g_fps = idx; save_cfg(); apply_fps(c); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = idx; save_cfg(); apply_vsync(c); return 1; }
+    if (role == ROLE_SMOOTH) { g_smooth = idx; save_cfg(); return 1; }
     g_mode = idx;
     save_cfg();
     // the game's own handler stores its value and ends in set_fullScreenMode, which applies the new mode
@@ -303,6 +308,8 @@ int rt_hook_4575d40(Cpu *c) {
         c->x[0] = new_str(c, s);
     } else if (role == ROLE_VSYNC) {
         c->x[0] = new_str(c, g_vsync ? "On" : "Off");
+    } else if (role == ROLE_SMOOTH) {
+        c->x[0] = new_str(c, g_smooth ? "On" : "Off");
     } else if (g_mode == M_BORDERLESS) {
         c->x[0] = new_str(c, "Borderless");
     } else {      // the game's localized "Windowed" / "Full Screen"
@@ -316,8 +323,8 @@ int rt_hook_4534720(Cpu *c) {
     uint64_t item = c->x[0];
     if (!item || !g_sm_klass || LD64(item) != g_sm_klass) return 0;
     int role = role_of(item);
-    if (role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
-    c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : "VSync");
+    if (role != ROLE_SMOOTH && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
+    c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_SMOOTH ? "Smooth Motion" : "VSync");
     return 1;
 }
 
@@ -342,7 +349,7 @@ int rt_hook_455d030(Cpu *c) {
     rt_call(c, FN(F_GC_DISABLE), 0);
     uint64_t cls = LD64(LD64(FN(LIST_OBJECT_CLASS_SLOT)));
     uint64_t add_mi = LD64(LD64(LD64(cls + 0x20) + 0xc0) + 0x70);
-    static const int roles[] = {ROLE_RES, ROLE_FPS, ROLE_VSYNC};
+    static const int roles[] = {ROLE_RES, ROLE_FPS, ROLE_VSYNC, ROLE_SMOOTH};
     int added = 0;
     for (size_t r = 0; r < sizeof roles / sizeof *roles; r++) {
         uint64_t obj = rt_call(c, FN(F_OBJECT_NEW), 1, g_sm_klass);
@@ -358,7 +365,7 @@ int rt_hook_455d030(Cpu *c) {
     items = LD64(list + 0x10);
     int total = (int32_t)LD32(list + 0x18);
     if (added && total == n + added) {
-        uint64_t tmp[4];
+        uint64_t tmp[8];
         for (int i = 0; i < added; i++) tmp[i] = LD64(items + 0x20 + 8ull * (n + i));
         for (int i = n - 1; i > at; i--) ST64(items + 0x20 + 8ull * (i + added), LD64(items + 0x20 + 8ull * i));
         for (int i = 0; i < added; i++) ST64(items + 0x20 + 8ull * (at + 1 + i), tmp[i]);
@@ -366,6 +373,24 @@ int rt_hook_455d030(Cpu *c) {
     rt_call(c, FN(F_GC_ENABLE), 0);
     c->x[0] = list;
     return 1;
+}
+
+// Is motion to be blended between the 60 Hz steps (interp.c)? When the Smooth Motion row is on and the picture can be
+// drawn more than 60 times a second with the current settings; at 60 and below a blend would only add its 16.7 ms
+// of delay. With VSync on the engine follows the display and ignores the limit.
+int rt_display_above_60(void) {
+    static uint64_t at;
+    static int hz = 60;
+    uint64_t now = GetTickCount64();
+    if (now - at > 2000) {
+        DEVMODEW dm = {.dmSize = sizeof dm};
+        at = now;
+        if (EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1) hz = (int)dm.dmDisplayFrequency;
+    }
+    init();
+    if (!g_smooth) return 0;
+    if (g_vsync) return hz > 62;
+    return FPS[g_fps] < 0 || FPS[g_fps] > 60;
 }
 
 // ---------------------------------------------------------------------------------------------- measurement
@@ -387,7 +412,8 @@ int rt_hook_43d58c0(Cpu *c) {
     static uint64_t t0, frames;
     static float time0, fixed0;
     static uint32_t fc0;
-    if (on < 0) on = getenv("BR_FPS_LOG") != NULL;
+    static double every = 2;
+    if (on < 0) { const char *e = getenv("BR_FPS_LOG"); on = e != NULL; if (e && atof(e) > 0.1 && atof(e) != 1) every = atof(e); }   // 1 = every 2 s, else the seconds
     {   // per-frame ticks of the other parts of the port
         extern void chara_dump_tick(Cpu *c);
         extern void window_title_tick(void);
@@ -398,6 +424,7 @@ int rt_hook_43d58c0(Cpu *c) {
         extern void name_ui_tick(Cpu *c);
         extern void pc_input_tick(Cpu *c);
         extern void test_aids_tick(Cpu *c);
+        extern void interp_tick(Cpu *c);
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
         chara_dump_tick(c);
@@ -409,13 +436,16 @@ int rt_hook_43d58c0(Cpu *c) {
         copy_button_tick(c);
         name_ui_tick(c);
         pc_input_tick(c);
+        interp_tick(c);
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     if (!on) return 0;
     // How smooth does it look: in how many rendered frames did a camera actually move? (A picture that only changes
     // 60 times a second looks like 60 fps however many frames are drawn.)
     static uint32_t cam_moved, cam_count;
-    static float cam_prev[8][3];
+    static float cam_prev[8][3], cam_step[8];
+    static uint32_t cam_uneven, cam_pairs;
+    static int cam_trace = -1;
     {
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
@@ -429,6 +459,18 @@ int rt_hook_43d58c0(Cpu *c) {
             float p[3];
             for (int k = 0; k < 3; k++) { uint32_t u = (uint32_t)c->v[k]; memcpy(&p[k], &u, 4); }
             if (p[0] != cam_prev[i][0] || p[1] != cam_prev[i][1] || p[2] != cam_prev[i][2]) moved = 1;
+            {   // evenness: a step less than half or more than twice the one before it (a frame that repeats the picture counts)
+                float dx = p[0] - cam_prev[i][0], dy = p[1] - cam_prev[i][1], dz = p[2] - cam_prev[i][2], d = sqrtf(dx * dx + dy * dy + dz * dz);
+                if (cam_step[i] > 1e-4f || d > 1e-4f) { cam_pairs++; if (d < 0.5f * cam_step[i] || d > 2.0f * cam_step[i]) cam_uneven++; }
+                if (cam_trace < 0) cam_trace = getenv("BR_CAM_TRACE") != NULL;   // every frame: camera number, step length
+                if (cam_trace && (d > 1e-4f || cam_step[i] > 1e-4f)) {   // with the wall time since the frame before, in ms
+                    static uint64_t last[8];
+                    uint64_t tk = rt_ticks();
+                    rt_log("cam %d %.5f %.2f", i, (double)d, (double)(tk - last[i]) / 19200.0);
+                    last[i] = tk;
+                }
+                cam_step[i] = d;
+            }
             memcpy(cam_prev[i], p, sizeof p);
         }
         cam_moved += (uint32_t)moved;
@@ -437,7 +479,7 @@ int rt_hook_43d58c0(Cpu *c) {
     }
     uint64_t now = rt_ticks();
     frames++;
-    if (!t0 || now - t0 >= 2 * 19200000ull) {
+    if (!t0 || now - t0 >= (uint64_t)(every * 19200000.0)) {
         uint64_t x0 = c->x[0], x1 = c->x[1];
         __uint128_t v0 = c->v[0];
         float t = call_float(c, F_TIME_GET_TIME), ft = call_float(c, F_TIME_GET_FIXED_TIME), fd = call_float(c, F_TIME_GET_FIXED_DELTA);
@@ -455,10 +497,10 @@ int rt_hook_43d58c0(Cpu *c) {
                    "(%.1f physics steps/s); limit %d, vsync %d", (double)frames / wall, (double)(fc - fc0) / wall,
                    (double)(t - time0) / wall, (double)(ft - fixed0) / wall, fd > 0 ? (double)(ft - fixed0) / wall / fd : 0.0,
                    FPS[g_fps], g_vsync);
-            rt_log("fps: a camera moved in %u of %llu frames (%.1f picture changes/s), %u cameras", cam_moved, (unsigned long long)frames,
-                   (double)cam_moved / wall, cam_count);
+            rt_log("fps: a camera moved in %u of %llu frames (%.1f picture changes/s), %u cameras; uneven steps %u of %u", cam_moved,
+                   (unsigned long long)frames, (double)cam_moved / wall, cam_count, cam_uneven, cam_pairs);
         }
-        cam_moved = 0;
+        cam_moved = cam_uneven = cam_pairs = 0;
         t0 = now; frames = 0; time0 = t; fixed0 = ft; fc0 = fc;
         c->x[0] = x0; c->x[1] = x1; c->v[0] = v0;
     }

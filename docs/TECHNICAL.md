@@ -130,7 +130,8 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_PLAYER_ARGS` | Player arguments for `run_player.sh`, e.g. `-force-vulkan`. |
 | `BR_INPUT_SCRIPT=<file>` | Scripted pad input, lines `<ms> <BUTTON> [hold ms]` (A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN). Buttons only, no sticks. |
 | `BR_STATUS=<s>` | Periodic counters (audio, pad reads, collections). |
-| `BR_FPS_LOG=1` | Every 2 s: measured frame rate, engine clock rate, physics step rate, engine target/vsync values. |
+| `BR_FPS_LOG=1` | Every 2 s (`BR_FPS_LOG=<seconds>`: that often): measured frame rate, engine clock rate, physics step rate, engine target/vsync values, in how many frames a camera moved, and how many camera steps were less than half or more than twice the step before ("uneven"). `BR_CAM_TRACE=1` adds a line per frame and camera: step length and the wall time since the frame before in ms. |
+| `BR_INTERP=0\|1`, `BR_INTERP_LOG=1` | Smooth motion (see that section) forced off / on whatever the settings say; every 2 s the number of tracked transforms and blended parts, and the transforms written in both phases of a frame. |
 | `BR_CHARA_DUMP=<part>`, `BR_CHARA_DUMP_EXIT=1` | Renderer/material dump of spawned characters (see below). |
 | `BR_DLC_LOG=1` | Logs the game's own verdict for each add-on content pack (index, name, installed or not), once per pack. |
 | `BR_AUDIO_DEBUG=1` | Audio pacing report, stall report, Start/Stop calls. `BR_AUDIO=off` skips the device. |
@@ -500,7 +501,7 @@ function's address. Managed methods are called from host code with `rt_call(c, a
 ### Display options (`display_opt.c`)
 
 The game's own Options > Display page is extended with Screen Mode (Windowed / Borderless / Full Screen),
-Resolution, Frame Rate Limit and VSync. The three added rows are copies of the game's Screen Mode row object,
+Resolution, Frame Rate Limit, VSync and Smooth Motion. The added rows are copies of the game's Screen Mode row object,
 inserted after it when the page's row list is built; each copy carries a role number in a padding word and the
 hooks answer by role. Settings are stored in `game\port_display.txt`. The game pins `targetFrameRate` to 60 and
 resets `vSyncCount` with every quality change, so both setters are hooked to keep the port's values. Game time
@@ -531,8 +532,44 @@ renderer lists have the same order). `BR_KEEP_30=1` switches the hook off for co
 
 The game moves everything on its 60 Hz physics step: with `BR_FPS_LOG=1` the log shows how many rendered frames a
 camera moved in. Measured at about 240 rendered frames per second: 60 camera moves per second in a single-player
-stage, an online Battle with 16 players and split screen alike. A frame rate limit above 60 therefore draws
-repeated pictures; real motion above 60 Hz would need interpolation, which the port does not do.
+stage, an online Battle with 16 players and split screen alike. Without the next section a frame rate above 60
+therefore draws repeated pictures.
+
+### Smooth motion above 60 frames a second (`interp.c`)
+
+Every rendered frame shows the moment it belongs to: a transform the game wrote during a fixed step is drawn
+between its value before that step and its value after it, by how far the frame's time lies between the two
+steps (what Unity's Rigidbody interpolation does, here for everything the game moves by hand: ball, camera,
+stage parts, other players, items). The picture is up to one step (16.7 ms) behind the simulation; the simulation
+itself is untouched, so physics, replays and online play are as before.
+
+* **Where.** The engine's Transform internal calls are wrapped when the engine registers them
+  (`rt_interp_wrap`, called from `il2cpp_add_internal_call`). Unity 2022.3 `_Injected` calls take the managed
+  object and struct pointers; the wrappers are plain Win64 functions with the same arguments.
+* **Phases** are told by `Time.inFixedTimeStep`. A setter during a fixed step notes the transform and the part
+  written (position, rotation, scale) with the value before the step. The first Transform call after the fixed
+  steps of a frame reads the value after the step and writes the blend, so Update / LateUpdate scripts and the
+  renderer see one consistent pose. The first Transform call of the next fixed step writes the true values back
+  before game logic reads anything. Local values are blended (a moved child of a moved parent comes out right).
+* **Ownership.** A part that a script writes outside the fixed step belongs to that script until a fixed step
+  writes it again: it is neither blended nor written back (`BR_INTERP_LOG=1` names such transforms).
+* **Jumps.** More than 6 units in one step (restart, wormhole, camera cut) is shown at once.
+* **Lifetime.** Tracked Transform objects are held by strong GC handles (host memory is not scanned); an entry
+  goes when the object is destroyed or was not written for two seconds. A stage tracks 10 to 50 transforms.
+* **When.** Options > Display > Smooth Motion (On by default, `smooth=` in `port_display.txt`), and only while the
+  picture can be drawn more than 60 times a second: VSync on a display above 60 Hz, or VSync off with a limit
+  above 60 (`rt_display_above_60`). At 60 and below a blend would only add its delay.
+
+Measured on a 240 Hz display (`BR_FPS_LOG`): first Adventure stage, steering: a camera moved in 30 of 120 frames
+with it off (every step uneven) and in 120 of 120 with it on (0 to 2 uneven steps of 240). An imported stage with
+sliding bars: 41 parts blended a frame. Online Adventure with two instances: both blend, the guest with 0 uneven
+steps of 960. A five-stage run with `BR_UNLOAD_EVERY=20`: no fault. Two-player split screen: both cameras move in
+every frame, but a third of the steps are uneven; `BR_CAM_TRACE` shows each step proportional to that frame's
+real duration (the frame that runs a two-player fixed step takes about 7.5 ms, more than a 240 Hz frame), so
+that is frame pacing, not the blend. Not looked at: Battle modes, replays, three and four players, a display
+between 60 and 240 Hz, how it feels in the hand (only numbers and stills). What is not covered: motion the
+engine itself makes in the fixed step without a script setter (Rigidbody-driven objects, Animators in physics
+mode) and values that are not transforms (a texture scrolled in FixedUpdate).
 
 ### Wide screens (`ultrawide.c`)
 

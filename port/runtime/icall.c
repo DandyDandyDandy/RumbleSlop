@@ -230,7 +230,8 @@ EXPORT void il2cpp_add_internal_call(const char *name, void *method) {
             if (rt_trace & 4) rt_log("icall %s: no signature in the metadata table, integer-only marshalling", name);
         }
     }
-    e->host = method;
+    extern void *rt_interp_wrap(const char *name, void *method);   // interp.c: Transform calls go through the port
+    e->host = rt_interp_wrap(name, method);
     ReleaseSRWLockExclusive(&g_icall_lock);
     c->x[0] = (uint64_t)(uintptr_t)e->name;
     c->x[1] = e->guest;

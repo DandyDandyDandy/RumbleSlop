@@ -17,6 +17,8 @@ A real PC version, not an emulator: the game's own code is recompiled to x64 and
 of the same engine version.
 
 - Windowed, borderless and full screen at any resolution, frame rate limit and VSync, in the game's own Options menu
+- Real motion above 60 frames a second: the game simulates at 60 Hz and the port blends every frame in between
+  (Options > Display > Smooth Motion)
 - Wide screens (21:9, 32:9) and 16:10, Steam Deck detection
 - Keyboard and mouse with the game's own PC key layout, rebinding in Options > Key Configuration, mouse on every menu
 - Xbox, DualSense and DualShock 4 controllers, up to four for split screen; button pictures follow the device in use
@@ -74,7 +76,6 @@ UPnP; without UPnP it works on the same network or VPN, or with the port forward
 - Online play has not been tested over the internet.
 - The opening movie cannot be skipped.
 - The option rows the port adds are English in every language.
-- A frame rate limit above 60 draws repeated pictures: the game moves everything at 60 Hz.
 
 If the game does not start, look at `game\port.log` and `game\player.log`.
 
