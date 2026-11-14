@@ -246,7 +246,7 @@ How it is put together:
   router for a mapping through Windows' UPnP helper and puts the router's external address in the code; without
   UPnP the code carries the PC's own address, which works on the same network or over a VPN, and otherwise the
   port has to be forwarded by hand and `public_ip=` set. Windows Firewall asks once to allow the game.
-  Settings file `game\port_net.txt` (optional): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`. Guests need the same
+  Settings file `port_net.txt` (optional; next to the saves, see "Where the player's files are"): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`. Guests need the same
   `port=` as the creator.
 * Position updates: the game sends each player's position stream (`NetworkStreamDispatcher`: 10 a second in 3
   groups of peers) about 9 times a second to each peer, which suits a Battle with 16 players. In an Adventure room
