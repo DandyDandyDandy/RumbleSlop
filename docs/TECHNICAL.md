@@ -488,7 +488,7 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   for a pad button; a pressed key is handed down the same road (`onPushButton`), and the row's item
   (`UIOptionChoicesItemData_KeyConfig`, `+0x44` its action) binds the key instead of reading a pad button. Esc
   closes the dialog unchanged; a key another action of the same group had is swapped; Options > Reset resets the
-  keys too (`ResetValue`). Changed bindings are in `game\port_keys<BR_PROFILE>.txt` (`<action id> <key name>...`).
+  keys too (`ResetValue`). Changed bindings are in `port_keys<BR_PROFILE>.txt` (`<action id> <key name>...`).
 * **Mouse on the UI.** Every button already has a mouse handler (`UIButtonMouseAction`: its screen's
   `UIUserInputDetector`, the input it stands for, click and hover callbacks). `SetMouseAction` is hooked to keep a
   list of buttons; when a screen polls its detector (`MonitorInputOnUpdate`), a pending left click or a moved
@@ -574,7 +574,7 @@ function's address. Managed methods are called from host code with `rt_call(c, a
 The game's own Options > Display page is extended with Screen Mode (Windowed / Borderless / Full Screen),
 Resolution, Frame Rate Limit, VSync and Smooth Motion. The added rows are copies of the game's Screen Mode row object,
 inserted after it when the page's row list is built; each copy carries a role number in a padding word and the
-hooks answer by role. Settings are stored in `game\port_display.txt`. The game pins `targetFrameRate` to 60 and
+hooks answer by role. Settings are stored in `port_display.txt`. The game pins `targetFrameRate` to 60 and
 resets `vSyncCount` with every quality change, so both setters are hooked to keep the port's values. Game time
 and the 60 Hz physics step were measured to be independent of frame rate.
 
@@ -584,7 +584,7 @@ desktop size itself.
 Steam Deck. The port recognises a Deck at start-up (`is_steam_deck`): Steam's own `SteamDeck=1` variable, which
 Proton hands to the game, or, with Windows installed on the Deck, the firmware's machine name (Valve, Jupiter or
 Galileo). On a Deck the game starts borderless at the display's own size (1280x800 on the built-in screen) whatever
-the game's save says about windowed or full screen, and the settings are kept in `game\port_display_deck.txt`, so a
+the game's save says about windowed or full screen, and the settings are kept in `port_display_deck.txt`, so a
 folder shared with a desktop PC keeps both machines' choices. Changes made in Options are kept as usual; Reset does
 not change the screen mode there. When the Display page is built the game's saved windowed / full screen value is
 made to agree with the port's mode, so the Screen Mode row's own text is right.
