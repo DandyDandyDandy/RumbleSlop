@@ -80,9 +80,22 @@ HOSTFN(_ZN2nn3err9ShowErrorENS_6ResultE) {
 // ------------------------------------------------------------------------------------------------ oe
 // nn::settings::LanguageCode is char[8], returned by value in x0.
 HOSTFN(_ZN2nn2oe18GetDesiredLanguageEv) {
+    // The language a new save starts in: BR_LANG, else the Windows display language (a save that has chosen a
+    // language in Options keeps it). Codes as the console reports them.
     const char *e = getenv("BR_LANG");
     char code[8] = {0};
-    snprintf(code, sizeof code, "%s", e && *e ? e : "en-US");
+    if (!(e && *e)) {
+        LANGID id = GetUserDefaultUILanguage();
+        WORD lang = PRIMARYLANGID(id), sub = SUBLANGID(id);
+        e = lang == LANG_JAPANESE ? "ja" : lang == LANG_FRENCH ? (sub == SUBLANG_FRENCH_CANADIAN ? "fr-CA" : "fr") : lang == LANG_GERMAN ? "de" :
+            lang == LANG_ITALIAN ? "it" : lang == LANG_SPANISH ? (sub == SUBLANG_SPANISH || sub == SUBLANG_SPANISH_MODERN ? "es" : "es-419") :
+            lang == LANG_CHINESE ? (sub == SUBLANG_CHINESE_TRADITIONAL || sub == SUBLANG_CHINESE_HONGKONG || sub == SUBLANG_CHINESE_MACAU ? "zh-Hant" : "zh-Hans") :
+            lang == LANG_KOREAN ? "ko" : lang == LANG_PORTUGUESE ? (sub == SUBLANG_PORTUGUESE_BRAZILIAN ? "pt-BR" : "pt") : lang == LANG_DUTCH ? "nl" :
+            lang == LANG_RUSSIAN ? "ru" : lang == LANG_ENGLISH && sub == SUBLANG_ENGLISH_UK ? "en-GB" : "en-US";
+        static int said;
+        if (!said++) rt_log("language: Windows display language %#x -> %s", id, e);
+    }
+    snprintf(code, sizeof code, "%s", e);
     uint64_t v;
     memcpy(&v, code, 8);
     RET(v);

@@ -78,7 +78,6 @@ UPnP; without UPnP it works on the same network or VPN, or with the port forward
   split-screen Adventure. Later stages and other modes have had little or no testing.
 - Online play has not been tested over the internet.
 - The opening movie cannot be skipped.
-- The option rows the port adds are English in every language.
 
 If the game does not start, look at `game\port.log` and `game\player.log`.
 

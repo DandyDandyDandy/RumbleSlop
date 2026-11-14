@@ -136,12 +136,8 @@ static void save_cfg(void) {
 }
 
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
-static uint64_t new_str(Cpu *c, const char *s) {
-    uint16_t buf[128];
-    int n = 0;
-    for (; s[n] && n < 127; n++) buf[n] = (uint8_t)s[n];
-    return rt_call(c, FN(F_STRING_NEW_UTF16), 2, (uint64_t)(uintptr_t)buf, (uint64_t)n);
-}
+uint64_t rt_tr_str(Cpu *c, const char *english);      // port_text.c: the text in the game's language
+static uint64_t new_str(Cpu *c, const char *s) { return rt_tr_str(c, s); }
 static void apply_fps(Cpu *c) {
     t_in_fps = 1;
     rt_call(c, FN(F_SET_TARGET_FRAME_RATE), 2, (uint64_t)(uint32_t)FPS[g_fps], 0ull);

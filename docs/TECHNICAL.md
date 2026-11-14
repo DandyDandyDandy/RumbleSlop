@@ -154,7 +154,7 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_HEAPDBG=1` | With the player argument `-systemallocator`: debug heap under the engine (`heapdbg.c`), reports overruns, writes after free and double frees inside UnityPlayer.dll with the allocating call stack. |
 | `BR_PAD_LAYOUT=positional` | Face buttons by Switch position instead of by label. `BR_SONY_PAD=off` disables direct DualSense reading. |
 | `BR_KB_PAD=1`, `BR_KIND=<n>`, `BR_INPUT_DUMP=1`, `BR_GLYPH_LOG=1` | Keyboard, mouse and glyph tests (see that section). |
-| `BR_LANG` | Game language, default en-US. |
+| `BR_LANG` | The language a new save starts in, as the console names it (`ja`, `en-US`, `fr`, `de`, `it`, `es`, `es-419`, `zh-Hans`, `zh-Hant`, `ko`, `pt-BR`); default: the Windows display language. |
 | `BR_TRACE`, `BR_TRACE_AFTER`, `BR_LOG_MAX`, `BR_PINVOKE=trap`, `BR_LIST_IMPORTS` | Low-level tracing. Never use `BR_TRACE=host` for a whole run (the log explodes). |
 
 Screenshots of a run: `port\tools\shot_window.ps1` captures the game window's own content (not the screen). Where
@@ -383,6 +383,19 @@ Testing
   `window.c` gives the window the same icon. `build_launcher.py --copy` replaces the exe in the game folder.
 * **Errors.** A FATAL shows a message box that names `port.log`, unless the run is scripted
   (`BR_NO_REAL_INPUT`) or `BR_FATAL_BOX=0`. Not triggered since the change (no fault at hand).
+
+### Language (`imports_plat.c`, `port_text.c`)
+
+The game has its own Language page in Options (eleven languages; changing returns to the title) and it works in
+the port as it is. A new save starts in the language `nn::oe::GetDesiredLanguage` reports: now the Windows display
+language (`GetUserDefaultUILanguage`, mapped to the console's codes), or `BR_LANG`. The port's own texts (the added
+option rows and their values, "Quit the game?", the tutorial question, the name box) go through `rt_tr_str` /
+`rt_tr_utf16`: a table of the English text and nine translations, chosen by `LocalizationManager.language`.
+A text without an entry stays English, so a new text needs a table row. The translations were written with the
+port, not by native speakers. Seen in Japanese: the quit question and the Display rows, every character drawn
+(the game's fonts had the kanji). Not looked at: the other languages on screen (Chinese and Korean could miss
+characters in the game's fonts), a Windows in another language, the row help texts (still none), the game's own
+untranslated PC words ("Windowed", "MIDDLE" in Japanese).
 
 ### Play-style screen (`playstyle_ui.c`)
 
@@ -729,7 +742,7 @@ Texture facts found the hard way:
   own rule, unchanged).
 * Exclusive Full Screen has not been tried from the menu; the Reset button on the Display page ran without a
   crash but its result was not checked.
-* The added option rows have English labels in every language and no help text.
+* The added option rows have no help text.
 * Wide and tall screens: battle modes, results screens, the pause menu, split screen and movies have not been
   looked at. With the top and bottom black images off, a 16:9 movie on a 16:10 screen shows whatever is behind it
   above and below.

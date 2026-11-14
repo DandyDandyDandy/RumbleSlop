@@ -29,12 +29,8 @@
 void *rt_icall_host(const char *name);       // icall.c: the engine's own function behind an internal call
 static uint32_t g_quit_h;                    // the open dialog's UIStateHandle
 
-static uint64_t new_str(Cpu *c, const char *s) {
-    uint16_t w[128];
-    int n = 0;
-    for (; s[n] && n < 127; n++) w[n] = (uint8_t)s[n];
-    return rt_call(c, FN(F_STRING_NEW_UTF16), 2, (uint64_t)(uintptr_t)w, (uint64_t)n);
-}
+uint64_t rt_tr_str(Cpu *c, const char *english);      // port_text.c: the text in the game's language
+static uint64_t new_str(Cpu *c, const char *s) { return rt_tr_str(c, s); }
 static uint64_t class_of_slot(Cpu *c, uint64_t slot_ptr) {
     uint64_t p = LD64(FN(slot_ptr));
     if (LD64(p) & 1) rt_call(c, FN(F_INIT_METADATA), 1, p);

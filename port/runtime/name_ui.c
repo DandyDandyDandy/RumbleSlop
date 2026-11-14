@@ -307,15 +307,18 @@ void name_ui_type(const char *s) {           // BR_INPUT_LIVE "TYPE <text>": '<'
     for (; *s; s++) push_char(*s == '<' ? 8 : *s == '!' ? 27 : (uint16_t)(uint8_t)*s);
 }
 static uint64_t box_text(Cpu *c) {
-    static const wchar_t head[] = L"Set your online display name!\n<size=135%><b>";
+    static const wchar_t head[] = L"\n<size=135%><b>";
     static const char caret_on[] = "_", caret_off[] = "<color=#00000000>_</color>";
-    static const wchar_t tail[] = L"</b></size>\n<size=62%>Enter: OK      Esc: Cancel</size>";
+    static const wchar_t tail[] = L"</b></size>\n<size=62%>", tail2[] = L"</size>";
+    extern int rt_tr_utf16(Cpu *c, const char *english, uint16_t *out, int max);      // port_text.c
     uint16_t w[400];
-    int n = 0;
+    int n = rt_tr_utf16(c, "Set your online display name!", w, 100);
     for (const wchar_t *p = head; *p; p++) w[n++] = (uint16_t)*p;
     for (int i = 0; i < g_box.len; i++) w[n++] = g_box.text[i];
     for (const char *p = g_box.caret ? caret_on : caret_off; *p; p++) w[n++] = (uint8_t)*p;
     for (const wchar_t *p = tail; *p; p++) w[n++] = (uint16_t)*p;
+    n += rt_tr_utf16(c, "Enter: OK      Esc: Cancel", w + n, 100);
+    for (const wchar_t *p = tail2; *p; p++) w[n++] = (uint16_t)*p;
     return new_str16(c, w, n);
 }
 static void box_open(Cpu *c) {
