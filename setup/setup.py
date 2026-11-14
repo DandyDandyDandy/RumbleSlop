@@ -9,7 +9,7 @@
 Put these into input\\ first (see README.md):
     prod.keys            your console's keys
     the base game        .xci (cartridge dump) or .nsp
-    the 2.0.0 update     .nsp
+    the 2.2.0 update     .nsp
     add-on content       .nsp files, optional
 
 Steps: tools, extract, image, generate, compile, link, assets, shaders, textures, assemble, dlc.
@@ -95,8 +95,8 @@ def find_inputs():
         have = 'only the update' if patch else ('only the base game' if base else 'neither')
         hint = ''
         if base and not patch:
-            hint = '\nThe port is made for version 2.0.0 of the game: add the 2.0.0 update (.nsp).'
-        raise Fail(f'{paths.INPUT} needs the base game (.xci or .nsp) and the 2.0.0 update (.nsp); found {have}.{hint}'
+            hint = '\nThe port is made for version 2.2.0 of the game: add the 2.2.0 update (.nsp).'
+        raise Fail(f'{paths.INPUT} needs the base game (.xci or .nsp) and the 2.2.0 update (.nsp); found {have}.{hint}'
                    + ''.join('\n  ' + x for x in problems))
     for x in problems:
         say('  note: ' + x)

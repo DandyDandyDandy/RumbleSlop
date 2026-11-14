@@ -353,9 +353,10 @@ void rt_backtrace(Cpu *c) {
     RtThread *t = (RtThread *)c;
     rt_log("guest state: pc %s", rt_guest_name(c->pc, buf, sizeof buf));
     rt_log("  lr %s  sp %#llx fp %#llx", rt_guest_name(c->x[30], buf, sizeof buf), (unsigned long long)c->sp, (unsigned long long)c->x[29]);
-    for (int i = 0; i < 8; i += 4)
+    for (int i = 0; i < 28; i += 4)
         rt_log("  x%d %#llx x%d %#llx x%d %#llx x%d %#llx", i, (unsigned long long)c->x[i], i + 1, (unsigned long long)c->x[i + 1],
                i + 2, (unsigned long long)c->x[i + 2], i + 3, (unsigned long long)c->x[i + 3]);
+    rt_log("  x28 %#llx", (unsigned long long)c->x[28]);
     rt_log("guest backtrace (frame-pointer chain):");
     uint64_t fp = c->x[29];
     for (int i = 0; i < 48 && fp && !(fp & 7) && readable(fp, 16); i++) {
@@ -432,6 +433,62 @@ uint64_t rt_ticks(void) {
 }
 void rt_spin_gate(Cpu *c, uint64_t head) { (void)c; (void)head; YieldProcessor(); }
 
+// What a fault in lifted code leaves to look at: the memory behind every guest register (with the class name when
+// the first word looks like a managed object's class pointer), and what every other guest thread is doing.
+static void crash_text(uint64_t a, char *out, int size) {
+    int n = 0;
+    for (; n < size - 1 && readable(a + (uint64_t)n, 1); n++) {
+        char ch = *(const char *)(uintptr_t)(a + (uint64_t)n);
+        if (ch < 0x20 || ch > 0x7e) break;
+        out[n] = ch;
+    }
+    out[n] = 0;
+}
+static void crash_words(const char *what, int i, uint64_t p) {
+    if (p < 0x10000 || (p & 7) || !readable(p, 64)) return;
+    const uint64_t *w = (const uint64_t *)(uintptr_t)p;
+    char name[64] = "", ns[64] = "";
+    uint64_t k = w[0] & ~1ull;                           // Il2CppClass: name at +0x10, namespace at +0x18
+    if (k > 0x10000 && !(k & 7) && readable(k, 0x20)) {
+        crash_text(LD64(k + 0x10), name, sizeof name);
+        crash_text(LD64(k + 0x18), ns, sizeof ns);
+    }
+    rt_log("  [%s%d] %016llx %016llx %016llx %016llx %016llx %016llx %016llx %016llx %s%s%s", what, i, (unsigned long long)w[0],
+           (unsigned long long)w[1], (unsigned long long)w[2], (unsigned long long)w[3], (unsigned long long)w[4],
+           (unsigned long long)w[5], (unsigned long long)w[6], (unsigned long long)w[7], ns, *ns ? "." : "", name);
+}
+static void crash_report(Cpu *c) {
+    for (int i = 0; i < 29; i++) {
+        uint64_t p = c->x[i];
+        crash_words("x", i, p);
+        if (i < 19 || p < 0x10000 || (p & 7) || !readable(p, 64)) continue;
+        for (int k = 0; k < 8; k++) {                    // one level further for the callee-saved registers
+            char tag[16];
+            snprintf(tag, sizeof tag, "x%d+", i);
+            crash_words(tag, 8 * k, LD64(p + 8 * (uint64_t)k));
+        }
+    }
+    int locked = rt_threads_trylock();
+    rt_log("guest threads (world owner thread %lu%s):", (unsigned long)rt_world_owner, locked ? "" : "; thread list locked");
+    for (RtThread *t = rt_threads; t; t = t->next) {
+        if (!t->host_thread || t->host_tid == GetCurrentThreadId()) continue;
+        DWORD before = SuspendThread(t->host_thread);
+        char b[300];
+        rt_log("thread %lu: suspend count %lu, call depth %d, %s with the collector, in host function %s, pc %s", (unsigned long)t->host_tid,
+               (unsigned long)before, t->call_depth, rt_gc_thread_registered(t) ? "registered" : "NOT registered",
+               t->in_host ? t->in_host : "(none)", rt_guest_name(t->cpu.pc, b, sizeof b));
+        host_backtrace(t->host_thread);
+        if (t->call_depth > 0 && !before) {              // running guest code right now: its registers as last stored
+            rt_log("  x0 %#llx x1 %#llx x19 %#llx x20 %#llx x21 %#llx x22 %#llx x23 %#llx lr %#llx", (unsigned long long)t->cpu.x[0],
+                   (unsigned long long)t->cpu.x[1], (unsigned long long)t->cpu.x[19], (unsigned long long)t->cpu.x[20],
+                   (unsigned long long)t->cpu.x[21], (unsigned long long)t->cpu.x[22], (unsigned long long)t->cpu.x[23],
+                   (unsigned long long)t->cpu.x[30]);
+            for (int i = 19; i < 24; i++) crash_words("other x", i, t->cpu.x[i]);
+        }
+    }
+    if (locked) rt_threads_unlock();
+}
+
 // First-chance report of host faults inside the port (wild guest pointers show up as access violations in lifted code).
 static void *g_mod_lo, *g_mod_hi;
 static HANDLE g_raw;
@@ -456,6 +513,8 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep) {
                    (unsigned long long)ep->ExceptionRecord->ExceptionInformation[1],
                    ep->ExceptionRecord->ExceptionInformation[0] ? "write" : "read");
             rt_backtrace(rt_cpu());
+            host_backtrace(GetCurrentThread());
+            crash_report(rt_cpu());
             die("host exception in lifted code (see port.log)");
         }
     }

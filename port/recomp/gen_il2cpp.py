@@ -490,6 +490,25 @@ def estimate(mod, s_idx, e_idx):
     return size
 
 
+def split_pads_removed(mod, S):
+    """S without the starts that would cut a call off from its landing pad.
+
+    discover() takes every address an ADRP + ADD pair seems to build for a function start; a pair that is not one
+    (the register was set again in between) can name the middle of a function. Where the exception table says a
+    call and its landing pad lie on both sides of such an address it cannot be a start: the function is one piece.
+    """
+    drop = np.zeros(len(S), dtype=bool)
+    for f in ehtab.read(mod):
+        for a, b, pad, _ in f.sites:
+            if pad:
+                lo, hi = min(a, pad), max(b - 1, pad)
+                drop[np.searchsorted(S, lo, side='right'):np.searchsorted(S, hi, side='right')] = True
+    if drop.any():
+        print(f'main: {int(drop.sum())} discovered starts between a call and its landing pad are not starts: '
+              f'{[hex(int(a)) for a in S[drop][:8]]}', file=sys.stderr, flush=True)
+    return S[~drop]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--nso', type=Path, default=paths.EXEFS / 'main')
@@ -510,7 +529,7 @@ def main():
     t0 = time.perf_counter()
     mod = Module('main', args.nso, BASE, 'c')
     starts, dstats = up.discover(mod)
-    S = mod.lo + starts * 4
+    S = split_pads_removed(mod, mod.lo + starts * 4)
     nxt = np.append(S[1:], mod.hi)
     ls, le = lift_ranges(args.closure)
     f = np.searchsorted(ls, S, side='right') - 1

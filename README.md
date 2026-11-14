@@ -6,7 +6,7 @@ It is called RumbleSlop because it is vibecoded slop: the whole port was written
 surprisingly well. Expect rough edges anyway.
 
 > **No game files are in this repository, and none may be added.** You need your own copy of the game, dumped from
-> your own console: the base game and the 2.0.0 update. How to dump is not explained here. The setup builds the
+> your own console: the base game and the 2.2.0 update. How to dump is not explained here. The setup builds the
 > game on your machine from your files, so the result contains the game. It is for your own use. Do not share it.
 >
 > Not affiliated with or endorsed by SEGA, Nintendo, Unity or CRI Middleware.
@@ -33,10 +33,10 @@ of the same engine version.
 - Your own files:
   - `prod.keys` of your console
   - the base game as `.xci` or `.nsp`
-  - the 2.0.0 update as `.nsp`
+  - the 2.2.0 update as `.nsp`
   - optional: add-on content `.nsp` files
 
-Only version 2.0.0 of the game is supported. The base game without that update, or with another update, stops the
+Only version 2.2.0 of the game is supported. The base game without that update, or with another update, stops the
 setup with a message.
 
 ## Setup (once)

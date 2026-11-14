@@ -20,6 +20,7 @@
 #define F_SHOP_ON_CREATE 0x43fa930ull       // SaveUserParam.ShopItemParam.OnCreate()
 #define F_SHOP_ON_AFTER_LOAD 0x43faae0ull   // SaveUserParam.ShopItemParam.OnAfterLoad()
 #define SHOP_CHARACTER 0x28                 // ShopItemParam.m_Character
+#define CHARACTER_DICT 0x10                 // ShopItemParamCharacter.m_Dict
 #define ITEM_CONDITION 0x10                 // ShopItemParamItemBase -> ShopItemConditionParam
 #define CONDITION_ID 0x10                   // ShopItemConditionParam.m_ConditionID
 #define CONDITION_NOT_HAVE 3
@@ -28,8 +29,8 @@
 
 static const uint32_t g_charas[] = {12, 19, 20, 21, 22, 23};   // Def.Chara.eID: Madhihi, Collab01..Collab05 (as in delisted.py)
 
-// A character counts only when the game data has its model: the 2.00 files hold Dr. Bad-Boon and the first two
-// collaboration characters; the other three exist as statistics only unless their add-on content is installed.
+// A character counts only when the game data has its model. The 2.2.0 update, which the port is made for, carries
+// all six (the game before it had Dr. Bad-Boon and two collaboration characters only); the check stays as a guard.
 static int has_model(uint32_t chara) {
     char pattern[700];
     WIN32_FIND_DATAA fd;
@@ -88,7 +89,10 @@ static int shop_event(Cpu *c, uint64_t fn) {
     uint64_t lr = c->x[30], self = c->x[0];
     g_inside = 1;
     rt_call(c, FN(fn), 2, self, c->x[1]);
+    // A new save: OnCreate makes m_Character without its dictionary (GetItem would read through null); the
+    // dictionary is filled by the OnAfterLoad that follows, which passes here again.
     uint64_t list = self ? LD64(self + SHOP_CHARACTER) : 0;
+    if (list && !LD64(list + CHARACTER_DICT)) list = 0;
     for (size_t i = 0; list && i < sizeof g_charas / sizeof *g_charas; i++)
         settle(g_charas[i], rt_call(c, FN(F_CHARA_GET_ITEM), 3, list, (uint64_t)g_charas[i], 0ull));
     g_inside = 0;

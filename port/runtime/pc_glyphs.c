@@ -232,16 +232,16 @@ int rt_hook_4543c80(Cpu *c) {
         return 1;                                                                              \
     }
 // UIBtnGuideDisplayModule_ForInputAction.getControllerBtnSprite(ActionAssignSet, ControllerKind): {+0x48 Action.eID}
-CONTEXT_HOOK(4512c00, 4, (int)LD32(a0 + 0x48), 0)
+CONTEXT_HOOK(4543800, 4, (int)LD32(a0 + 0x48), 0)
 // UIBtnGuideDisplayModule_ForDB.getControllerBtnSprite_Main / _Sub: {+0x58 / +0x5c KeyboardKeyIcon.eID of the guide}
-CONTEXT_HOOK(4512460, 4, 0, (int)LD32(a0 + 0x58))
-CONTEXT_HOOK(4512560, 4, 0, (int)LD32(a0 + 0x5c))
+CONTEXT_HOOK(45432c0, 4, 0, (int)LD32(a0 + 0x58))
+CONTEXT_HOOK(45432f0, 4, 0, (int)LD32(a0 + 0x5c))
 // UIPartViewBtnGuideFixed_ForInputAction.Setup(Action.eID, ControllerKind)
-CONTEXT_HOOK(44421b0, 4, (int)(uint32_t)a1, 0)
+CONTEXT_HOOK(44735f0, 4, (int)(uint32_t)a1, 0)
 // The rows of Options > Key Configuration: UIPartView_KeyConfig_SelectableBtn.SetButton(UIOptionChoicesItemData_KeyConfig
 // {+0x44 Action.eID}, ControllerKind) and SetUp(Action.eID, ControllerKind)
-CONTEXT_HOOK(452fc10, 4, a1 ? (int)LD32(a1 + 0x44) : 0, 0)
-CONTEXT_HOOK(452fc30, 4, (int)(uint32_t)a1, 0)
+CONTEXT_HOOK(45643d0, 4, a1 ? (int)LD32(a1 + 0x44) : 0, 0)
+CONTEXT_HOOK(45643f0, 4, (int)(uint32_t)a1, 0)
 
 // ------------------------------------------------------------------------------------------------ glyphs in text
 // Texts show buttons as TextMeshPro sprites: UITextEmojiDisplayModule turns its tags into "<sprite name=X>", X being

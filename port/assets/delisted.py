@@ -8,10 +8,8 @@ save says whether a player has them, and the table `Unlock_Subject_Chara` says w
 the six unlock with World 10; nothing of the mod is used here).
 
 On PC they are simply there from the start, without unlock notices or "new" marks: port\\runtime\\delisted.c marks
-them as owned whenever a save is created or loaded (those whose model is in the game data: version 2.00 has
-Dr. Bad-Boon and the first two collaboration characters, the other three come with their add-on content). This
-script does the other half: it switches off their rows
-of the unlock table, so the game's own unlock rules (an online battle, owning the add-on content) never fire a
+them as owned whenever a save is created or loaded (those whose model is in the game data: the 2.2.0 update
+has all six). This script does the other half: it switches off their rows of the unlock table, so the game's own unlock rules (an online battle, owning the add-on content) never fire a
 notice for a character the player already has.
 
 A row of the table (little endian ints): _id, TermsID (Unlock.Terms.eID), CharaID (Def.Chara.eID), ConditionID

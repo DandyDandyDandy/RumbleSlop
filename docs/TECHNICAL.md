@@ -1,13 +1,13 @@
 # RumbleSlop: technical guide
 
-A native Windows build of Super Monkey Ball Banana Rumble (Switch, Unity 2022.3.30f1, IL2CPP, version 2.0.0) made
+A native Windows build of Super Monkey Ball Banana Rumble (Switch, Unity 2022.3.30f1, IL2CPP, version 2.2.0) made
 on the user's PC from the user's own dump. This file is for whoever works on the port. It records how the port is
 put together, how to build and run it, and the traps already found. The player-facing instructions are in
 `README.md`.
 
 Nothing in the repository contains game code or data. Everything game-derived is made by `setup.cmd` under `build\`
 and `game\`, both ignored by git. The address tables in `port\recomp\tables\` and the offsets in the runtime's
-sources are facts about the 2.0.0 executable (where functions start and end), not its code.
+sources are facts about the 2.2.0 executable (where functions start and end), not its code.
 
 ## Design in one paragraph
 
@@ -25,7 +25,7 @@ what the Windows Vulkan player accepts.
 | `setup.cmd`, `setup\` | The one-time setup. `setup.py` runs the steps; `nx.py` reads XCI / NSP / NCA with the user's keys (pure Python); `fetch.py` downloads and unpacks the tools; `nsis.py` takes Unity's player out of Unity's installer without running it; `assemble.py` builds `game\`. |
 | `input\` | The user's `prod.keys` and dumps. Never committed. |
 | `port\paths.py` | Every folder and tool location, in one place. Scripts never name a machine path. |
-| `port\recomp\` | The lifter front end. `gen_il2cpp.py` generates C, `ehtab.py` reads exception tables, `hooks.txt` lists entry hooks, `tables\` holds the address tables for game version 2.0.0 (lift set, boundary targets, il2cpp API map). |
+| `port\recomp\` | The lifter front end. `gen_il2cpp.py` generates C, `ehtab.py` reads exception tables, `hooks.txt` lists entry hooks, `tables\` holds the address tables for game version 2.2.0 (lift set, boundary targets, il2cpp API map). |
 | `port\build.py` | Compiles the generated C to objects (ninja, clang). |
 | `port\runtime\` | Host runtime: loader, dispatcher, threads, exception unwinding, GC support, icall/API glue, and the `imports_*.c` Nintendo SDK implementations. `build_runtime.py` builds it and links `GameAssembly.dll`. |
 | `port\runtime\include\` | Contract shared by generated code and runtime: `cpu.h` (CPU state), `eh.h` (exception unwinding). |
@@ -71,7 +71,7 @@ The names come from the user's own game files and are never committed.
 
 ### How the version-specific tables were made
 
-`port\recomp\tables\` is for the 2.0.0 executable (build id in `port\paths.py`):
+`port\recomp\tables\` is for the 2.2.0 executable (build id in `port\paths.py`):
 
 * `lift_functions.tsv.gz`: start and end of every function that is lifted, from `tools\closure_build.py`
   (reachability from the managed method table over direct branches and address-taken functions, within the
@@ -85,6 +85,28 @@ The names come from the user's own game files and are never committed.
   signatures.
 
 Another game version needs these tables, `hooks.txt` and the `0x...ull` offsets in `port\runtime\*.c` redone.
+That was done once, from 2.0.0 to 2.2.0, like this:
+
+1. The tables are regenerated from the new executable, not carried over: the region constants at the top of
+   `tools\closure_build.py` and `port\recomp\extra_lift.py` are set for the new image, then `closure_build.py`,
+   `tools\make_tables.py` and `extra_lift.py` are run.
+2. An address map old -> new is built for every function (matched by method name from the metadata where there is
+   one, by code shape after masking addresses elsewhere, and confirmed by who calls whom) and for the data the
+   port names (class and method pointers). Native code (engine, CRIWARE, libil2cpp) moved as a block; the
+   generated managed code did not: generic instances were reordered, so `old + constant` is wrong there.
+3. `hooks.txt`, `il2cpp_api_map.tsv`, every `0x...ull` constant, `rt_hook_<address>` name and
+   `CONTEXT_HOOK(<address>` argument are rewritten through the map. A constant that is not an address (a mask, a
+   size) must be left alone: read the diff.
+4. Every hooked or called function whose body differs between the versions is read again (in 2.2.0: the button
+   glyph functions, which now go through `UIStandingSpriteManager`; the hooks kept working unchanged), and the
+   field offsets the port reads are compared between the two versions' type layouts (in 2.2.0 `MgPlayer` fields
+   from +0x1b0 moved by 8: `m_IsLocal` is at +0x1c0).
+5. As a cross-check the regenerated lift set must equal the old one carried through the map plus the functions the
+   new version added.
+
+`gen_il2cpp.py` guards against one weakness of the function-start search: an address that an unrelated
+ADRP + ADD pair seems to build is not taken for a start when it lies between a call and that call's landing pad
+(2.2.0 has one such address; splitting there would cut the function off from its exception handler).
 
 ## Run
 
@@ -120,8 +142,10 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_DESKTOP_SIZE=<w>x<h>` | Test: pretend the desktop has this size. With `SteamDeck=1` (the variable Steam itself sets on a Deck) and `1280x800` the port behaves as on a Steam Deck. |
 | `BR_SCREEN_DUMP=<s>,<s>...` | At those times: every camera (rect, target) and every UI canvas (scaler settings, pixel rect); also logs each UI element the wide-screen code widens. `BR_SCREEN_TREE=<depth>` adds the active UI objects under each canvas with their pixel boxes. |
 | `BR_SCREEN_RESIZE=<s>:<w>x<h>,...` | Switches to a window of that size at those times (tests a resolution change without the menu). |
+| `BR_UNLOAD_EVERY=<frames>` | Test: calls `Resources.UnloadUnusedAssets` every that many frames (stress for the engine's unused-asset sweep, which otherwise runs only between scenes). |
 | `BR_NO_REAL_INPUT=1` | The real keyboard, mouse and controllers are ignored (a scripted test is not disturbed by someone using the PC; dragging the game's window still stalls it). |
-| `BR_INPUT_LIVE=<file>` | Lines `<BUTTON> [hold ms]` appended to the file while the game runs are pressed one after the other (drives a running game from a test). Also `TYPE <text>` (into the open text box; `<` Backspace, `!` Esc in the name box), `KEY <name> [ms]` (a keyboard key, named as in `UnityEngine.InputSystem.Key`), `CLICK <x> <y>` / `MOVE <x> <y>` (left click at / cursor moved to a window pixel, from the top left), `WHEEL <n>` (mouse wheel notches, negative = down), `HOLD <x> <y>` / `RELEASE` (left button held at a window pixel while `MOVE` lines drag it, then let go), `DUMP` (the `BR_SCREEN_DUMP` output now), `BANANAS` (for the fork's bonus stages: counts as every banana taken) and `GOAL` (the local player's ball enters the stage's first goal: the game's own goal handler is called, so results, progress and what follows a stage can be checked without playing it; `test_aids.c`). Both input files also take `LSU LSD LSL LSR` (left stick fully up / down / left / right). |
+| `BR_INPUT_LIVE=<file>` | Lines `<BUTTON> [hold ms]` appended to the file while the game runs are pressed one after the other (drives a running game from a test). Also `TYPE <text>` (into the open text box; `<` Backspace, `!` Esc in the name box), `KEY <name> [ms]` (a keyboard key, named as in `UnityEngine.InputSystem.Key`), `CLICK <x> <y>` / `MOVE <x> <y>` (left click at / cursor moved to a window pixel, from the top left), `WHEEL <n>` (mouse wheel notches, negative = down), `HOLD <x> <y>` / `RELEASE` (left button held at a window pixel while `MOVE` lines drag it, then let go), `DUMP` (the `BR_SCREEN_DUMP` output now) and `GOAL` (every local player's ball enters the stage's first goal: the game's own goal handler is called, so results, progress and what follows a stage can be checked without playing it; `test_aids.c`). Both input files also take `LSU LSD LSL LSR` (left stick fully up / down / left / right). |
+| `BR_START_STAGE=<n>` | A world picked in split screen or online starts at its stage n (from 0) instead of its first stage, so a test reaches a late stage at once (`test_aids.c`; online, set it for every instance; n must be a stage of the world). `BR_PADS=2` gives the second pad split screen needs; its input lines are prefixed `2:`. |
 | `BR_PROFILE=<suffix>` | A second copy of the game on the same PC uses `save<suffix>\` and `temp<suffix>\` (give it `BR_LOG` and `-logFile` of its own too). |
 | `BR_NICKNAME=<name>` | Player name (default `Player`) when no name was set in the game (`port_name.txt`, see the online display name). |
 | `BR_STATE_LOG=1`, `BR_NAME_LOG=1` | UI diagnostics: every UI state request; every button a screen registers. |
@@ -150,7 +174,14 @@ the execution policy blocks script files, run it as
   collector thread can take while the world is stopped must be covered in `gc_stop_world` (heap gate, process
   heap, object table, big-block table and log are).
 * **No null checks.** The game is built without IL2CPP null checks, so a managed null dereference is a hard
-  access violation logged as FATAL in `port.log`, not a `NullReferenceException`.
+  access violation logged as FATAL in `port.log`, not a `NullReferenceException`. There are no array bounds
+  checks either: an index past the end silently writes into the next heap object, and the fault comes later,
+  typically in the engine's unused-asset sweep between scenes (`il2cpp::vm::Liveness`, on the main thread and
+  the engine's `AGCThread` workers at once, which is by design), when it follows the damaged object.
+* **Crash report.** A fault in lifted code logs all guest registers, the eight words behind each register that
+  points at memory (with the class name where the first word is a class pointer, and one level further for
+  x19..x28), the host stack, and every other guest thread: suspended or not, registered with the collector or
+  not, and where it is. A class pointer that differs from its neighbours' in one byte is an out-of-bounds write.
 * **Audio** (`imports_audio.c`). The game appends 5 ms buffers and keeps three queued. Buffers are released by a
   wall clock at the exact real-time rate and the PCM is copied into a ring that a feeder thread plays through
   waveOut in 10 ms blocks. Do not tie releases to waveOut completions (they arrive in 10 ms steps and halve the
@@ -198,6 +229,14 @@ How it is put together:
   port has to be forwarded by hand and `public_ip=` set. Windows Firewall asks once to allow the game.
   Settings file `game\port_net.txt` (optional): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`. Guests need the same
   `port=` as the creator.
+* Position updates: the game sends each player's position stream (`NetworkStreamDispatcher`: 10 a second in 3
+  groups of peers) about 9 times a second to each peer, which suits a Battle with 16 players. In an Adventure room
+  (at most 4 players) the port writes the dispatcher's two static values when the room is entered, so every send
+  goes to all peers 30 to 40 times a second depending on the frame rate (`set_stream_rate` in `online.c`; measured
+  with `BR_NET_LOG=1`, two instances: 35 a second received against 9.2). Battle rooms keep the game's values.
+  `adventure_rate=` in `port_net.txt` sets it (10 to 60, default 30; 0 = the game's values). Each player sets only
+  its own sending, and the receiver extrapolates from position, velocity and send time, so players with different
+  settings can share a room.
 * UI (`online_ui.c`): the code is typed straight into the game's own screen, with no pop-up. The game contains a PC
   layout for that screen (`createChoicesModule_Windows`: Search button and a paste button, no "open keyboard"
   button), which the hooks select; the console input module's empty per-frame `MonitorCharacterInput` reads the
@@ -567,6 +606,6 @@ Texture facts found the hard way:
   Screen Mode row's text following the port's mode when the game's save disagrees, the firmware-name detection,
   the 16:10 entries of the Resolution list beyond 1280x800.
 * The opening movie cannot be skipped with the buttons tried so far.
-* Only game version 2.0.0 is supported (base game plus the 2.0.0 update). The base game alone, or another
+* Only game version 2.2.0 is supported (base game plus the 2.2.0 update). The base game alone, or another
   update, has a different executable: the setup stops with a message.
 * Linux and Android builds are not started. The fixed load address is the main risk for Android.

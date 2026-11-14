@@ -1,7 +1,7 @@
 r"""Where everything lives. Every script of the port takes its folders and tools from here, so nothing else names a
 machine-specific path.
 
-    input\      the user's own files: prod.keys, the base game (.xci or .nsp), the 2.0.0 update (.nsp)
+    input\      the user's own files: prod.keys, the base game (.xci or .nsp), the 2.2.0 update (.nsp)
     build\      everything made on the way (extracted game, generated C, objects, converted assets, downloaded tools)
     game\       the finished game; nothing in it points back into build\ or input\
 
@@ -18,8 +18,8 @@ from pathlib import Path
 
 NAME = 'RumbleSlop'                     # the game's executable is <NAME>.exe, its data folder <NAME>_Data
 UNITY_VERSION = '2022.3.30f1'
-GAME_VERSION = '2.0.0'                  # the version of the Switch game the tables and hooks are made for
-MAIN_BUILD_ID = '95548fabbca7a4f723c3468e5cfb34d0'      # first 16 bytes of main's build id, version 2.0.0
+GAME_VERSION = '2.2.0'                  # the version of the Switch game the tables and hooks are made for
+MAIN_BUILD_ID = '95548fabbca7a4f723c3468e5cfb34d0'      # first 16 bytes of main's build id, version 2.2.0
 
 PORT = Path(__file__).resolve().parent
 ROOT = PORT.parent

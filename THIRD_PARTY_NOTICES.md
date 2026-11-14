@@ -34,4 +34,4 @@ are used to build the game on the user's PC; only Unity's player files end up in
 
 Super Monkey Ball Banana Rumble is (c) SEGA. This repository contains none of it: no code, no assets, no keys.
 The address tables in `port/recomp/tables/` and the function offsets in the sources say where things are in the
-game's 2.0.0 executable; the executable itself comes from the user's own copy at setup time.
+game's 2.2.0 executable; the executable itself comes from the user's own copy at setup time.
