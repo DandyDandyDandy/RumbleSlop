@@ -241,8 +241,17 @@ static void widen_walk(Cpu *c, uint64_t t, int depth) {
 }
 
 // UnityEngine.UI.CanvasScaler::Handle(): runs every frame for every enabled scaler.
+int rt_hide_ui;                              // set by a capture mode: every canvas with a scaler is switched off
+#define F_BEHAVIOUR_SET_ENABLED 0x3f07320ull
 int rt_hook_4176dc0(Cpu *c) {
     uint64_t s = c->x[0];
+    if (rt_hide_ui) {
+        uint64_t sx[31]; __uint128_t sv[8];
+        memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
+        uint64_t canvas = LD64(s + 0x50);
+        if (alive(c, canvas)) rt_call(c, FN(F_BEHAVIOUR_SET_ENABLED), 3, canvas, 0ull, 0ull);
+        memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
+    }
     if (g_dump_collect && g_nscalers < 64) g_scalers[g_nscalers++] = s;      // for this frame's BR_SCREEN_DUMP only
     if (!g_wide && !g_tall && g_restore_frames <= 0) return 0;
     float rx, ry;
