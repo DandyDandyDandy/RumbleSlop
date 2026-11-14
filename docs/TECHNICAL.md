@@ -384,6 +384,23 @@ dialog: "Would you like to skip the intro tutorial?" (focus starts on Yes; B ans
 * Test: a new `BR_PROFILE` suffix is a first start. Checked: Yes (play-style screen, not asked again after a
   restart), No (opening movie starts). Not checked: playing the tutorial to its end after No.
 
+### New save: no update notices (`tutorial_skip.c`)
+
+Update 2.20 brings announcements for the main menu ("You can now play new Stages during Race in Battle Mode!", the
+end of a collaboration, ...): rows of `DB.UpdateInfo.Kind`, each with a per-save flag
+(`SaveUserParam.UpdateInfoParam`, `UpdateInfoParamItem.m_IsPlayed`). `NoticeManager.Start` calls
+`Util.Unlock.CreateUpdateInfo` once the save is loaded (before the title), which queues a notice for every row not
+yet flagged. A save made on 2.20 has no flag set, so a new player was told about "new" content first thing.
+
+The hook on `CreateUpdateInfo` looks at `AdventureParam.m_playedTutorial`: unset means a new save, and then every
+row is flagged and nothing is queued (log line "new save: 7 of 7 update notices marked as shown"). The flags reach
+the file with the next save (the Yes of the tutorial question, or the tutorial's end). A save that has played the
+tutorial goes through unchanged, so one from before the update still gets its notices once.
+
+Checked in both games on a new `BR_PROFILE`: no notice on the main menu (the unhooked game shows the Race stages
+one there), none after a restart. Not checked: answering No and playing the tutorial, a save from 2.00 (unchanged
+path), the notices list in the X sub-menu.
+
 ### Keyboard, mouse and button glyphs (`pc_input.c`, `pc_glyphs.c`)
 
 The game is written for several platforms around "actions" (`Wonder.AppInput.State.Action*`,

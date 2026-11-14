@@ -28,6 +28,10 @@
 #define ADV_PLAYED_TUTORIAL 0x28            // AdventureParam.m_playedTutorial (bool)
 #define HANDLE_STATUS 0x10                  // UIStateHandle.status: 3 = Finished
 #define HANDLE_RESULT 0x14                  // UIStateHandle.result: 2 = Yes, 3 = No
+#define USER_UPDATE_INFO 0xa0               // SaveUserParam -> UpdateInfoParam
+#define INFO_DICT 0x18                      // UpdateInfoParam.m_Dict (SimpleSerializableDict: +0x10 List of entries)
+#define ENTRY_VALUE 0x18                    // SimpleSerializableDictEntry.m_Value -> UpdateInfoParamItem
+#define ITEM_PLAYED 0x10                    // UpdateInfoParamItem.m_IsPlayed (bool)
 
 static uint32_t g_handle_h;                  // the open dialog's UIStateHandle
 static uint64_t g_declined_tick;             // "No" was answered then: the request that follows is not asked about again
@@ -90,4 +94,26 @@ int rt_hook_4452e90(Cpu *c) {
     for (int i = 0; i < 5; i++) c->x[i] = a[i];
     c->x[30] = lr;
     return held;
+}
+
+// Util.Unlock.CreateUpdateInfo(Season.eID) (static, bool): queues a main-menu notice for every update announcement
+// the save has not shown yet ("new stages", "new Battle modes", "the collaboration is over": news for a player who
+// knew the game before the update). NoticeManager.Start calls it once the save is loaded, before the title. A save
+// that has not played the tutorial is a new one: nothing in the game is news to it, so every announcement is marked
+// as shown and none is queued. A save from before the update keeps its one-time notices.
+int rt_hook_4466c20(Cpu *c) {
+    uint64_t season = c->x[0], lr = c->x[30];
+    uint64_t user = rt_call(c, FN(F_USER_PARAM), 1, 0ull);
+    uint64_t adv = user ? LD64(user + USER_ADVENTURE) : 0, info = user ? LD64(user + USER_UPDATE_INFO) : 0;
+    c->x[0] = season; c->x[1] = 0; c->x[30] = lr;
+    if (!adv || !info || LD8(adv + ADV_PLAYED_TUTORIAL)) return 0;
+    uint64_t dict = LD64(info + INFO_DICT), list = dict ? LD64(dict + 0x10) : 0, items = list ? LD64(list + 0x10) : 0;
+    int n = items ? (int)LD32(list + 0x18) : 0, marked = 0;
+    for (int i = 0; i < n; i++) {
+        uint64_t entry = LD64(items + 0x20 + 8ull * i), item = entry ? LD64(entry + ENTRY_VALUE) : 0;
+        if (item && !LD8(item + ITEM_PLAYED)) { ST8(item + ITEM_PLAYED, 1); marked++; }
+    }
+    rt_log("new save: %d of %d update notices marked as shown", marked, n);
+    c->x[0] = 0;
+    return 1;
 }
