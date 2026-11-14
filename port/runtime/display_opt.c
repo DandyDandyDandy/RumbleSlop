@@ -232,6 +232,7 @@ int rt_hook_3ec1ab0(Cpu *c) {
         c->x[0] = 1;
     }
     inside = 1; call_orig(c, 0x3ec1ab0ull); inside = 0;
+    { extern void gfx_quality_changed(Cpu *c); gfx_quality_changed(c); }      // gfx_opt.c: the graphics rows are applied again
     int was = (int32_t)rt_call(c, FN(0x3ec1da0ull), 1, 0ull);        // QualitySettings.get_vSyncCount
     apply_vsync(c);
     if (was != g_vsync) rt_log("display: quality level %d asks for vSyncCount %d; kept at %d", level, was, g_vsync);
@@ -426,6 +427,7 @@ int rt_hook_43d58c0(Cpu *c) {
         extern void test_aids_tick(Cpu *c);
         extern void interp_tick(Cpu *c);
         extern void pc_shell_tick(Cpu *c);
+        extern void gfx_opt_tick(Cpu *c);
         uint64_t sx[19]; __uint128_t sv[8];
         memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
         chara_dump_tick(c);
@@ -439,6 +441,7 @@ int rt_hook_43d58c0(Cpu *c) {
         pc_input_tick(c);
         interp_tick(c);
         pc_shell_tick(c);
+        gfx_opt_tick(c);
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     if (!on) return 0;

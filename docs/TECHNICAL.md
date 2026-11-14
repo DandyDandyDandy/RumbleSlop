@@ -564,6 +564,37 @@ camera moved in. Measured at about 240 rendered frames per second: 60 camera mov
 stage, an online Battle with 16 players and split screen alike. Without the next section a frame rate above 60
 therefore draws repeated pictures.
 
+### The game's graphics rows (`gfx_opt.c`)
+
+Version 2.20 lists Graphics Settings, Shadow Quality, Post-Processing Effects (Low / Medium / High), Anti-Aliasing,
+Texture Smoothness (On / Off) and HUD Size (Standard / Large) on the Display page and saves them, but nothing in
+this build acts on them: `OptionElementSaveData_Quality.changeValue`, `_OnOff.changeValue` and
+`_HudScale.changeValue` are a bare `ret`, and the getters of the saved values have no caller. The port applies
+them. The saved values are read every frame (`SaveUserParam.m_OptionParam` +0x30; elements at +0x40, +0xc8, +0xd0,
++0xd8, +0xe0, +0xe8, value at +0x10) and applied when one changes or the game has switched its quality level:
+
+| Row | Low / Off | Medium / On | High |
+|---|---|---|---|
+| Graphics Settings | render scale 0.85, LOD bias x0.7 | the level's own (1.2 in a stage, 1.1 in the menus) | 1.5, LOD bias x2 |
+| Shadow Quality | 512 shadow map | the level's own (1024 in a stage, 2048 in the menus) | 4096 |
+| Post-Processing Effects | off | the game's | the game's plus SMAA |
+| Anti-Aliasing | MSAA off | MSAA 4x (the console level has 2x) | |
+| Texture Smoothness | anisotropic filtering off | forced on | |
+| HUD Size | | Standard | Large: 1.2 times, by the HUD canvases' scaler reference 1600x900 (`ultrawide.c`) |
+
+Render scale, shadow map and MSAA are set on the level's `UniversalRenderPipelineAsset` (what each asset had is
+kept by asset); LOD bias and filtering through `QualitySettings`, whose setters change the active level's stored
+values, so a level's own LOD bias is read the first time the level is seen. Post-processing is per camera: Low
+turns it off for cameras that have it on and remembers them. `BR_GFX_LOG=1` logs what is applied,
+`BR_GFX_FORCE=<graphics>,<shadow>,<post>,<aa>,<aniso>[,<hud>]` overrides the save for a test, `BR_GFX_OFF=1`
+leaves the rows dead as before. What the publisher's own PC version does with these rows is not known; the
+meanings above are the port's.
+
+Seen in the first Adventure stage with forced values: all Low (flat picture without bloom and haze), all High
+(no missing-shader colours with SMAA), HUD Large; 240 frames a second in each. Not done: changing the rows by
+hand in the menu and watching the preview, split screen with HUD Large, Battle, a frame rate comparison on a
+slow machine, a close look at edges and shadows (the pictures were 960 wide).
+
 ### Smooth motion above 60 frames a second (`interp.c`)
 
 Every rendered frame shows the moment it belongs to: a transform the game wrote during a fixed step is drawn

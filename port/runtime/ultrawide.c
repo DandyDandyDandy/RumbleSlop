@@ -149,7 +149,7 @@ static int g_hud_orig_set;
 
 int rt_hook_451cc70(Cpu *c) {
     uint64_t ra = c->x[30] - GUEST_BASE;
-    if (!(c->x[1] & 1) && ra >= MAINGAME_INIT_LO && ra < MAINGAME_INIT_HI) { ST8(c->x[0] + 0x59, 1); ST8(c->x[0] + 0x5a, 0); }
+    if (!(c->x[1] & 1) && ra >= MAINGAME_INIT_LO && ra < MAINGAME_INIT_HI) { ST8(c->x[0] + 0x59, 1); ST8(c->x[0] + 0x5a, 0); ST8(c->x[0] + 0x5b, 0); }
     return 0;
 }
 
@@ -158,20 +158,33 @@ int rt_hook_451cd90(Cpu *c) {
     uint64_t ctrl = c->x[0];
     if (!LD8(ctrl + 0x59)) return 0;
     int applied = LD8(ctrl + 0x5a);
+    // Options > Display > HUD Size (gfx_opt.c): Large draws the HUD canvases 1.2 times as big, by a smaller
+    // reference resolution of their scaler, so everything keeps its corner. +0x5b: Large is applied.
+    extern int gfx_hud_large;
+    int large = gfx_hud_large != 0, large_applied = LD8(ctrl + 0x5b);
+    float ref_w = large ? 1600.0f : 1920.0f, ref_h = large ? 900.0f : 1080.0f;
+    if (large != large_applied) {
+        uint64_t scaler = LD64(ctrl + 0x20);
+        if (scaler && LD64(scaler + 0x10)) {
+            memcpy((void *)(uintptr_t)(scaler + 0x2c), &ref_w, 4); memcpy((void *)(uintptr_t)(scaler + 0x30), &ref_h, 4);
+            ST8(ctrl + 0x5b, large);
+        }
+    }
+    int resize = applied && large != large_applied;      // the centred margin has the reference size
     if (!g_wide && !applied) return 0;
     uint64_t sx[31]; __uint128_t sv[8];
     memcpy(sx, c->x, sizeof sx); memcpy(sv, c->v, sizeof sv);
     uint64_t rt = LD64(ctrl + 0x28);
     if (alive(c, rt)) {
         int want = g_wide && (int)rt_call(c, FN(F_VIEWPORT_TYPE), 1, 0ull) == 1;
-        if (want && !applied) {
-            if (!g_hud_orig_set) {
+        if (want && (!applied || resize)) {
+            if (!g_hud_orig_set && !applied) {
                 get_v2(c, F_RT_GET_ANCHOR_MIN, rt, g_hud_orig[0]); get_v2(c, F_RT_GET_ANCHOR_MAX, rt, g_hud_orig[1]);
                 get_v2(c, F_RT_GET_ANCHORED_POS, rt, g_hud_orig[2]); get_v2(c, F_RT_GET_SIZE_DELTA, rt, g_hud_orig[3]);
                 g_hud_orig_set = 1;
             }
             set_v2(c, F_RT_SET_ANCHOR_MIN, rt, 0.5f, 0.5f); set_v2(c, F_RT_SET_ANCHOR_MAX, rt, 0.5f, 0.5f);
-            set_v2(c, F_RT_SET_ANCHORED_POS, rt, 0, 0); set_v2(c, F_RT_SET_SIZE_DELTA, rt, 1920, 1080);
+            set_v2(c, F_RT_SET_ANCHORED_POS, rt, 0, 0); set_v2(c, F_RT_SET_SIZE_DELTA, rt, ref_w, ref_h);
             ST8(ctrl + 0x5a, 1);
         } else if (!want && applied) {
             set_v2(c, F_RT_SET_ANCHOR_MIN, rt, g_hud_orig[0][0], g_hud_orig[0][1]); set_v2(c, F_RT_SET_ANCHOR_MAX, rt, g_hud_orig[1][0], g_hud_orig[1][1]);

@@ -17,6 +17,8 @@ A real PC version, not an emulator: the game's own code is recompiled to x64 and
 of the same engine version.
 
 - Windowed, borderless and full screen at any resolution, frame rate limit and VSync, in the game's own Options menu
+- The game's graphics rows work: render scale, shadow quality, post-processing, anti-aliasing, texture filtering,
+  HUD size
 - Real motion above 60 frames a second: the game simulates at 60 Hz and the port blends every frame in between
   (Options > Display > Smooth Motion)
 - Wide screens (21:9, 32:9) and 16:10, Steam Deck detection
