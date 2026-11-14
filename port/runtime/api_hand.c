@@ -19,6 +19,7 @@ static BOOL CALLBACK init_cb(PINIT_ONCE o, PVOID p, PVOID *x) {
     rt_log_init();
     rt_log("RumbleSlop runtime starting (GameAssembly.dll at %p)", (void *)&__ImageBase);
     rt_log_install_veh(&__ImageBase);
+    { extern void window_early_start(void); window_early_start(); }      // window.c: the port's title and icon as soon as the window exists
     rt_dispatch_init();
     rt_load_image();
     rt_bind_engine_helpers();

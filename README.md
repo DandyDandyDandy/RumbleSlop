@@ -78,7 +78,8 @@ UPnP; without UPnP it works on the same network or VPN, or with the port forward
 - Tested: the setup from scratch on one PC; title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
   split-screen Adventure. Later stages and other modes have had little or no testing.
 - Online play has not been tested over the internet.
-- The opening movie cannot be skipped.
+- The opening scene plays through the first time (the game's own rule); the tutorial question on a new save skips it.
+- The window is white for the first seconds after starting.
 
 If the game does not start, look at `game\port.log` and `game\player.log`.
 

@@ -771,7 +771,15 @@ Texture facts found the hard way:
   Checked that way: borderless 1280x800 on a fresh save, the Resolution row showing 1280 x 800. Not checked: the
   Screen Mode row's text following the port's mode when the game's save disagrees, the firmware-name detection,
   the 16:10 entries of the Resolution list beyond 1280x800.
-* The opening movie cannot be skipped with the buttons tried so far.
+* Start-up, measured on one PC (`_slop_scratch\start_time.py`, pictures every 1.5 s): the window opens at once and
+  is white for about 4.5 s (the engine loading its first scene and presenting an empty picture; painting the
+  window black from the port changed nothing on the screen), then the health warning (3 s), the publisher's logo
+  (3 s), and the title at about 14 s. The title bar has the port's name and icon from the first moment
+  (`window_early_start`). Nothing was done about the 4.5 s.
+* The opening scene (a real-time cutscene, about 25 s, then the tutorial) plays through on a new save whatever is
+  pressed (tried: +, A, Enter, Space, X, Y, -). By the game's code (`MgMovieSequeuce`), the skip prompt is only
+  offered for a scene the save has already seen, or in the viewer of the Memories menu; that a second viewing
+  can be skipped was not tried. Answering Yes to the port's tutorial question skips scene and tutorial.
 * Only game version 2.2.0 is supported (base game plus the 2.2.0 update). The base game alone, or another
   update, has a different executable: the setup stops with a message.
 * Linux and Android builds are not started. The fixed load address is the main risk for Android.
