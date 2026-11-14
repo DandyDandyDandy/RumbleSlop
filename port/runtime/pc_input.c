@@ -389,6 +389,7 @@ static void sample(KeySet *s) {
         if (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) s->mouse |= 8;
         if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) s->mouse |= 16;
     }
+    { extern int rt_ui_test_held(void); if (rt_ui_test_held()) s->mouse |= 1; }      // BR_INPUT_LIVE "HOLD x y"
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
     {                                           // the wheel on a screen without a list: the next waiting notch becomes an arrow-key tap
         static uint64_t next;
@@ -425,6 +426,10 @@ typedef struct {
     uint8_t analog;                           // AnalogKeyDef: the value ramps up and down over the two spans
     uint16_t start_ms, end_ms;
     uint8_t mouse;                            // eMouseButton mask of a plain mouse button binding
+    uint8_t vp_button;                        // VirtualPadDef: the mouse button held while dragging
+    uint8_t gesture;                          // GestureDef (not acted on)
+    uint16_t vp_sens;                         // its drag length for a full tilt, in pixels of a 1080-line screen
+    uint32_t vp_dir;                          // Def.Input.eButton: which way of the drag this action is
 } Binding;
 static Binding g_default[ACTION_COUNT], g_bind[ACTION_COUNT];
 static Binding g_pending;                     // defs seen since the last ActionAssignDatum constructor
@@ -447,6 +452,9 @@ int rt_hook_43c3950(Cpu *c) {
     return 0;
 }
 int rt_hook_43c30d0(Cpu *c) { g_pending.mouse = (uint8_t)W(0); return 0; }
+// ActionAssignMouse.VirtualPadDef(eMouseButton, eButton analogDir, int sensitivity) and GestureDef(eButton, int)
+int rt_hook_43c3150(Cpu *c) { g_pending.vp_button = (uint8_t)W(0); g_pending.vp_dir = W(1); g_pending.vp_sens = (uint16_t)W(2); return 0; }
+int rt_hook_43c31e0(Cpu *c) { g_pending.gesture = 1; g_pending.vp_dir = W(0); g_pending.vp_sens = (uint16_t)W(1); return 0; }
 static int datum(Cpu *c) {                    // ActionAssignDatum..ctor(Action.eID in_ActionID, ...): seven overloads
     uint32_t a = W(1);
     if (a < ACTION_COUNT) { g_default[a] = g_pending; g_captured++; }
@@ -529,6 +537,50 @@ void pc_action_reset(int action) {
     if (action > 0 && action < ACTION_COUNT) { g_bind[action] = g_default[action]; bindings_save(); }
 }
 
+// ------------------------------------------------------------------------------------------------ mouse virtual pad
+// The game's PC layout binds the tilt and camera actions to the mouse as a "virtual pad"
+// (AppActionMouse.ActionParamVirtualPad, whose component does not run in this build): while the binding's mouse
+// button is held, the place where it went down is the stick's centre and the drag away from it is the stick.
+// As in the game: the drag only counts after a small distance, and the centre is then moved by that distance so
+// the value starts at zero; the action's value is the part of the drag in its direction, full at the binding's
+// sensitivity in pixels (scaled to a 1080-line window). The Mouse Sensitivity option is not read.
+extern int rt_ui_mouse(float *x, float *y, int *down);      // online_ui.c: cursor in window pixels from the bottom left
+extern int rt_ui_test_held(void);
+#define VPAD_MIN 10.0f
+typedef struct { int state; float cx, cy, dx, dy; } VPad;   // state: 0 waiting, 1 finding the centre, 2 giving values
+static VPad g_vpad[5];
+static void vpad_update(void) {
+    float x, y, scale = 1.0f;
+    int down, inside = rt_ui_mouse(&x, &y, &down);
+    RECT cr;
+    HWND fg = GetForegroundWindow();
+    if (fg && GetClientRect(fg, &cr) && cr.bottom > 0) scale = 1080.0f / (float)cr.bottom;
+    for (int i = 0; i < 5; i++) {
+        VPad *p = &g_vpad[i];
+        if (!(g_frame.mouse >> i & 1) || (!inside && !p->state)) { p->state = 0; p->dx = p->dy = 0; continue; }
+        if (!p->state) { p->cx = x; p->cy = y; p->state = 1; p->dx = p->dy = 0; }
+        float ddx = (x - p->cx) * scale, ddy = (y - p->cy) * scale, len = sqrtf(ddx * ddx + ddy * ddy);
+        if (p->state == 1 && len >= VPAD_MIN) {
+            p->cx += ddx / len * VPAD_MIN / scale; p->cy += ddy / len * VPAD_MIN / scale;
+            ddx = (x - p->cx) * scale; ddy = (y - p->cy) * scale;
+            p->state = 2;
+        }
+        if (p->state == 2) { p->dx = ddx; p->dy = ddy; }
+    }
+}
+static float vpad_value(const Binding *b) {
+    if (!b->vp_button || b->gesture) return 0;
+    int i = __builtin_ctz(b->vp_button);
+    if (i > 4 || g_vpad[i].state != 2) return 0;
+    float dx = g_vpad[i].dx, dy = g_vpad[i].dy, len = sqrtf(dx * dx + dy * dy);
+    if (len < 1e-3f) return 0;
+    uint32_t d = b->vp_dir;
+    float part = d == 0x100 || d == 0x1000000 ? dy : d == 0x200 || d == 0x2000000 ? -dy : d == 0x400 || d == 0x4000000 ? -dx :
+                 d == 0x800 || d == 0x8000000 ? dx : 0;
+    float v = part / (b->vp_sens ? (float)b->vp_sens : 100.0f);
+    return v <= 0 ? 0 : v > 1 ? 1 : v;
+}
+
 // ------------------------------------------------------------------------------------------------ the game's side
 // The gates State.checkAction applies before it asks the pad, for the keyboard: 1 = this state may see input now.
 static int state_takes_input(Cpu *c, uint64_t state, uint32_t action) {
@@ -599,12 +651,15 @@ int rt_hook_43c8d50(Cpu *c) {
     inside = 0;
     float v = rt_getf(c, 0);
     const Binding *b = action < ACTION_COUNT ? pc_binding((int)action) : NULL;
-    if (b && b->nkeys && v < 1.0f && state_takes_input(c, state, action))
+    if (b && (b->nkeys || b->vp_button) && v < 1.0f && state_takes_input(c, state, action)) {
+        float mv = vpad_value(b);
+        if (mv > v) v = mv;
         for (int i = 0; i < b->nkeys; i++) {
             int k = b->keys[i];
             float kv = k > 0 && k < NKEY ? (b->analog ? g_analog[k] : (float)g_frame.cur[k]) : 0;
             if (kv > v) v = kv;
         }
+    }
     rt_setf(c, 0, v);
     return 1;
 }
@@ -617,6 +672,7 @@ int rt_hook_43b5380(Cpu *c) {
     memcpy(&a, (void *)(uintptr_t)(self + 0x3c), 4); memcpy(&b, (void *)(uintptr_t)(self + 0x40), 4);
     if (a > 0.05f && a < 2 && b > 0.01f && b < 2) { g_repeat_start = a; g_repeat_interval = b; }
     sample(&g_frame);
+    vpad_update();
     uint64_t now = GetTickCount64();
     float dt = g_ramp_stamp ? (float)(now - g_ramp_stamp) : 0;       // ms
     g_ramp_stamp = now;
@@ -832,10 +888,13 @@ void pc_input_tick(Cpu *c) {
         const Binding *b = &g_bind[a];
         char line[160] = "";
         int n = 0;
-        if (!b->nkeys && !b->mouse) continue;
+        if (!b->nkeys && !b->mouse && !b->vp_button) continue;
         for (int i = 0; i < b->nkeys; i++) n += snprintf(line + n, sizeof line - n, " %s", pc_key_name(b->keys[i]));
         if (b->analog) n += snprintf(line + n, sizeof line - n, " (analog %d/%d ms)", b->start_ms, b->end_ms);
         if (b->mouse) n += snprintf(line + n, sizeof line - n, " mouse %d", b->mouse);
+        if (b->vp_button) n += snprintf(line + n, sizeof line - n, " %s button %d dir %#x sensitivity %d", b->gesture ? "gesture" : "virtual pad",
+                                         b->vp_button, b->vp_dir, b->vp_sens);
+        else if (b->gesture) n += snprintf(line + n, sizeof line - n, " gesture dir %#x sensitivity %d", b->vp_dir, b->vp_sens);
         rt_log("pc input: action %3d:%s", a, line);
     }
 }

@@ -677,6 +677,7 @@ static void ui_mouse_frame(void) {
     if (edge && g_mouse_inside) { g_click = 1; g_click_x = x; g_click_y = y; }
 }
 int rt_ui_click_pending(void) { return g_click; }
+int rt_ui_test_held(void) { return g_test_hold; }      // pc_input.c: a scripted HOLD counts as the left button
 // The cursor in window pixels from the bottom left, and whether the left button is held; 0 when the cursor is not
 // over the window.
 int rt_ui_mouse(float *x, float *y, int *down) { *x = g_mouse_x; *y = g_mouse_y; *down = g_mouse_down; return g_mouse_inside; }

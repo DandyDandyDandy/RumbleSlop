@@ -129,3 +129,5 @@
 47042b0   Wonder.UI.MainMenu.Adventure.UIStateAdvMultiSetting_Offline::<setupInnerFSM>b__9_3   (test switch BR_START_STAGE)
 454d230   Wonder.UI.SceneChange.UIStateArgTransitionToMainGameScene::.ctor   (test switch BR_START_STAGE)
 45524c0   Wonder.UI.TitleLoop.UIStateTitle::onCancel_SelectPlayStyle   (asks "Quit the game?", pc_shell.c)
+43c3150   Wonder.AppInput+ActionAssignMouse::VirtualPadDef   (the game's mouse drag bindings, pc_input.c)
+43c31e0   Wonder.AppInput+ActionAssignMouse::GestureDef

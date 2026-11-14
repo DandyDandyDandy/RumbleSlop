@@ -477,7 +477,17 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   `OnPointerEnter`, which moves the focus), and a click on the standing Back button is reported as Cancel. A
   screen that is not polling (dialog on top, fade) is therefore not clickable. This covers menu entries, cards,
   list rows, option arrows, dialog buttons and the corner buttons (eye, copy, name, Change Character, ...).
-  Not done: the mouse "virtual pad" bindings (hold a button and drag to tilt or turn the camera).
+* **Mouse drag as a stick.** The game's default table also binds actions to the mouse as a "virtual pad"
+  (`ActionAssignMouse.VirtualPadDef(button, direction, sensitivity)`; the component that would read them,
+  `AppActionMouse`, does not run in this build). The port captures the definitions like the keys and does what
+  `ActionParamVirtualPad.Process` does: while the binding's button is held, the place where it went down is the
+  centre; after 10 pixels the drag counts, and the action's value is the part of the drag in its direction, full
+  at `sensitivity` pixels (of a 1080-line window). The game's layout: left button drag tilts the stage (actions
+  46 to 49, 200 pixels) and moves the cameras of the viewing modes, right button drag moves in menus (32 to 35).
+  The main-game camera has no mouse binding in the game's table (arrow keys). `BR_INPUT_DUMP=1` lists them.
+  Seen: a scripted drag (`HOLD 960 540`, `MOVE 960 300`) rolls the ball forward into the goal of the first
+  stage. Not done: the Mouse Sensitivity option (not read; where its row is was not looked for), the two
+  `GestureDef` bindings (actions 61, 62), a real mouse in the hand.
 * **Lists: wheel, scroll bar, hover.** Every list is a `UnityEngine.UI.ScrollRect` whose content the game moves
   towards the focused item, in three functions (`UIPartViewBaseVirtualScrollRect.Update`,
   `UICalcContentPosModule_Base.OnUpdate`, `UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical.Update`). The

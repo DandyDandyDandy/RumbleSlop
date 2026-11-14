@@ -65,7 +65,7 @@ Saves are in `game\save`. Settings the port adds are small text files next to th
 ## Playing
 
 Keyboard defaults are the game's own: W A S D tilt, arrow keys camera, Space spin dash, Enter confirm, Esc cancel
-and pause, Q / E tabs. Everything can be rebound in Options > Key Configuration.
+and pause, Q / E tabs. With the mouse: hold the left button and drag to tilt. Everything can be rebound in Options > Key Configuration.
 
 Online: **Online Play > Battle (or Adventure) > Host** creates a room and shows a room code; the other players
 choose **Join** and type it. The host must be reachable on UDP port 23711: the port asks the router for that through
