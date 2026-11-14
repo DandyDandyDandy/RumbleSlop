@@ -173,6 +173,17 @@ static int g_xconn[4];
 static uint64_t g_xprobe[4], g_xlast;
 static Dev g_dev[MAX_PADS];
 static int g_ndev, g_npads = 1;
+// The keyboard seat. Normally the keyboard and the first controller are both player 1. When the game asks for more
+// players than there are controllers and the keyboard can make up for one (the controller applet below), player
+// 1 becomes the keyboard alone and the controllers are players 2 and up; so two can play with one controller.
+// It ends when the play-style screen is built again (playstyle_ui.c).
+static int g_kb_seat;
+void rt_hid_keyboard_seat(int on) {
+    if (g_kb_seat == on) return;
+    g_kb_seat = on;
+    g_xlast = 0;                                // the next refresh rebuilds the table
+    rt_log("input: player 1 is %s", on ? "the keyboard alone; controllers are players 2 and up" : "the keyboard and the first controller again");
+}
 static void devices_refresh(void) {
     uint64_t now = GetTickCount64();
     static int forced = -1;
@@ -181,6 +192,7 @@ static void devices_refresh(void) {
     if (now != g_xlast) {                       // at most once a millisecond; an empty XInput slot is probed once a second
         g_xlast = now;
         int n = 0;
+        if (g_kb_seat) { g_dev[0].xinput = -2; n = 1; }      // no device: the keyboard
         for (int i = 0; i < 4; i++) {
             if (g_xconn[i] || now >= g_xprobe[i]) {
                 g_xconn[i] = !rt_no_real_input() && XInputGetState((DWORD)i, &g_xs[i]) == ERROR_SUCCESS;
@@ -208,7 +220,7 @@ static int positional_layout(void) {
     return positional;
 }
 static int sony_kind(int slot) { SonyPad sp; rt_sony_pad(slot, &sp); return sp.kind ? sp.kind : 2; }
-int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev ? 0 : g_dev[id].xinput >= 0 ? 1 : sony_kind(g_dev[id].sony); }
+int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev || g_dev[id].xinput == -2 ? 0 : g_dev[id].xinput >= 0 ? 1 : sony_kind(g_dev[id].sony); }
 uint64_t rt_pad_last_input(uint32_t id) { return id < MAX_PADS ? g_pad_tick[id] : 0; }
 int rt_pad_positional(void) { return positional_layout(); }
 
@@ -393,7 +405,7 @@ static void motors_update(uint32_t id) {
         g_x_sent[id][0] = a; g_x_sent[id][1] = b;
         XINPUT_VIBRATION v = {a, b};
         XInputSetState((DWORD)g_dev[id].xinput, &v);
-    } else rt_sony_rumble(g_dev[id].sony, m[0], m[1]);
+    } else if (g_dev[id].xinput == -1) rt_sony_rumble(g_dev[id].sony, m[0], m[1]);
 }
 HOSTFN(_ZN2nn3hid25GetVibrationDeviceHandlesEPNS0_21VibrationDeviceHandleEiRKjNS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE) {
     int n = 0;
@@ -549,7 +561,12 @@ HOSTFN(_ZN2nn3hid22RetrieveVibrationValueEPNS0_14VibrationValueEiPNS0_26Vibratio
 #define HID_CONTROLLER_SUPPORT_CANCELED 0x183acau   // module 202, description 3101
 HOSTFN(_ZN2nn3hid21ShowControllerSupportEPNS0_27ControllerSupportResultInfoERKNS0_20ControllerSupportArgE) {
     devices_refresh();
-    int min = X(1) ? LD8(X(1)) : 1, max = X(1) ? LD8(X(1) + 1) : 1, n = g_npads;
+    int min = X(1) ? LD8(X(1)) : 1, max = X(1) ? LD8(X(1) + 1) : 1;
+    if (g_npads < min && !g_kb_seat && g_ndev >= 1 && g_ndev + 1 >= min) {      // one short: the keyboard takes the first seat
+        rt_hid_keyboard_seat(1);
+        devices_refresh();
+    }
+    int n = g_npads;
     if (max < 1) max = 1;
     if (n > max) n = max;
     rt_log("hid: controller applet for %d..%d players: %d pad%s", min, max, g_npads, g_npads == 1 ? "" : "s");

@@ -50,6 +50,7 @@ static float button_x(Cpu *c, uint64_t button, float *y) {
 static void drop_local_card(Cpu *c, uint64_t parents, uint64_t children, uint64_t views);
 int rt_hook_458b250(Cpu *c) {
     uint64_t args[9], lr = c->x[30];                        // the constructor runs afterwards: its arguments must survive the calls
+    { extern void rt_hid_keyboard_seat(int on); rt_hid_keyboard_seat(0); }      // imports_hid.c: back at the play-style screen
     for (int i = 0; i < 9; i++) args[i] = c->x[i];
     if (args[1] && args[2] && args[3]) drop_local_card(c, args[1], args[2], args[3]);
     for (int i = 0; i < 9; i++) c->x[i] = args[i];

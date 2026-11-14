@@ -195,6 +195,13 @@ the execution policy blocks script files, run it as
   every connected pad. Keyboard and mouse are not
   mapped onto a pad any more: they are devices of the game's own action system (see "Keyboard, mouse and button
   glyphs"); `BR_KB_PAD=1` brings the old keyboard-as-controller mapping back.
+* **The keyboard seat.** Normally the keyboard and the first controller are both player 1. When the controller
+  applet asks for one player more than there are controllers (Local Multiplayer with a single pad), player 1
+  becomes the keyboard alone and the controllers are players 2 and up (`rt_hid_keyboard_seat`), until the
+  play-style screen is built again. Seen with one DualSense: Local Multiplayer opens with P1 and P2, in a
+  split-screen stage the W key moves player 1 and (scripted) pad input moves player 2. Not run: the way back to
+  single player afterwards, three players (two pads and the keyboard is not offered: the seat is only taken
+  when the pads are one short of the minimum).
 * **Rumble** (`imports_hid.c`, `pad_sony.c`). The game's effects are `.bnvib` files that it hands to a native
   plug-in of the Switch build (`nnUser.Util+Vibration::Play(npad, slot, bytes)`, called from
   `AppInput.StateNpad.vibrationSpecific`; the plug-in is not lifted code). The port answers those P/Invoke natives
@@ -748,6 +755,10 @@ Texture facts found the hard way:
 * Online was tested with two instances on one PC only (same address, no packet loss beyond the transport test's
   simulation). Not tested: over the internet, UPnP on a router that offers it, more than two real players, a
   guest leaving in the middle of a match.
+* Controllers: XInput pads and Sony pads only (no Switch Pro Controller or other pads unless something presents
+  them as XInput). Motion controls are answered as "lying flat": the Sony pads' sensor values are read
+  (`SonyPad.gyro`, `.accel`) but not given to `GetSixAxisSensorState`, because which way each axis must go for the
+  game's Accelerometer option can only be found with a pad in the hand.
 * The game refuses Battle with 3 or 4 local players and online or local-wireless play with 2 local players (its
   own rule, unchanged).
 * Exclusive Full Screen has not been tried from the menu; the Reset button on the Display page ran without a
