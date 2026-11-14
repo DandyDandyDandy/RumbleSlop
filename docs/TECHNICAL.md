@@ -263,6 +263,10 @@ How it is put together:
   exist here): `RequestStateTransition` is redirected in `playstyle_ui.c` (main menu 9, Adventure choice 36 ->
   friends 40, Battle choice 45 -> friends 47, and Back from the friends screens -> 9). `BR_STATE_LOG=1` logs every
   state request with the class that made it, which is how to find such ids.
+* Leaving an online lobby (Leave Room, Disband Room, a lost connection) ends on the main menu, not on the Create
+  Room / Join Room screen: the lobby is a scene of its own and returns with `RequestSceneChange` and an argument
+  object whose `get_stateAtSceneStart` names the state the menu scene opens in (40 Adventure, 47 Battle). Both
+  getters are hooked to answer 9 (`playstyle_ui.c`).
 
 ### Online display name (`name_ui.c`)
 

@@ -73,6 +73,8 @@
 454ef20   Wonder.UI.TitleLoop.UIViewSelectPlayStyle::SetPlayStyleSelectMain
 4552670   Wonder.UI.TitleLoop.UIStateTitle::onCallEShop
 45384e0   Wonder.UI.UIStateBase::RequestStateTransition   (skips the friends-or-random screens of Online Play)
+454d860   Wonder.UI.SceneChange.UIStateArgTransitionToMainMenuScene_AdvMulti_Friend_SelectHostOrGuest::get_stateAtSceneStart   (leaving an online lobby ends on the main menu)
+454d800   Wonder.UI.SceneChange.UIStateArgTransitionToMainMenuScene_FriendMatchingChooseHostOrGuest::get_stateAtSceneStart
 # port/runtime/tutorial_skip.c: first start asks before the opening movie and the tutorial
 4452e90   Wonder.Util+Movie::RequestMgMovieToTutorial
 # port/runtime/name_ui.c: online display name button and text box

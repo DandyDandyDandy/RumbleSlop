@@ -114,3 +114,10 @@ int rt_hook_45384e0(Cpu *c) {
     c->x[1] = (uint64_t)now;
     return 0;
 }
+// UIStateArgTransitionToMainMenuScene_AdvMulti_Friend_SelectHostOrGuest / _FriendMatchingChooseHostOrGuest
+// .get_stateAtSceneStart(): the state the main menu scene opens in after an online lobby is left or closed (Leave
+// Room, Disband Room, a lost connection). The game answers 40 / 47, the Create Room / Join Room screens. On PC those
+// are one step below the main menu and nothing above them exists, so leaving a room ends on the main menu (9), where
+// the room was entered from.
+int rt_hook_454d860(Cpu *c) { c->x[0] = 9; return 1; }
+int rt_hook_454d800(Cpu *c) { c->x[0] = 9; return 1; }
