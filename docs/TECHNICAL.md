@@ -390,6 +390,14 @@ Testing
   `window.c` gives the window the same icon. `build_launcher.py --copy` replaces the exe in the game folder.
 * **Errors.** A FATAL shows a message box that names `port.log`, unless the run is scripted
   (`BR_NO_REAL_INPUT`) or `BR_FATAL_BOX=0`. Not triggered since the change (no fault at hand).
+* **Screenshot.** F12 saves the picture on screen as `screenshots\<date> <time>.png` in the player's files
+  (`rt_user_dir()`; `screenshot_tick` in `pc_shell.c`). A console has a Capture button for this and the game
+  saves nothing itself: its photo mode only moves the camera and hides the HUD
+  (`MgPhotoModeCamera.writeScreenshot` reads the screen into a byte array and drops it; nothing requests it).
+  The file is written by the engine (`ScreenCapture.CaptureScreenshot` from the internal-call table, at the
+  end of the frame, in the render size). The key is fixed and is not taken away from Key Configuration: an
+  action bound to F12 fires too. Seen with a scripted key (`KEY F12 100`): the main menu and a stage, 1920 x
+  1080 PNGs, two in a row. Not tried: a real key press, photo mode itself, full screen, split screen.
 
 ### Language (`imports_plat.c`, `port_text.c`)
 

@@ -67,6 +67,8 @@ Saves and the settings the port adds (`port_display.txt`, `port_keys.txt`, `port
 empty file `portable.txt` next to `RumbleSlop.exe` before the first start. A game folder that already has a `save`
 folder keeps using it.
 
+F12 saves a picture of the game into a `screenshots` folder in the same place.
+
 ## Playing
 
 Keyboard defaults are the game's own: W A S D tilt, arrow keys camera, Space spin dash, Enter confirm, Esc cancel

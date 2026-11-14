@@ -6,7 +6,10 @@
 //    (Application.Quit, so the engine shuts down in order).
 //  * The mouse pointer is hidden while the pad or the keyboard is the device in use and comes back when the mouse
 //    moves (Cursor.visible).
+//  * F12 saves a picture of the game (a console has a Capture button; the game's photo mode saves nothing itself):
+//    <user files>\screenshots\<date and time>.png, written by the engine (ScreenCapture.CaptureScreenshot).
 #include <windows.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rt.h"
@@ -90,8 +93,39 @@ static void cursor_tick(void) {
     if (said++ < 4) rt_log("cursor: %s", want ? "shown (mouse in use)" : "hidden (pad or keyboard in use)");
 }
 
+static void screenshot_tick(Cpu *c) {
+    extern int pc_key_by_name(const char *name), pc_key_pressed(int key);
+    static int key;
+    static void (*capture)(void *file_name, int super_size, int stereo_mode);
+    if (!key) {
+        key = pc_key_by_name("F12");
+        capture = (void (*)(void *, int, int))rt_icall_host("UnityEngine.ScreenCapture::CaptureScreenshot");
+        if (!capture) rt_log("screenshot: the engine has no ScreenCapture.CaptureScreenshot");
+    }
+    if (!capture || !pc_key_pressed(key)) return;
+    char dir[MAX_PATH + 96], path[MAX_PATH + 160];
+    wchar_t w[MAX_PATH + 160];
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    snprintf(dir, sizeof dir, "%sscreenshots", rt_user_dir());
+    CreateDirectoryA(dir, NULL);
+    for (int n = 0; n < 100; n++) {              // several in one second: " (2)", " (3)", ...
+        char more[16] = "";
+        if (n) snprintf(more, sizeof more, " (%d)", n + 1);
+        snprintf(path, sizeof path, "%s\\%04d-%02d-%02d %02d.%02d.%02d%s.png", dir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                 t.wSecond, more);
+        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) break;
+    }
+    int len = MultiByteToWideChar(CP_ACP, 0, path, -1, w, (int)(sizeof w / sizeof *w)) - 1;
+    if (len <= 0) return;
+    uint64_t name = rt_call(c, FN(F_STRING_NEW_UTF16), 2, (uint64_t)(uintptr_t)w, (uint64_t)len);
+    capture((void *)(uintptr_t)name, 1, 1);      // the picture as shown, written at the end of this frame
+    rt_log("screenshot: %s", path);
+}
+
 // Once per rendered frame on the main thread (from the per-frame hook in display_opt.c).
 void pc_shell_tick(Cpu *c) {
     quit_tick(c);
     cursor_tick();
+    screenshot_tick(c);
 }

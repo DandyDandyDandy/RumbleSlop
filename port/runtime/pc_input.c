@@ -516,6 +516,7 @@ const Binding *pc_binding(int action) {
 int pc_action_key(int action) { const Binding *b = pc_binding(action); return b && b->nkeys ? b->keys[0] : 0; }
 int pc_action_mouse(int action) { const Binding *b = pc_binding(action); return b ? b->mouse : 0; }
 int pc_key_vk(int key) { if (!g_vk[KEY_ENTER]) vk_init(); return key > 0 && key < NKEY ? g_vk[key] : 0; }
+int pc_key_pressed(int key) { return key > 0 && key < NKEY && g_frame.cur[key] && !g_frame.prev[key]; }   // went down this frame
 void pc_action_set_key(int action, int key) {
     const Binding *old = pc_binding(action);
     if (!old || key <= 0 || key >= NKEY) return;
