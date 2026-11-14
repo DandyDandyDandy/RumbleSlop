@@ -21,7 +21,8 @@ of the same engine version.
   (Options > Display > Smooth Motion)
 - Wide screens (21:9, 32:9) and 16:10, Steam Deck detection
 - Keyboard and mouse with the game's own PC key layout, rebinding in Options > Key Configuration, mouse on every menu
-- Xbox, DualSense and DualShock 4 controllers, up to four for split screen; button pictures follow the device in use
+- Xbox, DualSense and DualShock 4 controllers, up to four for split screen, with rumble; button pictures follow the
+  device in use
 - Online play between PCs running this port: friend rooms joined by a room code, no server
 - Add-on content you own
 - The intro tutorial can be skipped on a new save

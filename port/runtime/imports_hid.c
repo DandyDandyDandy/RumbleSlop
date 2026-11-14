@@ -164,10 +164,10 @@ static void script_load(void) {
 }
 
 // Players and devices. Up to four pads: npad No.1..4 are the connected controllers in this order: XInput users
-// 0..3, then a directly read Sony pad. The keyboard and un-prefixed scripted input always belong to No.1, which is
+// 0..3, then the directly read Sony pads by slot. The keyboard and un-prefixed scripted input always belong to No.1, which is
 // reported connected even without a controller. BR_PADS=<n> reports n pads regardless of devices (tests).
 #define MAX_PADS 4
-typedef struct { int xinput; } Dev;           // XInput user index, or -1 for the Sony pad
+typedef struct { int xinput, sony; } Dev;     // XInput user index, or -1 and the Sony pad's slot (pad_sony.c)
 static XINPUT_STATE g_xs[4];
 static int g_xconn[4];
 static uint64_t g_xprobe[4], g_xlast;
@@ -188,8 +188,10 @@ static void devices_refresh(void) {
             }
             if (g_xconn[i] && n < MAX_PADS) g_dev[n++].xinput = i;
         }
-        SonyPad sp;
-        if (n < MAX_PADS && rt_sony_pad(&sp)) g_dev[n++].xinput = -1;
+        for (int k = 0; k < SONY_SLOTS; k++) {
+            SonyPad sp;
+            if (n < MAX_PADS && rt_sony_pad(k, &sp)) { g_dev[n].xinput = -1; g_dev[n++].sony = k; }
+        }
         if (n != g_ndev) rt_log("input: %d controller%s connected", n, n == 1 ? "" : "s");
         g_ndev = n;
         g_npads = forced > 0 ? forced : n < 1 ? 1 : n;
@@ -205,7 +207,8 @@ static int positional_layout(void) {
     if (positional < 0) { const char *e = getenv("BR_PAD_LAYOUT"); positional = e && !strcmp(e, "positional"); }
     return positional;
 }
-int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev ? 0 : g_dev[id].xinput >= 0 ? 1 : rt_sony_kind() ? rt_sony_kind() : 2; }
+static int sony_kind(int slot) { SonyPad sp; rt_sony_pad(slot, &sp); return sp.kind ? sp.kind : 2; }
+int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev ? 0 : g_dev[id].xinput >= 0 ? 1 : sony_kind(g_dev[id].sony); }
 uint64_t rt_pad_last_input(uint32_t id) { return id < MAX_PADS ? g_pad_tick[id] : 0; }
 int rt_pad_positional(void) { return positional_layout(); }
 
@@ -241,7 +244,7 @@ static void poll(Pad *p, uint32_t id) {
         p->ry = DZ(xs.Gamepad.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
     }
     SonyPad sp;
-    if (xi == -1 && rt_sony_pad(&sp)) {      // DualSense / DualShock 4: cross is the bottom button, like A on an Xbox pad
+    if (xi == -1 && rt_sony_pad(g_dev[id].sony, &sp)) {      // DualSense / DualShock 4: cross is the bottom button, like A on an Xbox pad
         uint32_t w = sp.buttons;
         if (w & SONY_CROSS) b |= 1ull << (positional ? B_B : B_A);
         if (w & SONY_CIRCLE) b |= 1ull << (positional ? B_A : B_B);
@@ -368,8 +371,29 @@ HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAx
     ST32(X(0) + 0x58, 1);                                          // IsConnected
 }
 
-// Vibration: the two motors of the XInput controller stand in for the left and right linear actuators.
-static float g_amp[MAX_PADS][2];
+// Rumble. A pad has two motors (XInput: left heavy, right light; Sony pads the same). Two sources feed them and the
+// stronger wins: values the game sends directly (SendVibrationValue: the left and right linear actuator of a
+// Switch controller, each standing for one motor) and the vibration-file player further down, which is what the
+// game's own effects use (low band -> heavy motor, high band -> light motor).
+static float g_amp[MAX_PADS][2], g_file_amp[MAX_PADS][2];
+static uint16_t g_x_sent[MAX_PADS][2];
+static void motors_update(uint32_t id) {
+    if (id >= MAX_PADS || id >= (uint32_t)g_ndev) return;
+    float m[2];
+    for (int k = 0; k < 2; k++) {
+        m[k] = g_amp[id][k] > g_file_amp[id][k] ? g_amp[id][k] : g_file_amp[id][k];
+        if (!(m[k] > 0)) m[k] = 0;
+        if (m[k] > 1) m[k] = 1;
+    }
+    if (rt_no_real_input()) return;
+    if (g_dev[id].xinput >= 0) {
+        uint16_t a = (uint16_t)(m[0] * 65535), b = (uint16_t)(m[1] * 65535);
+        if (a == g_x_sent[id][0] && b == g_x_sent[id][1]) return;
+        g_x_sent[id][0] = a; g_x_sent[id][1] = b;
+        XINPUT_VIBRATION v = {a, b};
+        XInputSetState((DWORD)g_dev[id].xinput, &v);
+    } else rt_sony_rumble(g_dev[id].sony, m[0], m[1]);
+}
 HOSTFN(_ZN2nn3hid25GetVibrationDeviceHandlesEPNS0_21VibrationDeviceHandleEiRKjNS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE) {
     int n = 0;
     if (LD32(X(2)) < MAX_PADS && (W(3) & STYLE_FULLKEY))
@@ -389,10 +413,97 @@ HOSTFN(_ZN2nn3hid18SendVibrationValueERKNS0_21VibrationDeviceHandleERKNS0_14Vibr
     if (a > 1) a = 1;
     uint32_t id = (LD32(X(0)) >> 24) & (MAX_PADS - 1);
     g_amp[id][(LD32(X(0)) >> 16) & 1] = a;
-    if (id < (uint32_t)g_ndev && g_dev[id].xinput >= 0) {
-        XINPUT_VIBRATION v = {(WORD)(g_amp[id][0] * 65535), (WORD)(g_amp[id][1] * 65535)};
-        XInputSetState((DWORD)g_dev[id].xinput, &v);
+    motors_update(id);
+}
+
+// The vibration-file player (nnUser.Util+Vibration, a native plug-in of the Switch build that is not part of the
+// lifted code: its P/Invoke natives are answered here, see pinvoke_policy.c). The game hands over a whole .bnvib
+// file per effect: Play(npad, slot 0..3, bytes, size), Stop(npad, slot). Up to four files play on a pad at once;
+// a thread steps through them at the file's sampling rate (200 Hz) and drives the motors with the strongest
+// amplitude of each band. BR_VIB_LOG=1 logs every Play and Stop.
+#define VIB_SLOTS 4
+typedef struct { uint8_t *smp; uint32_t count, loop, loop_start, loop_end, rate; uint64_t start; } VibPlay;
+static VibPlay g_vib[MAX_PADS][VIB_SLOTS];
+static SRWLOCK g_vib_lock = SRWLOCK_INIT;
+static volatile LONG g_vib_thread, g_vib_active;
+static int vib_log(void) { static int v = -1; if (v < 0) v = getenv("BR_VIB_LOG") != NULL; return v; }
+static uint64_t vib_now_us(void) {
+    static LARGE_INTEGER f;
+    LARGE_INTEGER t;
+    if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t);
+    return (uint64_t)((__int128)t.QuadPart * 1000000 / f.QuadPart);
+}
+static DWORD WINAPI vib_thread(void *unused) {
+    (void)unused;
+    for (;;) {
+        if (!g_vib_active) { Sleep(20); continue; }
+        uint64_t now = vib_now_us();
+        int any = 0;
+        AcquireSRWLockExclusive(&g_vib_lock);
+        for (uint32_t id = 0; id < MAX_PADS; id++) {
+            float lo = 0, hi = 0;
+            for (int k = 0; k < VIB_SLOTS; k++) {
+                VibPlay *v = &g_vib[id][k];
+                if (!v->smp) continue;
+                uint64_t i = (now - v->start) * v->rate / 1000000;
+                if (i >= v->count) {
+                    if (v->loop && v->loop_end > v->loop_start && v->loop_end <= v->count) i = v->loop_start + (i - v->loop_start) % (v->loop_end - v->loop_start);
+                    else { free(v->smp); v->smp = NULL; continue; }
+                }
+                const uint8_t *q = v->smp + 4 * i;
+                if (q[0] / 255.0f > lo) lo = q[0] / 255.0f;
+                if (q[2] / 255.0f > hi) hi = q[2] / 255.0f;
+                any = 1;
+            }
+            g_file_amp[id][0] = lo; g_file_amp[id][1] = hi;
+            motors_update(id);
+        }
+        if (!any) g_vib_active = 0;
+        ReleaseSRWLockExclusive(&g_vib_lock);
+        Sleep(4);
     }
+    return 0;
+}
+static void vib_stop(uint32_t id, uint32_t slot) {
+    if (id >= MAX_PADS || slot >= VIB_SLOTS) return;
+    AcquireSRWLockExclusive(&g_vib_lock);
+    free(g_vib[id][slot].smp);
+    g_vib[id][slot].smp = NULL;
+    g_vib_active = 1;                              // one more pass of the thread brings the motors down
+    ReleaseSRWLockExclusive(&g_vib_lock);
+}
+// .bnvib: u32 metaDataSize (4, or 12 / 16 with a loop), u16 formatId (3), u16 samplingRate (200), [u32 loopStart,
+// u32 loopEnd, [u32 loopInterval]], u32 dataSize, then 4 bytes per sample {amplitudeLow, frequencyLow, amplitudeHigh,
+// frequencyHigh}.
+static void vib_play(uint32_t id, uint32_t slot, const uint8_t *d, uint64_t size) {
+    if (id >= MAX_PADS || slot >= VIB_SLOTS || !d || size < 12) return;
+    uint32_t meta = LD32(d), rate = LD16(d + 6);
+    if ((meta != 4 && meta != 12 && meta != 16) || LD16(d + 4) != 3 || size < 8ull + meta || !rate) return;
+    uint32_t data_size = LD32(d + 4 + meta), count = data_size / 4, peak = 0;
+    if (size < 8ull + meta + data_size || !count) return;
+    uint8_t *copy = malloc(data_size);
+    memcpy(copy, d + 8 + meta, data_size);
+    for (uint32_t i = 0; i < count; i++) { if (copy[4 * i] > peak) peak = copy[4 * i]; if (copy[4 * i + 2] > peak) peak = copy[4 * i + 2]; }
+    AcquireSRWLockExclusive(&g_vib_lock);
+    VibPlay *v = &g_vib[id][slot];
+    free(v->smp);
+    *v = (VibPlay){copy, count, meta >= 12, meta >= 12 ? LD32(d + 8) : 0, meta >= 12 ? LD32(d + 12) : 0, rate, vib_now_us()};
+    g_vib_active = 1;
+    ReleaseSRWLockExclusive(&g_vib_lock);
+    if (!InterlockedExchange(&g_vib_thread, 1)) CloseHandle(CreateThread(NULL, 0, vib_thread, NULL, 0, NULL));
+    if (vib_log()) rt_log("vibration: pad %u slot %u plays %u samples at %u Hz (%.2f s%s), peak %.2f; pad is %s", id, slot, count, rate,
+                          (double)count / rate, meta >= 12 ? ", looping" : "", peak / 255.0,
+                          id >= (uint32_t)g_ndev ? "not connected" : g_dev[id].xinput >= 0 ? "XInput" : "a Sony pad");
+}
+// P/Invoke natives of nnUser.Util+Vibration (name after the "::"). Returns 1 when answered.
+int rt_vib_pinvoke(Cpu *c, const char *method) {
+    uint32_t id = W(0) == 0x20 ? 0 : W(0);         // NpadId: 0..3, 0x20 handheld
+    if (!strcmp(method, "Play")) vib_play(id, W(1), PTR(2), (int64_t)X(3) > 0 ? X(3) : ~0ull);
+    else if (!strcmp(method, "Stop")) { if (vib_log()) rt_log("vibration: pad %u slot %u stops", id, W(1)); vib_stop(id, W(1)); }
+    else if (strcmp(method, "Init") && strcmp(method, "StartThread")) return 0;
+    c->x[0] = 0;
+    return 1;
 }
 HOSTFN(_ZN2nn3hid18VibrationConverterC1Ei) { (void)c; }
 HOSTFN(_ZN2nn3hid18VibrationConverterD1Ev) { (void)c; }

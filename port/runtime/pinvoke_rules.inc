@@ -1,8 +1,8 @@
 // {method-name pattern ('*' = any run), kind, value, reason}; first match wins. Included by pinvoke_policy.c.
 
-// nnUser vibration player (nnUserPlugin.Runtime.dll): static nn::hid::VibrationPlayer objects driven by a timer
-// thread; not lifted. Rumble through nn.hid.Vibration::SendValue works (imports_hid.c).
-{"nnUser.Util+Vibration::*", P_RET, 0, "vibration file player not implemented"},
+// nnUser vibration player (nnUserPlugin.Runtime.dll): implemented by the port (imports_hid.c, rt_vib_pinvoke),
+// which rt_pinvoke_policy asks first; this rule only catches a native of it that the port does not know.
+{"nnUser.Util+Vibration::*", P_RET, 0, "vibration file player: unknown native"},
 
 // maria-upload telemetry (com.sega.techmng.maria-upload.dll): no-ops reporting success.
 {"MariaUpload.*", P_RET, 0, "telemetry disabled"},

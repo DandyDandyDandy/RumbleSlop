@@ -1,6 +1,5 @@
 // Deliberate answers for P/Invoke natives of the Switch plug-ins that are neither lifted nor implemented: the
-// NPLN online stack (gRPC/OpenSSL/WebRTC, 608 natives), the maria-upload telemetry library and the nnUser vibration
-// player. rt_boundary (dispatch.c) asks here before it raises EntryPointNotFoundException.
+// NPLN online stack (gRPC/OpenSSL/WebRTC, 608 natives), and the maria-upload telemetry library. rt_boundary (dispatch.c) asks here before it raises EntryPointNotFoundException.
 //
 // A rule's pattern is matched against the method name that follows "native for " in rt_boundary_info; '*' matches
 // any run of characters and the pattern must match the whole name. The first match wins, so specific rules go before
@@ -41,6 +40,8 @@ static uint8_t *g_seen;
 
 int rt_pinvoke_policy(Cpu *c, uint64_t addr, const char *name) {
     const char *m = name + 11;   // after "native for "
+    extern int rt_vib_pinvoke(Cpu *c, const char *method);      // imports_hid.c: the vibration-file player
+    if (!strncmp(m, "nnUser.Util+Vibration::", 23) && rt_vib_pinvoke(c, m + 23)) return 1;
     const Rule *r = g_rules;
     for (; r->prefix; r++)
         if (glob(r->prefix, m)) break;

@@ -189,11 +189,22 @@ the execution policy blocks script files, run it as
   audio rate). The release event is re-signalled every tick while a played buffer is uncollected, because the
   game can clear a signal it has not acted on.
 * **Input** (`imports_hid.c`, `pad_sony.c`). Up to four full-key pads: npad No.1..4 are the connected controllers
-  in this order: XInput users 0..3, then a directly read DualSense/DualShock 4 (HID, USB or Bluetooth). No.1
+  in this order: XInput users 0..3, then directly read DualSense / DualShock 4 pads (HID, USB or Bluetooth, up to
+  four, each in a slot it keeps while connected). No.1
   exists even without a controller. The Switch controller applet (press L+R to join) is answered at once with
-  every connected pad. No rumble output for Sony pads; file-based rumble is a no-op. Keyboard and mouse are not
+  every connected pad. Keyboard and mouse are not
   mapped onto a pad any more: they are devices of the game's own action system (see "Keyboard, mouse and button
   glyphs"); `BR_KB_PAD=1` brings the old keyboard-as-controller mapping back.
+* **Rumble** (`imports_hid.c`, `pad_sony.c`). The game's effects are `.bnvib` files that it hands to a native
+  plug-in of the Switch build (`nnUser.Util+Vibration::Play(npad, slot, bytes)`, called from
+  `AppInput.StateNpad.vibrationSpecific`; the plug-in is not lifted code). The port answers those P/Invoke natives
+  itself (`rt_vib_pinvoke`, asked first by `rt_pinvoke_policy`): up to four files play on a pad at once, a thread
+  steps through them at the file's rate (200 Hz), the strongest low-band amplitude drives the heavy motor and the
+  strongest high-band amplitude the light one. `nn::hid::SendVibrationValue` (which this game does not use) feeds
+  the same motors. Output: `XInputSetState`, or for a Sony pad its output report with only the motor fields
+  marked valid. `BR_VIB_LOG=1` logs every Play and Stop. Seen: a stage plays 0.5 s files on bumps; a DualSense on
+  USB accepted the report. Not tested: an XInput pad, a DualShock 4, Bluetooth (its report layout and CRC are
+  written from the documentation of other projects), how it feels.
 * **Online.** Friend matches joined by a room code work between PCs running this port (next section). Everything
   else of Nintendo's online service is absent: the platform layer still says there is no network, and the
   remaining `nn.npln` natives raise `EntryPointNotFoundException` if something reaches them.
