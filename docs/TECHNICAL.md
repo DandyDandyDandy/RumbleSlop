@@ -559,7 +559,8 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   `UIUserInputDetector`, the input it stands for, click and hover callbacks). `SetMouseAction` is hooked to keep a
   list of buttons; when a screen polls its detector (`MonitorInputOnUpdate`), a pending left click or a moved
   cursor is hit-tested against that detector's buttons and given to the handler (click: `OnClick`; hover:
-  `OnPointerEnter`, which moves the focus), and a click on the standing Back button is reported as Cancel. A
+  `OnPointerEnter`, which moves the focus), and a click on the standing Back button is reported as Cancel (to every detector of that button polled in the
+  same frame, as Esc is: the Style screen polls two and leaves on the second one's Cancel). A
   screen that is not polling (dialog on top, fade) is therefore not clickable. This covers menu entries, cards,
   list rows, option arrows, dialog buttons and the corner buttons (eye, copy, name, Change Character, ...).
 * **Mouse drag as a stick.** The game's default table also binds actions to the mouse as a "virtual pad"
@@ -607,7 +608,11 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   the handle one to one, a press beside the handle brings it under the cursor. After a scroll the hover test runs
   again, so the row under the cursor has the focus. The part of a row cut off by the list's edge is not
   clickable (`list_hides`). On a screen without a scrolling list a notch is still a tap of the Up / Down arrow
-  key. `BR_DRAG_LOG=1` logs each wheel use and bar press. Known gap: a list behind a dialog still takes the wheel.
+  key. A list whose rows are buttons of screens that are not polling input takes neither the bar nor the wheel:
+  Select World's list stays alive at the same place under Select Stage and used to take the press on Select
+  Stage's bar (`list_dead`, the detectors seen in `MonitorInputOnUpdate` during the last two frames; a list
+  without known buttons counts as alive). `BR_DRAG_LOG=1` logs each wheel use and bar press, `BR_CLICK_LOG=1` a
+  click on a Back button. Not checked since that rule: a list behind a dialog (it used to take the wheel).
 * **Glyphs.** The game draws glyphs per controller kind (`Wonder.DB.Input.ControllerKind`: Switch kinds, PS4 8,
   XboxOne 9, Steam 10, PS5 11) and redraws them when a player's kind changes
   (`UIInputDeviceSwitchingDetector`); the build only has Switch pictures (64 px sprites). The port sets the kind

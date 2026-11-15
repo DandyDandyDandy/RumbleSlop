@@ -175,6 +175,8 @@ typedef struct {
     uint64_t sr;
     uint32_t handle, seen;                   // GC handle; the frame its LateUpdate ran last
     int cur, axis, has_bar;                  // on screen this frame; 1 scrolls vertically, 2 horizontally, 0 fits
+    int dead;                                // its rows belong to screens that are not taking input (list_dead)
+    uint32_t dead_frame;
     float view[4], bar[4];                   // viewport and scroll bar on screen: x, y, width, height
 } List;
 static List g_lists[MAX_LISTS];
@@ -189,6 +191,22 @@ extern void rt_ui_mouse_touch(void);
 extern int rt_ui_rect(Cpu *c, uint64_t view, float r[4]);
 extern void rt_ui_click_consume(void);
 
+// Detectors (UIUserInputDetector) that polled input lately, i.e. the screens taking input now (rt_hook_457ac20).
+#define MAX_POLLED 16
+static struct { uint64_t det; uint32_t frame; } g_polled[MAX_POLLED];
+static void polled_note(uint64_t det) {
+    int slot = 0;
+    for (int i = 0; i < MAX_POLLED; i++) {
+        if (g_polled[i].det == det) { slot = i; break; }
+        if (g_polled[i].frame < g_polled[slot].frame) slot = i;
+    }
+    g_polled[slot].det = det; g_polled[slot].frame = g_list_frame;
+}
+static int polled_now(uint64_t det) {
+    for (int i = 0; i < MAX_POLLED; i++)
+        if (g_polled[i].det == det && g_list_frame - g_polled[i].frame <= 2) return 1;
+    return 0;
+}
 static float ldf(uint64_t a) { uint32_t u = LD32(a); float f; memcpy(&f, &u, 4); return f; }
 static void stf(uint64_t a, float f) { uint32_t u; memcpy(&u, &f, 4); ST32(a, u); }
 static int alive(Cpu *c, uint64_t o) { return o && (rt_call(c, FN(F_OBJ_ALIVE_), 2, o, 0ull) & 1); }
@@ -247,6 +265,17 @@ static int list_hides(Cpu *c, uint64_t view, float x, float y) {
     }
     return 0;
 }
+// 1 when the list's rows are buttons of screens that are not taking input: a screen left behind that is still
+// there (Select World's list stays alive, at the same place, under Select Stage) must not take the bar or the
+// wheel. A list without such buttons counts as alive. Worked out again every 10 frames, or at once with `now`.
+static int list_rows_polled(Cpu *c, uint64_t content);      // -1 no rows known, 0 none of a polling screen, 1 some
+static int list_dead(Cpu *c, List *l, int now) {
+    if (!now && l->dead_frame && g_list_frame - l->dead_frame < 10) return l->dead;
+    uint64_t content = LD64(l->sr + SR_CONTENT);
+    l->dead = alive(c, content) && list_rows_polled(c, content) == 0;
+    l->dead_frame = g_list_frame ? g_list_frame : 1;
+    return l->dead;
+}
 static List *list_of(uint64_t sr) {
     for (int i = 0; i < MAX_LISTS; i++)
         if (g_lists[i].handle && g_lists[i].cur && g_lists[i].sr == sr) return &g_lists[i];
@@ -290,7 +319,7 @@ static void lists_tick(Cpu *c) {              // once a frame, after the mouse w
         l->axis = (LD32(l->sr + SR_VERTICAL) & 0xff) && hid_y > 1 ? 1 : (LD32(l->sr + SR_HORIZONTAL) & 0xff) && hid_x > 1 ? 2 : 0;
         uint64_t bar = LD64(l->sr + SR_VBAR);
         l->has_bar = l->axis == 1 && alive(c, bar) && rt_ui_rect(c, bar, l->bar) && l->bar[3] >= 8;
-        if (!l->axis) continue;
+        if (!l->axis || list_dead(c, l, 0)) continue;
         g_list_count++;
         single = l;
         if (inside && (in_rect(l->view, x, y, 0) || (l->has_bar && in_rect(l->bar, x, y, GRAB_PX))) &&
@@ -304,7 +333,7 @@ static void lists_tick(Cpu *c) {              // once a frame, after the mouse w
         for (int i = 0; i < MAX_LISTS; i++) {
             List *l = &g_lists[i];
             int reverse;
-            if (!l->handle || !l->cur || !l->has_bar || !in_rect(l->bar, x, y, GRAB_PX)) continue;
+            if (!l->handle || !l->cur || !l->has_bar || !in_rect(l->bar, x, y, GRAB_PX) || list_dead(c, l, 1)) continue;
             float size = bar_size(c, l, &reverse), norm = clamp01(call_f(c, F_SR_GET_VNORM, l->sr));
             float from = (reverse ? 1 - norm : norm) * (1 - size), at = (y - l->bar[1]) / l->bar[3];
             grab = at >= from && at <= from + size ? at - from : size / 2;      // beside the handle: it jumps under the cursor
@@ -775,6 +804,17 @@ static void buttons_sweep(Cpu *c) {          // forget destroyed buttons, a few 
         }
     }
 }
+static int list_rows_polled(Cpu *c, uint64_t content) {
+    int seen = 0;
+    for (int i = 0; i < MAX_BUTTONS; i++) {
+        uint64_t v = g_buttons[i].view, ma = v ? LD64(v + VIEW_MOUSE_ACTION) : 0;
+        if (!ma || !(rt_call(c, FN(F_OBJ_ALIVE), 2, v, 0ull) & 1)) continue;
+        if (!(rt_call(c, FN(F_T_IS_CHILD_OF), 3, rt_call(c, FN(F_GET_TRANSFORM_), 2, v, 0ull), content, 0ull) & 1)) continue;
+        if (polled_now(LD64(ma + MA_DETECTOR))) return 1;
+        seen = 1;
+    }
+    return seen ? 0 : -1;
+}
 // The button of this detector under the click (or the cursor): the smallest one when several overlap.
 static uint64_t button_at(Cpu *c, uint64_t det, int hover) {
     uint64_t best = 0;
@@ -795,7 +835,17 @@ static int name_has(Cpu *c, uint64_t view, const char *part) {
     for (int i = 0; s && i < 95 && i < (int)LD32(s + 0x10); i++) { name[i] = (char)LD16(s + 0x14 + 2 * (uint64_t)i); name[i + 1] = 0; }
     return strstr(name, part) != NULL;
 }
+// A click on the standing Back button is Cancel for every detector of that button polled in the same frame, as
+// Esc is: some screens poll two (the Style screen: the item list's and the screen's own, and only the second one
+// leaves the screen), and the click is taken by the first.
+static uint64_t g_back_click;
+static uint32_t g_back_frame;
 static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
+    if (g_back_click && g_back_frame == g_list_frame && (uint32_t)r == 0 && LD64(det + DET_RETURN_BUTTON) == g_back_click &&
+        (uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) == LD32(det + DET_LAYER)) {
+        ST32(det + DET_USER_INPUT, INPUT_CANCEL);
+        return INPUT_CANCEL;
+    }
     if ((uint32_t)r != 0 || (!rt_ui_click_pending() && !rt_ui_mouse_moved())) return r;
     uint32_t layer = LD32(det + DET_LAYER);
     if ((uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) != layer) return r;
@@ -804,6 +854,8 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
         uint64_t back = LD64(det + DET_RETURN_BUTTON), v;
         if (back && (rt_call(c, FN(F_OBJ_ALIVE), 2, back, 0ull) & 1) && rt_ui_hit(c, back, 0) > 0) {   // the standing Back button: Cancel
             rt_ui_click_consume();
+            g_back_click = back; g_back_frame = g_list_frame;
+            if (getenv("BR_CLICK_LOG")) rt_log("click: the Back button, Cancel");
             c->x[0] = back; c->x[1] = 6; c->x[2] = LD32(back + VIEW_DISABLED) & 0xff; c->x[3] = 0;     // eAnimationKind.PressedToHighlighted
             rt_setf(c, 0, 0.0f);
             rt_call_regs(c, FN(F_PLAY_ANIMATION));
@@ -834,6 +886,7 @@ int rt_hook_457ac20(Cpu *c) {
     static __thread int inside;
     if (inside) return 0;
     uint64_t det = X(0);
+    polled_note(det);
     inside = 1;
     uint64_t r = rt_call(c, FN(F_MONITOR_INPUT), 2, det, 0ull);
     inside = 0;
