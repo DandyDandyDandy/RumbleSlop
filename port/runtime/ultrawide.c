@@ -220,8 +220,35 @@ static int is_backdrop_name(const char *name) {
     return 0;
 }
 
+// The title screen's drifting pattern (ui_View_TitleLoop_TitleBackground > P01 / P02, plain Transforms the view's
+// animation slides to the right and puts back at each title loop): rows of tiled images 11000 wide, whose right end
+// starts just past the 16:9 area's edge, so on a wider screen the right side stayed empty until it drifted in. Each
+// row gets the extra canvas width on its right end only (a tiled image tiles from its left edge, so the pattern
+// does not move). The row's width tells what was applied, as above.
+#define STRIP_W 11000.0f
+static void widen_strip(Cpu *c, uint64_t t) {
+    char a[16];
+    if (strncmp(name_of(c, rt_call(c, FN(F_GET_GAMEOBJECT), 2, t, 0ull), a, sizeof a), "P0", 2)) return;
+    float want = STRIP_W + (g_cur_w > 1920 ? g_cur_w - 1920 : 0), prev = STRIP_W + (g_prev_w > 1920 ? g_prev_w - 1920 : 0);
+    int n = (int)rt_call(c, FN(F_CHILD_COUNT), 2, t, 0ull);
+    for (int i = 0; i < n && i < 16; i++) {
+        uint64_t row = rt_call(c, FN(F_GET_CHILD), 3, t, (uint64_t)i, 0ull);
+        if (!row || strcmp(class_of(row), "RectTransform")) continue;
+        float r[4], sd[2], ap[2];
+        rect_of(c, F_RT_RECT, row, r);
+        if (near_f(r[2], want) || !(near_f(r[2], STRIP_W) || near_f(r[2], prev))) continue;
+        float d = want - r[2];
+        get_v2(c, F_RT_GET_SIZE_DELTA, row, sd); get_v2(c, F_RT_GET_ANCHORED_POS, row, ap);
+        set_v2(c, F_RT_SET_SIZE_DELTA, row, sd[0] + d, sd[1]);
+        set_v2(c, F_RT_SET_ANCHORED_POS, row, ap[0] + d / 2, ap[1]);    // pivot in the middle: the left end stays
+    }
+}
+
 static void widen_walk(Cpu *c, uint64_t t, int depth) {
-    if (strcmp(class_of(t), "RectTransform")) return;
+    if (strcmp(class_of(t), "RectTransform")) {
+        if (depth == 4 && !strcmp(class_of(t), "Transform")) widen_strip(c, t);
+        return;
+    }
     uint64_t go = rt_call(c, FN(F_GET_GAMEOBJECT), 2, t, 0ull);
     if (!(rt_call(c, FN(F_ACTIVE_IN_HIER), 2, go, 0ull) & 1)) return;
     float r[4];

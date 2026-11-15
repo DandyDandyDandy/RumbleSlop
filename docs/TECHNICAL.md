@@ -904,6 +904,9 @@ goes to the screen edges. On a screen that is not 16:9, wider (21:9, 32:9) or ta
 * resizes full-screen childless UI elements that are backdrops by name (flat backgrounds, dimming layers, the
   blurred menu backdrop) from 1920x1080 to the canvas size (wider on a wide screen, higher on a tall one), and
   creates that blurred backdrop's render texture at the screen's aspect ratio;
+* on a wide screen, lengthens the title screen's drifting pattern rows (`P01` / `P02` under
+  `ui_View_TitleLoop_TitleBackground`, tiled images 11000 wide) on their right end by the extra canvas width; they
+  start each title loop just past the 16:9 edge, so the right side used to stay empty until they drifted in;
 * on a wide screen, gives the in-game HUD canvases (those `UIManager_MainGame` sets up without a margin) a centred
   1920x1080 `SafeMargin`, when there is one full-screen player view. With split screen the game's layout is kept.
   On a tall screen the HUD keeps the game's layout, which reaches the top and bottom edges;
