@@ -37,11 +37,14 @@ typedef struct NpConfig {
     uint16_t port;            // base UDP port (0 = default): a host listens on it or one of the next 9
     int upnp;                 // ask the router for a port mapping when hosting
     char public_ip[64];       // address to put in the code instead of the detected one ("" = detect)
+    int steam;                // host over Steam when it is available (steam_net.c); joining follows the code
     // test knobs
     int loss_percent;         // drop this share of outgoing packets
     int no_thread;            // not used by the game
 } NpConfig;
 #define NP_DEFAULT_PORT 23711
+#define NP_STEAM_PORT_INDEX 15            // the port index of a code that names a Steam account
+#define NP_STEAM_ID_BASE 0x0110000100000000ull   // individual account in the public universe; + 32-bit account number
 
 Np *np_create(void);
 void np_destroy(Np *np);
@@ -73,6 +76,20 @@ void np_set_content_tag(uint32_t tag);
 // upnp.c: 1 on success, ext_ip receives the router's external address ("" when unknown)
 int upnp_map(uint16_t port, const char *local_ip, char *ext_ip, size_t n);
 void upnp_unmap(uint16_t port);
+
+// steam_net.c: Steam as the carrier (loaded at runtime; all of these fail softly without Steam)
+int sn_available(void);                           // starts Steam if needed; 1 when it is up
+uint64_t sn_self(void);
+void sn_use(int on);                              // a session starts / stops using Steam (keeps it from shutting down)
+int sn_send(uint64_t to, const void *p, int n);
+int sn_recv(uint8_t *buf, int cap, uint64_t *from);
+void sn_pump(void);
+void sn_close(uint64_t peer);
+void sn_presence(const char *value);              // NULL clears
+int sn_friend_room(const char *prefix, char *code, size_t ncode, char *name, size_t nname);
+void sn_tick(void);                               // once a frame from the game
+void sn_shutdown(void);                           // before the process exits
+void np_steam_prefix(char *out, size_t n);        // the presence prefix of this build's protocol
 
 void np_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));   // provided by the embedding program
 

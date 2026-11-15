@@ -28,7 +28,8 @@ of the same engine version.
 - Xbox, DualSense and DualShock 4 controllers, up to four for split screen, with rumble; button pictures follow the
   device in use
 - Two players with one controller: the keyboard is player 1, the controller player 2
-- Online play between PCs running this port: friend rooms joined by a room code, no server
+- Online play between PCs running this port: friend rooms joined by a room code, over Steam (no ports to open)
+  or directly
 - Add-on content you own
 - The intro tutorial can be skipped on a new save
 
@@ -79,11 +80,18 @@ choose **Join** and type it. The host must be reachable on UDP port 23711: the p
 UPnP; without UPnP it works on the same network or VPN, or with the port forwarded by hand (`port_net.txt`, see
 [docs/TECHNICAL.md](docs/TECHNICAL.md)). Random matchmaking, rankings and play with Switch consoles do not exist.
 
+When Steam is running, rooms go over Steam's relay network instead: nothing to open on the router, and a Steam
+friend's room code is filled in for you on the Join screen (press Search). The game borrows Valve's test app
+Spacewar for this, so Steam shows you as "playing Spacewar" while online play is in use; it needs a
+`steam_api64.dll`, which the game copies from any of your installed Steam games. `steam=0` in `port_net.txt`
+turns this off.
+
 ## Known problems
 
 - Tested: the setup from scratch on one PC; title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
   split-screen Adventure. Later stages and other modes have had little or no testing.
-- Online play has not been tested over the internet.
+- Online play has not been tested over the internet. Rooms over Steam have not been tested between two Steam
+  accounts yet.
 - The opening scene plays through the first time (the game's own rule); the tutorial question on a new save skips it.
 - The window is white for the first seconds after starting.
 

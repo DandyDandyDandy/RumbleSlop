@@ -15,7 +15,10 @@
 //
 // Everything managed is touched on the game's main thread only: the hooks, and online_tick (called once a frame
 // from the MultiPlatformManager.LateUpdate hook in display_opt.c), which delivers what the network thread queued.
-// Settings: <exe dir>port_net.txt, lines "port=23711", "upnp=1", "public_ip=1.2.3.4" (all optional).
+// Settings: <exe dir>port_net.txt, lines "port=23711", "upnp=1", "public_ip=1.2.3.4", "steam=1" (all optional).
+// steam=1 (the default): a created room goes over Steam when Steam runs (steam_net.c); steam=0 always makes direct
+// (UDP) rooms. BR_NET_STEAM=0|1 overrides the file (two test instances on one PC must use 0: one Steam account
+// cannot reach itself).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -174,8 +177,11 @@ static void read_config(NpConfig *cfg) {
     char path[600], line[200];
     memset(cfg, 0, sizeof *cfg);
     cfg->upnp = 1;
+    cfg->steam = 1;
     snprintf(path, sizeof path, "%sport_net.txt", rt_user_dir());
     FILE *f = fopen(path, "r");
+    const char *env = getenv("BR_NET_STEAM");
+    if (env && env[0]) cfg->steam = atoi(env) != 0;
     if (!f) return;
     while (fgets(line, sizeof line, f)) {
         char *v = strchr(line, '=');
@@ -185,9 +191,16 @@ static void read_config(NpConfig *cfg) {
         if (!strcmp(line, "port")) cfg->port = (uint16_t)atoi(v);
         else if (!strcmp(line, "upnp")) cfg->upnp = atoi(v) != 0;
         else if (!strcmp(line, "public_ip")) snprintf(cfg->public_ip, sizeof cfg->public_ip, "%s", v);
+        else if (!strcmp(line, "steam") && !(env && env[0])) cfg->steam = atoi(v) != 0;
         else if (!strcmp(line, "adventure_rate")) { int r = atoi(v); g_adv_hz = r <= 0 ? 0 : r < 10 ? 10 : r > 60 ? 60 : r; }
     }
     fclose(f);
+}
+
+int online_steam_on(void) {
+    NpConfig cfg;
+    read_config(&cfg);
+    return cfg.steam;
 }
 
 // ---------------------------------------------------------------------------------------------------- per-frame
@@ -197,6 +210,7 @@ static double network_seconds(void) {
 }
 void online_tick(Cpu *c) {
     NpEvent e;
+    sn_tick();
     if (!g_np) return;
     if (g_state != ST_IDLE) { g_frame_time = network_seconds(); stat_log(); }
     while (np_poll(g_np, &e)) {

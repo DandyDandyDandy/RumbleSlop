@@ -1,7 +1,11 @@
 // PC online play transport: private rooms over UDP, joined by a code.
 //
 // Topology: a star. The player who creates the room (the host, always the game's "master") listens on one UDP port;
-// guests connect to it and the host relays between guests. There is no server of ours and no third-party service.
+// guests connect to it and the host relays between guests. There is no server of ours; direct rooms use no
+// third-party service at all.
+// Steam rooms (steam_net.c): the same protocol, but each datagram goes to a Steam account through Valve's relay
+// network instead of a UDP address. The code then holds the host's Steam account number instead of its address
+// (port index 15, which a UDP host never uses), so it has the same length and the same screens take it.
 //
 // Room code: 12 characters = 60 bits = host IPv4 address, port offset and a 24-bit secret. A guest proves knowledge of the
 // secret in the handshake (SHA-256 over secret and both nonces), so somebody who only finds the open port cannot join
@@ -43,11 +47,12 @@ enum { MSG_GAME = 1, MSG_PEERS };
 #define CONNECT_MS 8000
 #define MAX_EVENT_BYTES (32u << 20)
 
+typedef struct Addr { struct sockaddr_in in; uint64_t sid; } Addr;   // UDP address, or a Steam id (sid != 0)
 typedef struct Out { struct Out *next; uint32_t seq; uint64_t sent; int tries; uint16_t len; uint8_t data[]; } Out;
 typedef struct In { uint8_t *data; uint16_t len; uint8_t present; } In;
 typedef struct Conn {
     int used;
-    struct sockaddr_in addr;
+    Addr addr;
     uint64_t token, peer, cnonce;
     Out *q_head, *q_tail;
     uint32_t snd_next, snd_una, rcv_next;
@@ -61,7 +66,7 @@ typedef struct Ev { struct Ev *next; NpEvent e; } Ev;
 typedef struct Sess {
     Np *np;
     volatile LONG stop;
-    int host, purpose, state;
+    int host, purpose, state, steam;
     NpConfig cfg;
     SOCKET s;
     uint16_t port;
@@ -127,8 +132,8 @@ static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
 static uint16_t get16(const uint8_t *p) { uint16_t v; memcpy(&v, p, 2); return v; }
 static uint32_t get32(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v; }
 static uint64_t get64(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v; }
-static int same_addr(const struct sockaddr_in *a, const struct sockaddr_in *b) {
-    return a->sin_addr.s_addr == b->sin_addr.s_addr && a->sin_port == b->sin_port;
+static int same_addr(const Addr *a, const Addr *b) {
+    return a->sid == b->sid && a->in.sin_addr.s_addr == b->in.sin_addr.s_addr && a->in.sin_port == b->in.sin_port;
 }
 // tag: 'j' join proof (guest -> host), 'a' accept proof (host -> guest)
 static void proof(uint32_t secret, uint64_t cn, uint64_t hn, char tag, uint8_t out[16]) {
@@ -141,12 +146,13 @@ static void proof(uint32_t secret, uint64_t cn, uint64_t hn, char tag, uint8_t o
     sha256(b, sizeof b, h);
     memcpy(out, h, 16);
 }
-static uint64_t cookie(Sess *s, const struct sockaddr_in *from, uint64_t cn) {
-    uint8_t b[30], h[32];
+static uint64_t cookie(Sess *s, const Addr *from, uint64_t cn) {
+    uint8_t b[38], h[32];
     memcpy(b, s->cookie_key, 16);
-    memcpy(b + 16, &from->sin_addr.s_addr, 4);
-    memcpy(b + 20, &from->sin_port, 2);
+    memcpy(b + 16, &from->in.sin_addr.s_addr, 4);
+    memcpy(b + 20, &from->in.sin_port, 2);
     put64(b + 22, cn);
+    put64(b + 30, from->sid);
     sha256(b, sizeof b, h);
     return get64(h);
 }
@@ -205,9 +211,10 @@ static void push_ev(Sess *s, int type, uint64_t peer, int reliable, int reason, 
 }
 
 // ---------------------------------------------------------------------------------------------------- packets
-static void tx(Sess *s, const struct sockaddr_in *to, const uint8_t *p, int n) {
+static void tx(Sess *s, const Addr *to, const uint8_t *p, int n) {
     if (s->cfg.loss_percent && rand() % 100 < s->cfg.loss_percent) return;
-    sendto(s->s, (const char *)p, n, 0, (const struct sockaddr *)to, sizeof *to);
+    if (s->steam) sn_send(to->sid, p, n);
+    else sendto(s->s, (const char *)p, n, 0, (const struct sockaddr *)&to->in, sizeof to->in);
 }
 static int hdr(Conn *c, uint8_t *p, int type) {
     uint32_t bits = 0;
@@ -494,7 +501,7 @@ static void on_connected(Sess *s, Conn *c, int type, const uint8_t *p, int n, ui
     }
 }
 
-static void send_reject(Sess *s, const struct sockaddr_in *to, uint64_t cn, int reason) {
+static void send_reject(Sess *s, const Addr *to, uint64_t cn, int reason) {
     uint8_t r[14];
     put32(r, MAGIC); r[4] = PT_REJECT; put64(r + 5, cn); r[13] = (uint8_t)reason;
     tx(s, to, r, sizeof r);
@@ -507,7 +514,7 @@ static void send_accept(Sess *s, Conn *c, uint64_t hn) {
     tx(s, &c->addr, r, sizeof r);
 }
 
-static void on_packet(Sess *s, const uint8_t *p, int n, const struct sockaddr_in *from, uint64_t now) {
+static void on_packet(Sess *s, const uint8_t *p, int n, const Addr *from, uint64_t now) {
     if (n < 5 || get32(p) != MAGIC) return;
     int type = p[4];
     if (type >= PT_REL) {
@@ -635,7 +642,20 @@ static uint32_t local_ip(void) {
     }
     return ip ? ip : 0x7f000001;
 }
+// The rich presence a Steam host shows its friends: protocol number and code, so only matching builds pick it up.
+void np_steam_prefix(char *out, size_t n) { snprintf(out, n, "BRN%04x:", PROTO); }
 static int host_setup(Sess *s) {
+    if (s->steam) {
+        char rp[64];
+        uint64_t me = sn_self();
+        if (!me) return 0;
+        np_code_format((uint32_t)me, NP_STEAM_PORT_INDEX, s->secret, s->code, sizeof s->code);
+        np_steam_prefix(rp, sizeof rp);
+        snprintf(rp + strlen(rp), sizeof rp - strlen(rp), "%s", s->code);
+        sn_presence(rp);
+        np_logf("net: hosting over Steam (account %u); Steam friends see the code", (unsigned)me);
+        return 1;
+    }
     struct sockaddr_in a = {0};
     uint16_t base = s->cfg.port ? s->cfg.port : NP_DEFAULT_PORT;
     int ok = 0;
@@ -667,7 +687,7 @@ static int host_setup(Sess *s) {
 static DWORD WINAPI sess_thread(LPVOID arg) {
     Sess *s = arg;
     Np *np = s->np;
-    int ok = s->s != INVALID_SOCKET;
+    int ok = s->steam || s->s != INVALID_SOCKET;
     if (ok && s->host) ok = host_setup(s);                           // may take seconds (UPnP); the lock is not held
     EnterCriticalSection(&np->lock);
     if (!ok) sess_close(s, NP_EV_FAILED, NP_FAIL_SOCKET);
@@ -678,7 +698,21 @@ static DWORD WINAPI sess_thread(LPVOID arg) {
     }
     LeaveCriticalSection(&np->lock);
     uint8_t *buf = malloc(2048);
-    while (!s->stop && buf) {
+    while (!s->stop && buf && s->steam) {
+        sn_pump();
+        EnterCriticalSection(&np->lock);
+        uint64_t now = mono_ms();
+        for (int k = 0; k < 512 && !s->stop; k++) {
+            Addr from = {0};
+            int n = sn_recv(buf, 2048, &from.sid);
+            if (n < 0) break;
+            on_packet(s, buf, n, &from, now);
+        }
+        if (!s->stop) tick(s, now);
+        LeaveCriticalSection(&np->lock);
+        Sleep(1);
+    }
+    while (!s->stop && buf && !s->steam) {
         fd_set fds;
         struct timeval tv = {0, 4000};
         FD_ZERO(&fds);
@@ -687,15 +721,15 @@ static DWORD WINAPI sess_thread(LPVOID arg) {
         EnterCriticalSection(&np->lock);
         uint64_t now = mono_ms();
         for (int k = 0; r > 0 && k < 512 && !s->stop; k++) {
-            struct sockaddr_in from;
-            int fl = sizeof from;
-            int n = recvfrom(s->s, (char *)buf, 2048, 0, (struct sockaddr *)&from, &fl);
+            Addr from = {0};
+            int fl = sizeof from.in;
+            int n = recvfrom(s->s, (char *)buf, 2048, 0, (struct sockaddr *)&from.in, &fl);
             if (n < 0) {
                 int e = WSAGetLastError();
                 if (e == WSAECONNRESET || e == WSAEMSGSIZE) continue;  // ICMP port unreachable from an earlier send
                 break;
             }
-            if (fl == sizeof from && from.sin_family == AF_INET) on_packet(s, buf, n, &from, now);
+            if (fl == sizeof from.in && from.in.sin_family == AF_INET) on_packet(s, buf, n, &from, now);
         }
         if (!s->stop) tick(s, now);
         LeaveCriticalSection(&np->lock);
@@ -709,6 +743,10 @@ static DWORD WINAPI sess_thread(LPVOID arg) {
         }
     if (np->cur == s) np->cur = NULL;
     LeaveCriticalSection(&np->lock);
+    if (s->steam) {
+        if (s->host) sn_presence(NULL);
+        sn_use(0);
+    }
     while (s->early_head) { Ev *e = s->early_head; s->early_head = e->next; free(e->e.data); free(e); }
     if (s->s != INVALID_SOCKET) closesocket(s->s);
     if (s->mapped) upnp_unmap(s->port);
@@ -718,14 +756,16 @@ static DWORD WINAPI sess_thread(LPVOID arg) {
     return 0;
 }
 
-static Sess *sess_new(Np *np, int host, int purpose, const NpConfig *cfg) {
+static Sess *sess_new(Np *np, int host, int purpose, const NpConfig *cfg, int steam) {
     static int wsa;
     if (!wsa) { WSADATA w; WSAStartup(MAKEWORD(2, 2), &w); wsa = 1; }
     Sess *s = calloc(1, sizeof *s);
     if (!s) abort();
     s->np = np; s->host = host; s->purpose = purpose; s->state = NP_CONNECTING;
     if (cfg) s->cfg = *cfg;
-    s->s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    s->s = INVALID_SOCKET;
+    if (steam) { s->steam = 1; sn_use(1); }
+    else s->s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (s->s != INVALID_SOCKET) {
         u_long nb = 1;
         int sz = 1 << 20;
@@ -753,6 +793,7 @@ static void sess_start(Np *np, Sess *s) {
         np->cur = NULL;
         LeaveCriticalSection(&np->lock);
         if (s->s != INVALID_SOCKET) closesocket(s->s);
+        if (s->steam) sn_use(0);
         free(s);
         InterlockedDecrement(&np->threads);
     }
@@ -774,7 +815,9 @@ void np_destroy(Np *np) {
     free(np);
 }
 void np_host(Np *np, int purpose, const NpConfig *cfg) {
-    Sess *s = sess_new(np, 1, purpose, cfg);
+    int steam = cfg && cfg->steam && sn_available();
+    if (cfg && cfg->steam && !steam) np_logf("net: Steam is not available: the room is a direct (UDP) one");
+    Sess *s = sess_new(np, 1, purpose, cfg, steam);
     rnd(&s->secret, 4);
     s->secret &= 0xffffff;
     rnd(s->cookie_key, sizeof s->cookie_key);
@@ -783,27 +826,40 @@ void np_host(Np *np, int purpose, const NpConfig *cfg) {
     s->master_id = s->local_id;
     sess_start(np, s);
 }
+static void join_fail(Np *np, Sess *s, int reason, const char *why) {
+    np_leave(np);
+    EnterCriticalSection(&np->lock);
+    np->cur = s;
+    np_logf("net: %s", why);
+    sess_close(s, NP_EV_FAILED, reason);
+    np->cur = NULL;
+    LeaveCriticalSection(&np->lock);
+    if (s->s != INVALID_SOCKET) closesocket(s->s);
+    if (s->steam) sn_use(0);
+    free(s);
+}
 void np_join(Np *np, const char *code, int purpose, const NpConfig *cfg) {
-    Sess *s = sess_new(np, 0, purpose, cfg);
-    uint32_t ip = 0;
-    int idx = 0;
+    uint32_t ip = 0, secret = 0;
+    int idx = 0, ok = np_code_parse(code, &ip, &idx, &secret);
+    int steam = ok && idx == NP_STEAM_PORT_INDEX;
+    Sess *s = sess_new(np, 0, purpose, cfg, steam);
     Conn *c = &s->conns[0];
-    if (!np_code_parse(code, &ip, &idx, &s->secret)) {
-        np_leave(np);
-        EnterCriticalSection(&np->lock);
-        np->cur = s;
-        np_logf("net: that is not a room code");
-        sess_close(s, NP_EV_FAILED, NP_FAIL_CODE);
-        np->cur = NULL;
-        LeaveCriticalSection(&np->lock);
-        if (s->s != INVALID_SOCKET) closesocket(s->s);
-        free(s);
+    s->secret = secret;
+    if (!ok) { join_fail(np, s, NP_FAIL_CODE, "that is not a room code"); return; }
+    if (steam) {
+        if (!sn_available()) { join_fail(np, s, NP_FAIL_SOCKET, "the code is a Steam room, but Steam is not available"); return; }
+        c->addr.sid = NP_STEAM_ID_BASE | ip;
+        if (c->addr.sid == sn_self()) { join_fail(np, s, NP_FAIL_REJECTED, "that is this Steam account's own room"); return; }
+        rnd(&s->cnonce, 8);
+        s->hs_start = mono_ms();
+        np_logf("net: joining a Steam room (account %u)", (unsigned)ip);
+        sess_start(np, s);
         return;
     }
     uint16_t port = (uint16_t)((s->cfg.port ? s->cfg.port : NP_DEFAULT_PORT) + idx);
-    c->addr.sin_family = AF_INET;
-    c->addr.sin_addr.s_addr = htonl(ip);
-    c->addr.sin_port = htons(port);
+    c->addr.in.sin_family = AF_INET;
+    c->addr.in.sin_addr.s_addr = htonl(ip);
+    c->addr.in.sin_port = htons(port);
     rnd(&s->cnonce, 8);
     s->hs_start = mono_ms();
     np_logf("net: joining a room at %u.%u.%u.%u:%u", ip >> 24, (ip >> 16) & 255, (ip >> 8) & 255, ip & 255, port);

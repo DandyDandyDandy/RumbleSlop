@@ -26,7 +26,7 @@ API_MAP = str(paths.TABLES / 'il2cpp_api_map.tsv')
 IMAGE = str(paths.MAIN_BIN)
 METADATA = str(paths.METADATA)
 SOURCES = ['imports_posix.c', 'log.c', 'dispatch.c', 'thread.c', 'loader.c', 'eh.c', 'imports_libc.c', 'imports_cxx.c', 'imports_nn.c',
-           'imports_fs.c', 'imports_plat.c', 'imports_hid.c', 'pad_sony.c', 'display_opt.c', 'interp.c', 'pc_shell.c', 'gfx_opt.c', 'port_text.c', 'dlc_log.c', 'chara_dump.c', 'window.c', 'ultrawide.c', 'netplay.c', 'upnp.c', 'online.c', 'online_ui.c', 'playstyle_ui.c', 'name_ui.c', 'tutorial_skip.c', 'pc_input.c', 'pc_glyphs.c', 'test_aids.c', 'delisted.c', 'glyph_data.S', 'heapdbg.c', 'swkbd_win.c', 'imports_audio.c', 'pinvoke_policy.c', 'unity_plugin.c', 'icall_host.c',
+           'imports_fs.c', 'imports_plat.c', 'imports_hid.c', 'pad_sony.c', 'display_opt.c', 'interp.c', 'pc_shell.c', 'gfx_opt.c', 'port_text.c', 'dlc_log.c', 'chara_dump.c', 'window.c', 'ultrawide.c', 'netplay.c', 'upnp.c', 'steam_net.c', 'online.c', 'online_ui.c', 'playstyle_ui.c', 'name_ui.c', 'tutorial_skip.c', 'pc_input.c', 'pc_glyphs.c', 'test_aids.c', 'delisted.c', 'glyph_data.S', 'heapdbg.c', 'swkbd_win.c', 'imports_audio.c', 'pinvoke_policy.c', 'unity_plugin.c', 'icall_host.c',
            'gc.c', 'icall.c', 'api_hand.c', 'thunk.cpp', 'tramp.S']
 LIBS = ['-lbcrypt', '-lwinmm', '-lxinput9_1_0', '-lhid', '-lsetupapi', '-lws2_32', '-lole32', '-loleaut32', '-luuid', '-lgdi32', '-lshell32']
 CFLAGS = ['-O2', '-g', '-march=x86-64-v3', '-D_WIN32_WINNT=0x0A00', '-fno-strict-aliasing', '-Wall', '-Wextra', '-Wno-unused-parameter',
@@ -80,7 +80,7 @@ def main():
         os.makedirs(BUILD, exist_ok=True)
         exe = os.path.join(BUILD, 'test_netplay.exe')
         run([CLANG, '-O2', '-g', '-std=gnu17', '-Wall', '-Wextra', '-Wno-unused-parameter'] +
-            [os.path.join(HERE, f) for f in ('netplay.c', 'upnp.c', os.path.join('tests', 'test_netplay.c'))] +
+            [os.path.join(HERE, f) for f in ('netplay.c', 'upnp.c', 'steam_net.c', os.path.join('tests', 'test_netplay.c'))] +
             ['-o', exe, '-static', '-lws2_32', '-lbcrypt', '-lole32', '-loleaut32', '-luuid'])
         sys.exit(subprocess.run([exe], env=env).returncode)
     generate()

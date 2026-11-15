@@ -242,7 +242,7 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
   itself, which nothing in the supported flows reaches any more, falls back to a small Windows text box
   (`swkbd_win.c`).
 
-### Online play between PCs (`online.c`, `netplay.c`, `online_ui.c`, `upnp.c`)
+### Online play between PCs (`online.c`, `netplay.c`, `online_ui.c`, `upnp.c`, `steam_net.c`)
 
 Friend matches work between PCs that run this port: **Online Play > Battle (or Adventure) > ... Friends > Host**
 creates a room and shows a room code (the game calls it the password; R shows it and copies it to the clipboard),
@@ -269,7 +269,7 @@ How it is put together:
   router for a mapping through Windows' UPnP helper and puts the router's external address in the code; without
   UPnP the code carries the PC's own address, which works on the same network or over a VPN, and otherwise the
   port has to be forwarded by hand and `public_ip=` set. Windows Firewall asks once to allow the game.
-  Settings file `port_net.txt` (optional; next to the saves, see "Where the player's files are"): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`. Guests need the same
+  Settings file `port_net.txt` (optional; next to the saves, see "Where the player's files are"): `port=23711`, `upnp=1`, `public_ip=1.2.3.4`, `steam=1`. Guests need the same
   `port=` as the creator.
 * Position updates: the game sends each player's position stream (`NetworkStreamDispatcher`: 10 a second in 3
   groups of peers) about 9 times a second to each peer, which suits a Battle with 16 players. In an Adventure room
@@ -286,6 +286,39 @@ How it is put together:
   buttons (`rt_text_entry_active`). The six one-character boxes are merged into one text box, the English
   explanation says "12-character", the code counts as complete (Search enabled and pressed by the game) at 12
   characters instead of 6.
+* **Rooms over Steam** (`steam_net.c`; `steam=1` in `port_net.txt`, the default). When Steam runs, a created
+  room goes over Steam instead of UDP: every datagram of the same protocol (handshake with the secret, reliable
+  channel, relaying) is sent to a Steam account with `ISteamNetworkingMessages`, which goes through Valve's relay
+  network, so no port has to be open, any router works, and players do not learn each other's IP addresses. The
+  code keeps its 12 characters: port index 15 (a UDP host only uses 0..9) marks a Steam room and the address bits
+  hold the host's 32-bit account number. Joining follows the code, so a Steam code needs Steam on the guest too.
+  Without Steam, or with `steam=0` / `BR_NET_STEAM=0`, rooms are UDP as before.
+  * App: Spacewar (480), Valve's shared test app: Steam shows the player as "playing Spacewar", nothing goes to
+    any publisher. Nothing else of Steam is used (no lobbies, stats, achievements; the overlay gets loaded into the
+    process by Steam but is not used).
+  * `steam_api64.dll` is Valve's and not in the repo: looked for next to the exe, else in the player's own Steam
+    libraries (registry `SteamPath` + `libraryfolders.vdf`, up to five folders deep in `steamapps\common`), the first
+    one with every function used is copied next to the exe. All calls go through the flat C API, loaded at runtime;
+    SDK generations before and after 1.58 are both accepted (`SteamAPI_Init` / `SteamAPI_InitFlat`, interface
+    versions `SteamUser_v021/v023`, `SteamFriends_v017/v018`, `SteamNetworkingUtils_v003/v004`).
+  * One worker thread makes every Steam call (start, manual callback dispatch, send, receive, presence, friend
+    list, shut down); the rest only touches queues. Reason: Steam's client reports internal assertions through
+    `OutputDebugString`, which stalled for minutes here; when that happened inside the room lock the game froze.
+    Steam is started when online play needs it (code entry screen, creating or joining a Steam room) and shut down
+    a minute after the last room ended, and on exit from `il2cpp_shutdown` (`sn_shutdown`): a process that exits
+    with Steam up hangs in Steam's unload.
+  * Friends: the host sets rich presence `brn` = `BRN<protocol>:<code>` (protocol includes the content tag, so
+    RumbleSlop and RumbleManiaSlop rooms do not mix). On the code entry screen the port looks for a Steam friend in
+    Spacewar with a matching `brn` for 6 s; when found and the box is still empty, the code is filled in and the
+    explanation line names the friend. Unlike a typed code, a filled-in code is not searched for at once (the hook
+    on `ForceFocusOnDecide` holds back): the player presses Search, or types another code. Only Steam friends can see
+    the presence; the code's secret still decides who may join.
+  * Test aids: `BR_STEAM_FAKE_FRIEND=name|code` answers the friend lookup as if that friend hosted;
+    `BR_NET_STEAM=0` for two instances on one PC (one Steam account cannot reach itself: Steam reports "a message
+    session failed"). Seen on this PC: Steam started under app 480, a Steam room created and the lobby reached, a
+    datagram to the own account and back (stand-alone probe), the friend line and filled code, Search starting the
+    join, clean exit with Steam up, direct rooms unchanged. **Not tested: a join between two Steam accounts**
+    (needs a second PC or account), the relay's latency, a friend's presence actually seen.
 * Lobby password panel (Battle and Adventure, `restyle_password_panel`): widened from 610 to 800 units with a 440
   wide code field, so the 12-character code has room. The code starts hidden as in the original (R shows it). The
   game's own "copy room name" button, which the Switch build hides, is switched on and moved into the panel between

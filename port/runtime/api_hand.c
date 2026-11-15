@@ -150,4 +150,8 @@ EXPORT bool il2cpp_monitor_wait(void *obj) {
     api_call(c, api_guest("il2cpp_monitor_try_wait") - GUEST_BASE, "il2cpp_monitor_wait");
     return (c->x[0] & 0xff) != 0;
 }
-EXPORT void il2cpp_shutdown(void) { rt_log("il2cpp_shutdown (ignored: the process is exiting)"); }
+EXPORT void il2cpp_shutdown(void) {
+    extern void sn_shutdown(void);
+    rt_log("il2cpp_shutdown (the process is exiting; Steam, if it runs, is shut down)");
+    sn_shutdown();
+}
