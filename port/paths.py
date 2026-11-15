@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 NAME = 'RumbleSlop'                     # the game's executable is <NAME>.exe, its data folder <NAME>_Data
+ICON_TEXTURE = 'ui_View_TitleLoop_Title_Aiai'  # the exe's icon: this title-screen texture of the dump (launcher\make_icon.py)
 UNITY_VERSION = '2022.3.30f1'
 GAME_VERSION = '2.2.0'                  # the version of the Switch game the tables and hooks are made for
 MAIN_BUILD_ID = '95548fabbca7a4f723c3468e5cfb34d0'      # first 16 bytes of main's build id, version 2.2.0

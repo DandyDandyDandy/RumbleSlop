@@ -444,7 +444,9 @@ Testing
 * **Pads and focus.** A controller is not read while another program is in front (`poll` in `imports_hid.c`;
   the keyboard always behaved so). Scripted input is not affected.
 * **Icon and version.** `port\launcher\build_launcher.py` builds the exe with `launcher.rc`: icon resource 103
-  (`icon.ico`, drawn by `make_icon.py`: the port's own picture) and a version block with the game version.
+  (`build\obj\icon.ico`, made by `make_icon.py` at build time from the title-screen texture `paths.ICON_TEXTURE`
+  of the user's dump, `ui_view_titleloop_title.prefab.bundle`; Aiai here, Gongon in the fork; nothing of it is in
+  the repository) and a version block with the game version.
   `window.c` gives the window the same icon. `build_launcher.py --copy` replaces the exe in the game folder.
 * **Errors.** A FATAL shows a message box that names `port.log`, unless the run is scripted
   (`BR_NO_REAL_INPUT`) or `BR_FATAL_BOX=0`. Not triggered since the change (no fault at hand).

@@ -12,6 +12,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
 import paths  # noqa: E402
+import make_icon  # noqa: E402
 
 
 def run(*cmd):
@@ -25,7 +26,8 @@ def main():
     res = paths.OBJ / 'launcher_res.o'
     exe = paths.OBJ / f'{paths.NAME}.exe'
     ver = paths.GAME_VERSION
-    run(paths.llvm('x86_64-w64-mingw32-windres'), f'-DGAME_NAME=\\"{paths.NAME}\\"', f'-DGAME_VER=\\"{ver}\\"',
+    make_icon.make()                    # build/obj/icon.ico from the dump's title picture; -I below lets the .rc find it
+    run(paths.llvm('x86_64-w64-mingw32-windres'), '-I', paths.OBJ, f'-DGAME_NAME=\\"{paths.NAME}\\"', f'-DGAME_VER=\\"{ver}\\"',
         '-DGAME_VER_NUM=' + ','.join((ver.split('.') + ['0', '0', '0'])[:4]), 'launcher.rc', '-O', 'coff', '-o', res)
     run(paths.llvm('clang'), '-O2', '-municode', '-mwindows', f'-DGAME_NAME_W=L"{paths.NAME}"', 'launcher.c', res, '-o', exe, '-static')
     print('built', exe)

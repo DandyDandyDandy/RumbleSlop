@@ -1,4 +1,5 @@
-// The program icon and version information of the game's executable. GAME_NAME and GAME_VER come from the build.
+// The program icon and version information of the game's executable. GAME_NAME and GAME_VER come from the build;
+// icon.ico is made in build\obj by make_icon.py from the user's dump (found through the include path -I).
 #include <winver.h>
 103 ICON "icon.ico"
 VS_VERSION_INFO VERSIONINFO

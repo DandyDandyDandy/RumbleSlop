@@ -1,55 +1,55 @@
-"""Draw the game's program icon (icon.ico next to this file): a ball with a banana, drawn here from plain shapes.
+"""Make the game's program icon (build/obj/icon.ico) from a title-screen picture of the user's own game dump.
 
     python make_icon.py
 
-Needs Pillow. The .ico is kept in the repository, so the setup does not run this; run it again to change the drawing.
-The icon is the port's own picture: nothing of the game's art is used.
+The picture is the texture paths.ICON_TEXTURE of the title screen's bundle (a monkey in a ball, 760 x 760), read from
+the extracted game (setup step "extract"). The icon is made at build time and never kept in the repository, so the
+repository holds none of the game's art. build_launcher.py runs this before building the exe.
+
+Needs UnityPy and Pillow (both in the setup's environment).
 """
 import os
-from PIL import Image, ImageDraw, ImageFilter
+import sys
 
-S = 1024                                  # drawn large, scaled down for each size
+from PIL import Image, ImageFilter
+
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, '..'))
+import paths  # noqa: E402
+
+BUNDLE = paths.ROMFS_DATA / 'StreamingAssets' / 'aa' / 'Switch' / 'ui_assets_ui' / 'scenetitleloop' / 'ui_view_titleloop_title.prefab.bundle'
+ICO = paths.OBJ / 'icon.ico'
+SIZES = (256, 64, 48, 32, 24, 16)
 
 
-def crescent(size, box, cut, fill):
-    """An ellipse `box` minus the ellipse `cut`: the banana's body."""
-    layer = Image.new('L', (size, size), 0)
-    d = ImageDraw.Draw(layer)
-    d.ellipse(box, fill=255)
-    d.ellipse(cut, fill=0)
-    return layer
+def picture():
+    import UnityPy
+    if not BUNDLE.exists():
+        sys.exit(f'make_icon: {BUNDLE} is missing (run the setup step "extract" first)')
+    for obj in UnityPy.load(str(BUNDLE)).objects:
+        if obj.type.name == 'Texture2D':
+            tex = obj.read()
+            if tex.m_Name == paths.ICON_TEXTURE:
+                return tex.image.convert('RGBA')
+    sys.exit(f'make_icon: no texture {paths.ICON_TEXTURE} in {BUNDLE}')
 
 
-def draw():
-    im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    m = 40
-    # the ball: dark rim, orange body, a lighter upper half, a soft highlight
-    d.ellipse((m, m, S - m, S - m), fill=(92, 46, 10, 255))
-    d.ellipse((m + 34, m + 34, S - m - 34, S - m - 34), fill=(250, 150, 30, 255))
-    top = Image.new('L', (S, S), 0)
-    td = ImageDraw.Draw(top)
-    td.ellipse((m + 34, m + 34, S - m - 34, S - m - 34), fill=255)
-    td.rectangle((0, S // 2 + 30, S, S), fill=0)
-    im.paste((255, 196, 84, 255), (0, 0), top)
-    d.rectangle((m + 34, S // 2 + 14, S - m - 34, S // 2 + 46), fill=(92, 46, 10, 255))      # the seam of the two halves
-    ring = Image.new('L', (S, S), 0)
-    ImageDraw.Draw(ring).ellipse((m, m, S - m, S - m), fill=255)
-    im.putalpha(ring)                         # nothing outside the ball
-    # the banana: outline first, then the body, the same shape a little smaller
-    for grow, colour in ((30, (92, 46, 10, 255)), (0, (255, 226, 60, 255))):
-        body = crescent(S, (250 - grow, 190 - grow, 830 + grow, 770 + grow), (330 + grow, 90 + grow, 960 - grow, 640 - grow), 255)
-        im.paste(colour, (0, 0), body)
-    shine = Image.new('L', (S, S), 0)
-    ImageDraw.Draw(shine).ellipse((170, 130, 470, 330), fill=120)
-    shine = shine.filter(ImageFilter.GaussianBlur(40))
-    im.paste((255, 255, 255, 255), (0, 0), Image.composite(shine, Image.new('L', (S, S), 0), ring))
-    return im
+def make():
+    im = picture()
+    im = im.crop(im.getbbox() or (0, 0) + im.size)
+    side = max(im.size)                                   # square, the picture centred
+    sq = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+    sq.paste(im, ((side - im.width) // 2, (side - im.height) // 2))
+    frames = []
+    for s in SIZES:
+        f = sq.resize((s, s), Image.LANCZOS)
+        if s <= 48:                                       # small sizes go soft when scaled this far down
+            f = f.filter(ImageFilter.UnsharpMask(radius=1, percent=60, threshold=2))
+        frames.append(f)
+    paths.OBJ.mkdir(parents=True, exist_ok=True)
+    frames[0].save(ICO, sizes=[(s, s) for s in SIZES], append_images=frames[1:])
+    return ICO
 
 
 if __name__ == '__main__':
-    big = draw()
-    out = os.path.join(HERE, 'icon.ico')
-    big.resize((256, 256), Image.LANCZOS).save(out, sizes=[(256, 256), (64, 64), (48, 48), (32, 32), (24, 24), (16, 16)])
-    print('wrote', out)
+    print('wrote', make())
