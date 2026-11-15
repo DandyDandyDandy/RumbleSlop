@@ -630,7 +630,10 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   key. A list whose rows are buttons of screens that are not polling input takes neither the bar nor the wheel:
   Select World's list stays alive at the same place under Select Stage and used to take the press on Select
   Stage's bar (`list_dead`, the detectors seen in `MonitorInputOnUpdate` during the last two frames; a list
-  without known buttons counts as alive). `BR_DRAG_LOG=1` logs each wheel use and bar press, `BR_CLICK_LOG=1` a
+  without known buttons counts as alive). While a stage is played (`get_mainGameState` 4) only lists whose rows
+  belong to a screen taking input are used: the pause menu's Options pages take the bar and the wheel, the game
+  itself never does, and a wheel notch is not turned into an arrow-key tap there (it would tilt the stage).
+  `BR_DRAG_LOG=1` logs each wheel use and bar press (with every known list's state), `BR_CLICK_LOG=1` a
   click on a Back button. Not checked since that rule: a list behind a dialog (it used to take the wheel).
 * **Glyphs.** The game draws glyphs per controller kind (`Wonder.DB.Input.ControllerKind`: Switch kinds, PS4 8,
   XboxOne 9, Steam 10, PS5 11) and redraws them when a player's kind changes

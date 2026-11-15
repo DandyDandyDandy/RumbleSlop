@@ -176,6 +176,7 @@ typedef struct {
     uint32_t handle, seen;                   // GC handle; the frame its LateUpdate ran last
     int cur, axis, has_bar;                  // on screen this frame; 1 scrolls vertically, 2 horizontally, 0 fits
     int dead;                                // its rows belong to screens that are not taking input (list_dead)
+                                             // or, during play, to no screen taking input
     uint32_t dead_frame;
     float view[4], bar[4];                   // viewport and scroll bar on screen: x, y, width, height
 } List;
@@ -267,12 +268,15 @@ static int list_hides(Cpu *c, uint64_t view, float x, float y) {
 }
 // 1 when the list's rows are buttons of screens that are not taking input: a screen left behind that is still
 // there (Select World's list stays alive, at the same place, under Select Stage) must not take the bar or the
-// wheel. A list without such buttons counts as alive. Worked out again every 10 frames, or at once with `now`.
+// wheel. A list without such buttons counts as alive, except while a stage is played: then only a list of a screen
+// taking input (the pause menu's Options) is used, nothing else may take the mouse from the game. Worked out again
+// every 10 frames, or at once with `now`.
 static int list_rows_polled(Cpu *c, uint64_t content);      // -1 no rows known, 0 none of a polling screen, 1 some
 static int list_dead(Cpu *c, List *l, int now) {
     if (!now && l->dead_frame && g_list_frame - l->dead_frame < 10) return l->dead;
     uint64_t content = LD64(l->sr + SR_CONTENT);
-    l->dead = alive(c, content) && list_rows_polled(c, content) == 0;
+    int rows = alive(c, content) ? list_rows_polled(c, content) : -1;
+    l->dead = rows == 0 || (g_wheel_blocked && rows != 1);
     l->dead_frame = g_list_frame ? g_list_frame : 1;
     return l->dead;
 }
@@ -326,9 +330,15 @@ static void lists_tick(Cpu *c) {              // once a frame, after the mouse w
             (!over || l->view[2] * l->view[3] < over->view[2] * over->view[3])) over = l;
     }
     g_list_frame++;
-    if (g_wheel_blocked) { g_drag_sr = 0; anim_sr = 0; return; }
-
     if (!down || !inside) g_drag_sr = 0;
+    if (fresh && inside && log)
+        for (int i = 0; i < MAX_LISTS; i++) {
+            List *l = &g_lists[i];
+            if (!l->handle) continue;
+            rt_log("drag: press %.0f %.0f; list %llx cur %d axis %d bar %llx has %d (%.0f %.0f %.0f %.0f) view (%.0f %.0f %.0f %.0f) dead %d",
+                   x, y, (unsigned long long)l->sr, l->cur, l->axis, (unsigned long long)LD64(l->sr + SR_VBAR), l->has_bar,
+                   l->bar[0], l->bar[1], l->bar[2], l->bar[3], l->view[0], l->view[1], l->view[2], l->view[3], l->dead);
+        }
     if (fresh && inside) {                       // a press on a scroll bar takes hold of the handle
         for (int i = 0; i < MAX_LISTS; i++) {
             List *l = &g_lists[i];
@@ -422,7 +432,7 @@ static void sample(KeySet *s) {
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
     {                                           // the wheel on a screen without a list: the next waiting notch becomes an arrow-key tap
         static uint64_t next;
-        if (g_wheel_blocked || text) InterlockedExchange(&g_wheel, 0);
+        if ((g_wheel_blocked && !g_list_count) || text) InterlockedExchange(&g_wheel, 0);     // in play: no key taps
         else if (g_wheel && !g_list_count && now >= next) {
             LONG n = g_wheel;
             if (n > 8 || n < -8) n = InterlockedExchange(&g_wheel, n > 0 ? 8 : -8) > 0 ? 8 : -8;     // a spin does not queue for seconds
