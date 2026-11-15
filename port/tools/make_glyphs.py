@@ -7,7 +7,7 @@ The cell numbers are fixed here and in port\runtime\pc_glyphs.c:
     0..95     pad glyphs: family * 32 + Wonder.DB.UI.ButtonIcon.eID (family 0 Xbox, 1 PlayStation 5, 2 PlayStation 4);
               the four face cells (13..16) hold the buttons by their own names, A B X Y / cross circle square triangle
     96..206   keyboard keys: 96 + UnityEngine.InputSystem.Key
-    208..215  mouse (whole, left, right, middle, back, forward), WASD, the four arrow keys
+    208..215  mouse (whole, left, right, middle, back, forward), WASD, the four arrow keys (key_cluster)
 
 Style: the game draws its glyphs as a black shape with a white outline and white lettering. The pack's filled
 icons are white shapes with the lettering cut out, so each icon is rebuilt from its silhouette: an outline ring in
@@ -76,6 +76,37 @@ def system_button(kind):
         d.rounded_rectangle([c - 20 * S, c + 10 * S, c + 20 * S, c + 22 * S], radius=6 * S, fill=w)
     return img.resize((CELL, CELL), Image.LANCZOS)
 
+def key_mark(path):
+    """A key's lettering (or arrow) alone, white on transparent, cut tight: the restyled key without shape and ring."""
+    img = restyle(path)
+    a = img.getchannel('A')
+    inner = a.point(lambda v: 255 if v > 250 else 0).filter(ImageFilter.MinFilter(2 * 12 + 1))   # inside the ring
+    m = ImageChops.multiply(ImageChops.multiply(img.getchannel('R'), a.point(lambda v: 255 if v > 128 else 0)), inner)
+    m = m.crop(m.point(lambda v: 255 if v > 40 else 0).getbbox())
+    out = Image.new('RGBA', m.size, (255, 255, 255, 0))
+    out.putalpha(m)
+    return out
+
+
+def key_cluster(marks, key=29, gap=2, ring=2.5, mark_part=0.58, S=8):
+    """WASD or the arrow keys as one glyph: four keycaps, one above three, apart from each other (shrunk pack keys
+    side by side overlapped and their outlines ran together). Drawn here at S times the size: rounded keycaps in the
+    game's style (white ring, black inside) with the pack's lettering made big enough to read at small sizes."""
+    n = CELL * S
+    img = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    x0, y0 = (CELL - 3 * key - 2 * gap) / 2, (CELL - 2 * key - gap) / 2
+    spots = [(x0 + key + gap, y0)] + [(x0 + i * (key + gap), y0 + key + gap) for i in range(3)]
+    for (x, y), m in zip(spots, marks):
+        r = key * 0.24
+        d.rounded_rectangle([x * S, y * S, (x + key) * S, (y + key) * S], radius=r * S, fill=(255, 255, 255, 255))
+        d.rounded_rectangle([(x + ring) * S, (y + ring) * S, (x + key - ring) * S, (y + key - ring) * S],
+                            radius=(r - ring * 0.7) * S, fill=(0, 0, 0, 255))
+        k = mark_part * key * S / max(m.size)
+        m = m.resize((round(m.width * k), round(m.height * k)), Image.LANCZOS)
+        img.alpha_composite(m, (round((x + key / 2) * S - m.width / 2), round((y + key / 2) * S - m.height / 2)))
+    return img.resize((CELL, CELL), Image.LANCZOS)
+
 
 def pad_family(prefix, plus, minus):
     p = prefix
@@ -132,19 +163,13 @@ def main():
         for icon, kind in ((23, 'options'), (24, 'create')):
             cell = fam * 32 + icon
             atlas.paste(system_button(kind), ((cell % COLS) * CELL, (cell // COLS) * CELL))
-    key_img = {}
     for key, name in KEYS.items():
-        key_img[key] = put(96 + key, 'Keyboard & Mouse', 'keyboard_' + name)
+        put(96 + key, 'Keyboard & Mouse', 'keyboard_' + name)
     for cell, name in MOUSE.items():
         put(cell, 'Keyboard & Mouse', name)
-    # WASD and the arrow keys as one glyph each: four small keys, one above three
-    for cell, keys in ((214, (37, 15, 33, 18)), (215, (63, 61, 64, 62))):
-        img = Image.new('RGBA', (CELL, CELL), (0, 0, 0, 0))
-        small = [key_img[k].resize((46, 46), Image.LANCZOS) for k in keys]
-        img.alpha_composite(small[0], (25, 4))
-        for i in range(3):
-            img.alpha_composite(small[1 + i], (-6 + 31 * i + 6, 46))
-        atlas.paste(img, ((cell % COLS) * CELL, (cell // COLS) * CELL))
+    for cell, names in ((214, ('w', 'a', 's', 'd')), (215, ('arrow_up', 'arrow_left', 'arrow_down', 'arrow_right'))):
+        marks = [key_mark(os.path.join(root, 'Keyboard & Mouse', 'Double', 'keyboard_' + n + '.png')) for n in names]
+        atlas.paste(key_cluster(marks), ((cell % COLS) * CELL, (cell // COLS) * CELL))
     atlas.save(os.path.join(out_dir, 'glyphs.png'), optimize=True)
     if '--preview' in sys.argv:                             # the atlas on a colour, to look at
         preview = Image.new('RGBA', atlas.size, (70, 110, 150, 255))

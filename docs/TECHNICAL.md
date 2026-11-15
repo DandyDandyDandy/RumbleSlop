@@ -656,7 +656,8 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
 * **The atlas** is made by `python port\tools\make_glyphs.py <Kenney "Input Prompts" folder>` (CC0): the pack's
   filled icons rebuilt as black shape, white outline, white lettering; 16 x 14 cells of 96 px; it is linked into
   the DLL by `glyph_data.S`. Cells: `family * 32 + ButtonIcon.eID` (Xbox, PS5, PS4), `96 + Key`, mouse and the
-  WASD / arrows groups from 208.
+  WASD / arrows groups from 208. The two groups are drawn by the script (`key_cluster`): four keycaps apart
+  from each other with the pack's lettering made large (shrunk pack keys side by side overlapped).
 * **Tests without devices**: `BR_INPUT_LIVE` lines `KEY <Key name> [ms]`, `CLICK x y`, `MOVE x y`; `BR_KIND=<n>`
   forces a controller kind for the glyphs; `BR_GLYPH_LOG=1` logs the size of the game's own glyph sprites.
   Checked this way: menus and a stage by keys only, hover and click, Back button, rebinding and reset, the three
