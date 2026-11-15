@@ -281,16 +281,192 @@ static void append_copy(Cpu *c, uint64_t list, uint64_t pattern, int role) {
 // characters or their outfits change. The row Options > General > Dole Collaboration (Off by default, `dole=` in
 // port_display.txt) answers both questions instead: On shows the look whatever is worn, Off never. A change also
 // writes the flag, so the next stage and the next main menu load follow it.
+//
+// A change made during a stage (pause menu > Options) is shown at once (dole_tick, the next frame): the logo by the
+// game's own MainGameStage.SetupDole (shows / hides m_DoleGo, loads and places it if the stage has none yet), the
+// bananas as the game's character change does it (MgBananaManager.Load with the new model, which picks the Dole
+// model only for characters whose banana model is the plain one), except that the bananas are not created anew: the
+// game's way puts back the bananas already taken, so each banana keeps its object and state and only its visual
+// child (m_RotTransform: the one child of every banana prefab, holding LODGroup, meshes and the golden sparkle) is
+// replaced by a copy of the new prefab's, with MgBanana.m_Renderers / m_Materials rebuilt as MgBanana.Awake does.
+// The old prefabs are released after that.
 #define F_GET_MAIN_GAME 0x43db8d0ull        // Wonder.RuntimeParam::get_mainGame (static): null before the object exists
 #define MAINGAME_DOLE_ACTIVE 0x42
+static int g_dole_pending;
 static void set_dole(Cpu *c, int on) {
     g_dole = on != 0;
     save_cfg();
     uint64_t mg = rt_call(c, FN(F_GET_MAIN_GAME), 1, 0ull);
-    if (mg && !c->eh_unwinding) ST8(mg + MAINGAME_DOLE_ACTIVE, g_dole);
+    if (mg && !c->eh_unwinding) { ST8(mg + MAINGAME_DOLE_ACTIVE, g_dole); g_dole_pending = 1; }
 }
 int rt_hook_4444bc0(Cpu *c) { init(); c->x[0] = (uint64_t)g_dole; return 1; }
 int rt_hook_443b3b0(Cpu *c) { init(); c->x[0] = (uint64_t)g_dole; return 1; }
+
+#define F_MAIN_GAME_STAGE 0x42cf030ull      // Wonder.MainGame::get_mainGameStage (static): null outside a stage
+#define F_SETUP_DOLE 0x4324310ull           // Wonder.MainGameStage::SetupDole()
+#define F_SINGLETON_EXISTS_ 0x28671d0ull    // Framework.SingletonBase<T>::get_Exists / get_Instance (MethodInfo in x0)
+#define F_SINGLETON_GET_ 0x2866fd0ull
+#define SLOT_BANANA_MGR_EXISTS 0x6166b30ull
+#define SLOT_BANANA_MGR_GET 0x6166b38ull
+#define F_BANANA_LOAD 0x4295b50ull          // Wonder.MgBananaManager (static): Load, IsReady, model id, prefabs
+#define F_BANANA_IS_READY 0x4295e80ull
+#define F_BANANA_MODEL_ID 0x4296580ull
+#define F_BANANA_PREFAB 0x42947f0ull
+#define F_FUSA_PREFAB 0x42948b0ull
+#define F_GOLDEN_PREFAB 0x4294970ull
+#define F_LOADER_UNLOAD 0x2c6a910ull        // AddressableResourceLoader<object>::Unload (shared; MethodInfo below)
+#define SLOT_LOADER_UNLOAD 0x6160eb8ull
+#define BANANA_MODEL_PLAIN 1                // Wonder.DB.Banana.Model.eID: the plain banana and its Dole variant
+#define BANANA_MODEL_DOLE 4
+#define MGR_BANANA_LIST 0x38                // MgBananaManager: List<MgBanana>, then the three prefab loaders
+#define MGR_LOADERS 0x40
+#define BANANA_ROT_TRANSFORM 0x28           // MgBanana
+#define BANANA_KIND 0x30                    // Wonder.DB.Banana.Kind.eID: 1 plain, 2 bunch, 3 golden
+#define BANANA_RENDERERS 0x88
+#define BANANA_MATERIALS 0x90
+#define F_OBJ_NAME_ 0x3f10820ull            // UnityEngine.Object::get_name
+#define F_OBJ_ALIVE_ 0x3f10610ull
+#define F_INSTANTIATE_ 0x3f11860ull         // Object.Instantiate(Object original, Transform parent, bool worldSpace)
+#define F_DESTROY_IMMEDIATE 0x3f11cc0ull    // Object.DestroyImmediate(Object, bool allowDestroyingAssets)
+#define F_GO_TRANSFORM_ 0x3f0bb40ull
+#define F_COMP_GAMEOBJECT 0x3f07fb0ull
+#define F_COMP_TRANSFORM 0x3f07f60ull
+#define F_GET_CHILD_ 0x3f1ea10ull
+#define F_GO_SET_ACTIVE 0x3f0bd10ull
+#define F_GO_ACTIVE_SELF_ 0x3f0bd80ull
+#define F_GO_COMPONENTS_IN_CHILDREN 0x246dd50ull   // GameObject.GetComponentsInChildren<T>(bool includeInactive) (shared)
+#define SLOT_GO_RENDERERS 0x6161a58ull      // GameObject.GetComponentsInChildren<Renderer>(): its rgctx holds the (bool) one
+#define F_RGCTX_INIT 0x459b44ull            // fills a generic method's rgctx on first use
+#define F_RENDERER_MATERIALS 0x3ec6690ull
+#define F_RENDERER_GET_SHADOW 0x3ec5e70ull
+#define F_RENDERER_SET_SHADOW 0x3ec5ec0ull
+#define F_RENDERER_GET_ENABLED 0x3ec5d60ull
+#define F_RENDERER_SET_ENABLED 0x3ec5db0ull
+#define F_LIST_ADD_RANGE 0x33bfd10ull       // List<object>::AddRange (MethodInfo below: List<Material>)
+#define SLOT_MATERIAL_ADD_RANGE 0x6161a60ull
+#define F_WRITE_BARRIER_ 0x450610ull        // Il2CppCodeGenWriteBarrier(void **slot, void *value)
+static uint32_t g_old_loader_h[3];          // GC handles of the loaders replaced by the new Load (released when done)
+static int g_banana_wait;                   // frames waited for the new prefabs
+
+static uint64_t banana_mgr(Cpu *c) {
+    if (!(rt_call(c, FN(F_SINGLETON_EXISTS_), 1, LD64(LD64(FN(SLOT_BANANA_MGR_EXISTS)))) & 1)) return 0;
+    return rt_call(c, FN(F_SINGLETON_GET_), 1, LD64(LD64(FN(SLOT_BANANA_MGR_GET))));
+}
+static int obj_alive(Cpu *c, uint64_t o) { return o && (rt_call(c, FN(F_OBJ_ALIVE_), 2, o, 0ull) & 1); }
+static int name_has_dole(Cpu *c, uint64_t o) {
+    uint64_t s = o ? rt_call(c, FN(F_OBJ_NAME_), 2, o, 0ull) : 0;
+    if (!s) return 0;
+    int n = (int)LD32(s + 0x10);
+    const uint16_t *p = (const uint16_t *)(uintptr_t)(s + 0x14);
+    for (int i = 0; i + 4 <= n; i++)
+        if (p[i] == 'D' && p[i + 1] == 'o' && p[i + 2] == 'l' && p[i + 3] == 'e') return 1;
+    return 0;
+}
+static void set_ref(Cpu *c, uint64_t slot, uint64_t v) { ST64(slot, v); rt_call(c, FN(F_WRITE_BARRIER_), 2, slot, v); }
+static void release_old_loaders(Cpu *c) {
+    uint64_t mi = LD64(LD64(FN(SLOT_LOADER_UNLOAD)));
+    for (int i = 0; i < 3; i++) {
+        if (!g_old_loader_h[i]) continue;
+        uint64_t l = rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_old_loader_h[i]);
+        if (l) rt_call(c, FN(F_LOADER_UNLOAD), 2, l, mi);
+        rt_call(c, FN(F_GCHANDLE_FREE), 1, (uint64_t)g_old_loader_h[i]);
+        g_old_loader_h[i] = 0;
+    }
+}
+
+// One banana: its visual child replaced by a copy of the prefab's.
+static void swap_banana_visual(Cpu *c, uint64_t banana, uint64_t prefab, uint64_t mi_renderers, uint64_t mi_add_range) {
+    uint64_t old_t = LD64(banana + BANANA_ROT_TRANSFORM);
+    if (!obj_alive(c, old_t) || !obj_alive(c, prefab)) return;
+    uint64_t src_t = rt_call(c, FN(F_GET_CHILD_), 3, rt_call(c, FN(F_GO_TRANSFORM_), 2, prefab, 0ull), 0ull, 0ull);
+    if (!src_t) return;
+    uint64_t src = rt_call(c, FN(F_COMP_GAMEOBJECT), 2, src_t, 0ull);
+    uint64_t root_t = rt_call(c, FN(F_COMP_TRANSFORM), 2, banana, 0ull);
+    uint64_t old_go = rt_call(c, FN(F_COMP_GAMEOBJECT), 2, old_t, 0ull);
+    // what the game set on the old visual: shown or not, shadows, renderers on or off
+    int active = (int)(rt_call(c, FN(F_GO_ACTIVE_SELF_), 2, old_go, 0ull) & 1);
+    uint64_t rs = LD64(banana + BANANA_RENDERERS);
+    int shadow = -1, enabled = 1;
+    if (rs && LD32(rs + 0x18) > 0 && obj_alive(c, LD64(rs + 0x20))) {
+        shadow = (int)rt_call(c, FN(F_RENDERER_GET_SHADOW), 2, LD64(rs + 0x20), 0ull);
+        enabled = (int)(rt_call(c, FN(F_RENDERER_GET_ENABLED), 2, LD64(rs + 0x20), 0ull) & 1);
+    }
+    uint64_t go = rt_call(c, FN(F_INSTANTIATE_), 4, src, root_t, 0ull, 0ull);
+    if (!go) return;
+    rt_call(c, FN(F_DESTROY_IMMEDIATE), 3, old_go, 0ull, 0ull);
+    if (!active) rt_call(c, FN(F_GO_SET_ACTIVE), 3, go, 0ull, 0ull);
+    set_ref(c, banana + BANANA_ROT_TRANSFORM, rt_call(c, FN(F_GO_TRANSFORM_), 2, go, 0ull));
+    uint64_t root_go = rt_call(c, FN(F_COMP_GAMEOBJECT), 2, banana, 0ull);
+    uint64_t arr = rt_call(c, FN(F_GO_COMPONENTS_IN_CHILDREN), 3, root_go, 1ull, mi_renderers);
+    if (!arr) return;
+    set_ref(c, banana + BANANA_RENDERERS, arr);
+    uint64_t mats = LD64(banana + BANANA_MATERIALS);
+    if (mats) { ST32(mats + 0x18, 0); ST32(mats + 0x1c, LD32(mats + 0x1c) + 1); }   // List.Clear (size, version)
+    int n = (int)LD32(arr + 0x18);
+    for (int i = 0; i < n; i++) {
+        uint64_t r = LD64(arr + 0x20 + 8ull * i);
+        if (!r) continue;
+        if (shadow >= 0) rt_call(c, FN(F_RENDERER_SET_SHADOW), 3, r, (uint64_t)shadow, 0ull);
+        if (!enabled) rt_call(c, FN(F_RENDERER_SET_ENABLED), 3, r, 0ull, 0ull);
+        if (mats) rt_call(c, FN(F_LIST_ADD_RANGE), 3, mats, rt_call(c, FN(F_RENDERER_MATERIALS), 2, r, 0ull), mi_add_range);
+    }
+}
+
+static void swap_all_bananas(Cpu *c, uint64_t mgr) {
+    uint64_t mi = LD64(LD64(FN(SLOT_GO_RENDERERS)));
+    if (!LD64(mi + 0x38)) rt_call(c, FN(F_RGCTX_INIT), 1, mi);
+    uint64_t mi_renderers = LD64(LD64(mi + 0x38));     // GetComponentsInChildren<Renderer>(bool)
+    uint64_t mi_add_range = LD64(LD64(FN(SLOT_MATERIAL_ADD_RANGE)));
+    uint64_t prefab[4] = {0, rt_call(c, FN(F_BANANA_PREFAB), 1, 0ull), rt_call(c, FN(F_FUSA_PREFAB), 1, 0ull),
+                          rt_call(c, FN(F_GOLDEN_PREFAB), 1, 0ull)};
+    uint64_t list = LD64(mgr + MGR_BANANA_LIST);
+    if (!list || !mi_renderers) return;
+    uint64_t items = LD64(list + 0x10);
+    int n = (int)LD32(list + 0x18), done = 0;
+    for (int i = 0; i < n; i++) {
+        uint64_t b = LD64(items + 0x20 + 8ull * i);
+        int kind = b ? (int)LD32(b + BANANA_KIND) : 0;
+        if (kind < 1 || kind > 3 || !obj_alive(c, b)) continue;
+        swap_banana_visual(c, b, prefab[kind], mi_renderers, mi_add_range);
+        done++;
+    }
+    rt_log("dole: %d of %d bananas now %s", done, n, g_dole ? "Dole" : "plain");
+}
+
+static void dole_tick(Cpu *c) {
+    if (g_banana_wait) {   // new prefabs loading
+        uint64_t mgr = banana_mgr(c);
+        if (!mgr) { release_old_loaders(c); g_banana_wait = 0; return; }
+        if (!(rt_call(c, FN(F_BANANA_IS_READY), 1, 0ull) & 1)) {
+            if (++g_banana_wait > 600) { rt_log("dole: banana prefabs not ready after 600 frames"); release_old_loaders(c); g_banana_wait = 0; }
+            return;
+        }
+        g_banana_wait = 0;
+        rt_call(c, FN(F_GC_DISABLE), 0);
+        swap_all_bananas(c, mgr);
+        rt_call(c, FN(F_GC_ENABLE), 0);
+        release_old_loaders(c);
+        return;
+    }
+    if (!g_dole_pending) return;
+    g_dole_pending = 0;
+    uint64_t stage = rt_call(c, FN(F_MAIN_GAME_STAGE), 1, 0ull);
+    if (!stage || c->eh_unwinding) return;
+    rt_call(c, FN(F_SETUP_DOLE), 2, stage, 0ull);
+    uint64_t mgr = banana_mgr(c);
+    if (!mgr) return;
+    int want = (int)rt_call(c, FN(F_BANANA_MODEL_ID), 1, 0ull);
+    if (want != BANANA_MODEL_PLAIN && want != BANANA_MODEL_DOLE) return;   // a character with bananas of its own
+    uint64_t cur = rt_call(c, FN(F_BANANA_PREFAB), 1, 0ull);
+    if (!cur || name_has_dole(c, cur) == (want == BANANA_MODEL_DOLE)) return;
+    for (int i = 0; i < 3; i++) {
+        uint64_t l = LD64(mgr + MGR_LOADERS + 8ull * i);
+        g_old_loader_h[i] = l ? (uint32_t)rt_call(c, FN(F_GCHANDLE_NEW), 2, l, 0ull) : 0;
+    }
+    rt_call(c, FN(F_BANANA_LOAD), 1, 0ull);
+    g_banana_wait = 1;
+    rt_log("dole: loading the %s banana model for a stage in progress", want == BANANA_MODEL_DOLE ? "Dole" : "plain");
+}
 
 
 // UnityEngine.Screen::set_fullScreenMode(FullScreenMode value): the game's saved value decides windowed or not.
@@ -634,6 +810,7 @@ int rt_hook_43d58c0(Cpu *c) {
         pc_shell_tick(c);
         gfx_opt_tick(c);
         rate_tick(c);
+        dole_tick(c);
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     if (!on) return 0;

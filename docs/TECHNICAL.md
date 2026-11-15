@@ -722,7 +722,14 @@ deck chairs and signs of the main menu) is shown only while a selected character
 that in one flag, `RuntimeParam.mainGame.isDoleCollabActive`, set from
 `Util.CharaCustomize.IsExistDoleItemSelectedChara` and `IsExistDoleItemCoordinate` whenever characters or outfits
 change. Both are hooked and answer with the row: On shows the look whatever is worn, Off never. A change also
-writes the flag, so the main menu and the next stage follow at once. The row is one more copy of the Screen Mode
+writes the flag, so the main menu and the next stage follow at once. Changed during a stage (pause menu >
+Options), the stage follows on the next frame (`dole_tick`): the logo through the game's own
+`MainGameStage.SetupDole` (shows or hides `m_DoleGo`, loads and places it under the start if the stage has none
+yet), the bananas by `MgBananaManager.Load` with the new model and then, per banana, its one visual child
+(`m_RotTransform`) replaced by a copy of the new prefab's, with `m_Renderers` / `m_Materials` rebuilt as
+`MgBanana.Awake` does; the old prefabs are released afterwards. The game's own way (the character change mid-stage)
+destroys and creates the bananas, which would put back the ones already taken; this keeps each banana's state.
+Log lines `dole: ...`. The row is one more copy of the Screen Mode
 row object, appended to the page that has the Show Tips row. `BR_OPT_LOG=1` logs the row classes of every Options
 page as it is built.
 
