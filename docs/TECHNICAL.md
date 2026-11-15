@@ -161,6 +161,29 @@ Screenshots of a run: `port\tools\shot_window.ps1` captures the game window's ow
 the execution policy blocks script files, run it as
 `& ([scriptblock]::Create((Get-Content -Raw port\tools\shot_window.ps1))) -Out <prefix> -At 30,60`.
 
+### Scripted tests: how the live commands behave (`imports_hid.c`, `test_aids.c`)
+
+What the `BR_INPUT_LIVE` table row does not say, read from the code:
+
+* The file is read every 50 ms from where the last read stopped; a line without its newline yet waits. Button
+  lines queue: each starts at least 150 ms after the one before ends. The number after a button is its hold time
+  (default 100 ms), so `B 1500` holds B for 1.5 s. A `1:`..`4:` prefix picks the pad (`2:A`, `2:LSU 1500`); a second
+  pad exists only with `BR_PADS=<n>` (or a real one). The other commands (`TYPE`, `KEY`, `CLICK`, `MOVE`, `HOLD`,
+  `RELEASE`, `WHEEL`, `GOAL`, `DUMP`) act as soon as they are read and do not wait for queued buttons.
+* `CLICK`, `MOVE`, `HOLD` take pixels of the window's client area, top left = 0 0, in physical pixels: with
+  Windows display scaling the client area is larger than the window size the game was set to.
+* `GOAL` calls the game's goal handler (`MgGoalColi.OnTriggerEnterPlayer`) for the stage's first goal with every
+  local player's ball; it logs "test: GOAL: ..." either way. It skips the run to the goal, so whatever is computed
+  from the run is not real: online the result screen shows a nonsense clear time ("-31:-23.-648"); a real roll into
+  the goal shows a correct one. Use it to reach results, progress and the next stage, not to check times.
+* `BR_NO_REAL_INPUT=1` makes the port treat the window as never focused: real keys, mouse buttons, wheel and pad
+  buttons are ignored, rumble is not sent, and the scripted cursor stays where the last `CLICK` / `MOVE` / `HOLD`
+  put it. XInput pads are not looked for, but Sony pads (DualSense, DualShock 4) are still found and listed: a
+  plugged-in one counts as a connected controller (which changes what Local Multiplayer does with the keyboard)
+  while its buttons do nothing. Dragging the game's window still stalls the game.
+* A test that changes a row of Options writes the same `port_*.txt` files the player uses (one file for all
+  profiles): put the player's values back afterwards.
+
 ## Runtime
 
 * **Address space.** The Switch image is mapped at `0x7000000000` and the code is generated for that base, so a
@@ -590,6 +613,31 @@ To add a pack later: put its `.nsp` into `input\` and run `setup.cmd --only dlc`
 The game knows 34 packs (indices 1-30 and 34-37). On the first start after packs appear the game shows one "now available"
 dialog per pack.
 
+### Characters that can no longer be bought or earned (`delisted.c`, `port\assets\delisted.py`)
+
+Six characters are in every copy of the game's data but out of a player's reach today: Dr. Bad-Boon
+(`Def.Chara.eID` 12, `Madhihi`; unlocked by one online battle on Nintendo's service) and the five collaboration
+characters (19..23, `Collab01..05`; their add-on content was taken off sale). The port gives them to every save,
+from the start, without unlock notices or "new" marks. Two halves:
+
+* **Runtime** (`delisted.c`). Whether a save has a character is one value: `SaveUserParam.ShopItemParam.m_Character`,
+  a dictionary `Def.Chara.eID -> ShopItemParamCharacterItem`, whose condition (`Shop.Item.Condition.eID`) is set to
+  Have (5). Hooks on `ShopItemParam.OnCreate` / `OnAfterLoad` (`43fa930`, `43faae0`) set it for the six when the
+  save's shop data is made or loaded, and hooks on both `ShopItemParamCharacter.GetItem` overloads (`43fbd10`,
+  `4400890`) set it again on every look-up, so nothing in between can leave them locked. A character counts only
+  when its model folder is in the game data (`chara_model_assets_chara\model\<id>*`); otherwise a save that says
+  "owned" is set back to not owned (it would be an empty slot). On a new save `OnCreate` runs before the dictionary
+  exists, so the work is done by the `OnAfterLoad` that follows. Log line at the first look-up:
+  `delisted: 6 of 6 characters have model data and are owned in every save` (2.20 has all six; 2.00 had three).
+* **Data** (`delisted.py`, run by the setup's game-folder step, `setup\assemble.py`). Sets `_empty` = 1 on the six
+  characters' rows of the table `Unlock_Subject_Chara` (bundle `db_assets_db\unlock_subject_chara.asset.bundle`),
+  so the game's own unlock rules never fire a notice for a character the player already has. The bundle file is
+  replaced, not written through (it may be a hard link into the build tree).
+
+The paid add-on characters (`Def.Chara.eID` 13..18) are not touched: they come from the player's own add-on
+content files (see above). That these six only need their unlock rule changed was found by iswimfly's mod
+"Delisted Character Fix"; the port takes a different route and uses nothing of it.
+
 ### Entry hooks
 
 `port\recomp\hooks.txt` lists NSO offsets. The generator makes each listed function start with
@@ -728,7 +776,14 @@ goes to the screen edges. On a screen that is not 16:9, wider (21:9, 32:9) or ta
   creates that blurred backdrop's render texture at the screen's aspect ratio;
 * on a wide screen, gives the in-game HUD canvases (those `UIManager_MainGame` sets up without a margin) a centred
   1920x1080 `SafeMargin`, when there is one full-screen player view. With split screen the game's layout is kept.
-  On a tall screen the HUD keeps the game's layout, which reaches the top and bottom edges.
+  On a tall screen the HUD keeps the game's layout, which reaches the top and bottom edges;
+* on a wide screen, switches cameras that use physical properties with a horizontal gate fit (the main menu's 3D
+  scene) to a vertical fit (`gate_fit_tick`, twice a second over `Camera.allCameras`, only cameras that draw to the
+  screen). With a horizontal fit the view's width is fixed, so a wider screen cuts off top and bottom and zooms in
+  on the characters; with a vertical fit the view keeps its 16:9 height and gains width at the sides. Log line
+  "screen: wide screen: camera <name> fits its view vertically" (once); back at 16:9 the changed cameras return to
+  the horizontal fit. Other cameras are left alone (a camera without physical properties keeps its vertical field of view and widens
+  by itself).
 
 Nothing is changed at 16:9, and a resolution change is followed at once (checked 32:9 -> 16:9 -> 21:9 -> 32:9 in
 a stage and on the stage select; not checked between wide and tall).
