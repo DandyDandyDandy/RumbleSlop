@@ -8,6 +8,7 @@
 //    moves (Cursor.visible).
 //  * F12 saves a picture of the game (a console has a Capture button; the game's photo mode saves nothing itself):
 //    <user files>\screenshots\<date and time>.png, written by the engine (ScreenCapture.CaptureScreenshot).
+//  * The title's version label names the port's version after the game's ("Ver. 2.20 RS 0.1"; PORT_LABEL).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -128,4 +129,30 @@ void pc_shell_tick(Cpu *c) {
     quit_tick(c);
     cursor_tick();
     screenshot_tick(c);
+}
+
+
+// TMPro.TMP_Text::set_text(string): the title's version label. UIStateTitle's start-up writes the literal
+// "Ver. <game version>" into UIViewTitle.m_VersionText; the port's own version follows it after a space:
+// "Ver. 2.20 RS 0.1". PORT_LABEL comes from port\paths.py (agreed anew for every release, see TECHNICAL.md).
+// Only a text that is "Ver. " and digits and dots is changed, so the result is never changed twice.
+int rt_hook_3e31d50(Cpu *c) {
+    static const char pre[] = "Ver. ";
+    uint64_t s = c->x[1];
+    if (!s) return 0;
+    int32_t n = (int32_t)LD32(s + 0x10);
+    if (n < (int)sizeof pre || n > 16) return 0;
+    for (int i = 0; i < n; i++) {
+        uint16_t ch = LD16(s + 0x14 + 2ull * i);
+        if (i < (int)sizeof pre - 1 ? ch != (uint16_t)pre[i] : !(ch == '.' || (ch >= '0' && ch <= '9'))) return 0;
+    }
+    uint16_t w[64];
+    int m = 0;
+    for (int i = 0; i < n; i++) w[m++] = LD16(s + 0x14 + 2ull * i);
+    w[m++] = ' ';
+    for (const char *p = PORT_LABEL; *p && m < 64; p++) w[m++] = (uint8_t)*p;
+    uint64_t self = c->x[0], method = c->x[2], lr = c->x[30];
+    uint64_t label = rt_call(c, FN(F_STRING_NEW_UTF16), 2, (uint64_t)(uintptr_t)w, (uint64_t)m);
+    c->x[0] = self; c->x[1] = label; c->x[2] = method; c->x[30] = lr;
+    return 0;                                   // set_text goes on with the longer text
 }

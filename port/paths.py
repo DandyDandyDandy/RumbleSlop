@@ -20,6 +20,9 @@ NAME = 'RumbleSlop'                     # the game's executable is <NAME>.exe, i
 UNITY_VERSION = '2022.3.30f1'
 GAME_VERSION = '2.2.0'                  # the version of the Switch game the tables and hooks are made for
 MAIN_BUILD_ID = '95548fabbca7a4f723c3468e5cfb34d0'      # first 16 bytes of main's build id, version 2.2.0
+PORT_LABEL = 'RS 0.1'                 # the port's own version, after the game's on the title ("Ver. 2.20 RS 0.1").
+                                        # Every release: agree on the release's number and change it here
+                                        # (docs\TECHNICAL.md "The port's version"); the runtime takes it at build time.
 
 PORT = Path(__file__).resolve().parent
 ROOT = PORT.parent

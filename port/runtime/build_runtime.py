@@ -30,7 +30,7 @@ SOURCES = ['imports_posix.c', 'log.c', 'dispatch.c', 'thread.c', 'loader.c', 'eh
            'gc.c', 'icall.c', 'api_hand.c', 'thunk.cpp', 'tramp.S']
 LIBS = ['-lbcrypt', '-lwinmm', '-lxinput9_1_0', '-lhid', '-lsetupapi', '-lws2_32', '-lole32', '-loleaut32', '-luuid', '-lgdi32', '-lshell32']
 CFLAGS = ['-O2', '-g', '-march=x86-64-v3', '-D_WIN32_WINNT=0x0A00', '-fno-strict-aliasing', '-Wall', '-Wextra', '-Wno-unused-parameter',
-          '-Wno-missing-field-initializers', f'-DGAME_NAME="{paths.NAME}"', '-I', os.path.join(HERE, 'include'), '-I', HERE,
+          '-Wno-missing-field-initializers', f'-DGAME_NAME="{paths.NAME}"', f'-DPORT_LABEL="{paths.PORT_LABEL}"', '-I', os.path.join(HERE, 'include'), '-I', HERE,
           '-I', GEN]
 env = paths.tool_env()
 
@@ -50,7 +50,7 @@ def compile_one(src, extra=()):
     deps = [path] + [os.path.join(HERE, f) for f in os.listdir(HERE) if f.endswith(('.h', '.inc'))] + \
            [os.path.join(HERE, 'icons', f) for f in os.listdir(os.path.join(HERE, 'icons')) if f.endswith(('.inc', '.png'))] + \
            [os.path.join(HERE, 'include', f) for f in os.listdir(os.path.join(HERE, 'include'))] + \
-           [os.path.join(GEN, f) for f in os.listdir(GEN)]
+           [os.path.join(GEN, f) for f in os.listdir(GEN)] + [paths.__file__]   # paths.py: PORT_LABEL, GAME_NAME
     if os.path.exists(obj) and all(os.path.getmtime(obj) > os.path.getmtime(d) for d in deps):
         return obj
     cc = CLANGXX if src.endswith('.cpp') else CLANG

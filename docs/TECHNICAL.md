@@ -457,6 +457,18 @@ Testing
   action bound to F12 fires too. Seen with a scripted key (`KEY F12 100`): the main menu and a stage, 1920 x
   1080 PNGs, two in a row. Not tried: a real key press, photo mode itself, full screen, split screen.
 
+### The port's version (`PORT_LABEL` in `port\paths.py`, shown by `pc_shell.c`)
+
+The title's version label reads the game's version, a space and the port's own version: "Ver. 2.20 RS 0.1". The
+game writes "Ver. <game version>" (a string literal in `UIStateTitle`'s start-up, through a StringBuilder into
+`UIViewTitle.m_VersionText`); the hook on `TMPro.TMP_Text::set_text` (`3e31d50`) adds the port's part to a text
+that is exactly "Ver. " and digits and dots. RumbleSlop is "RS", RumbleManiaSlop "RMS".
+
+**Every major release needs a version number agreed for it, and `PORT_LABEL` in `port\paths.py` changed to it
+before the release is built** (both repos keep their own prefix; `build_runtime.py` passes it in as a define and
+recompiles the runtime when `paths.py` changes). The number started at 0.1 on 2026-11-15 and has not been raised
+since.
+
 ### Language (`imports_plat.c`, `port_text.c`)
 
 The game has its own Language page in Options (eleven languages; changing returns to the title) and it works in
