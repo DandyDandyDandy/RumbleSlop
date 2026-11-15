@@ -145,15 +145,27 @@ static void save_cfg(void) {
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
 uint64_t rt_tr_str(Cpu *c, const char *english);      // port_text.c: the text in the game's language
 static uint64_t new_str(Cpu *c, const char *s) { return rt_tr_str(c, s); }
-// The primary display's refresh rate in Hz, read again at most every two seconds.
+// The refresh rate in Hz of the display the game's window is on (the primary display until the window exists), read
+// again at most every two seconds.
+static BOOL CALLBACK own_window(HWND h, LPARAM out) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId() && IsWindowVisible(h) && !GetWindow(h, GW_OWNER)) { *(HWND *)out = h; return FALSE; }
+    return TRUE;
+}
 static int refresh_hz(void) {
     static uint64_t at;
     static int hz = 60;
+    static HWND win;
     uint64_t now = GetTickCount64();
     if (!at || now - at > 2000) {
         DEVMODEW dm = {.dmSize = sizeof dm};
+        MONITORINFOEXW mi = {.cbSize = sizeof mi};
+        const wchar_t *dev = NULL;
         at = now;
-        if (EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1) hz = (int)dm.dmDisplayFrequency;
+        if (!win || !IsWindow(win)) { win = NULL; EnumWindows(own_window, (LPARAM)&win); }
+        if (win && GetMonitorInfoW(MonitorFromWindow(win, MONITOR_DEFAULTTONEAREST), (MONITORINFO *)&mi)) dev = mi.szDevice;
+        if (EnumDisplaySettingsW(dev, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1) hz = (int)dm.dmDisplayFrequency;
     }
     return hz;
 }
@@ -162,11 +174,11 @@ static int refresh_hz(void) {
 // On (144 on a 240 Hz display; a display without variable refresh may tear then). Syncing to every second refresh
 // (vSyncCount 2) is no way out: the game reads vSyncCount back and then runs its logic at 30 Hz, as on the console
 // (measured: 120 on a 240 Hz display gave 30 physics steps a second). g_eff_vsync is what the engine runs with.
-static int g_eff_vsync = 1;
+static int g_eff_vsync = 1, g_rate_hz, g_vsync_fast;
 static void apply_rate(Cpu *c) {
     int hz = refresh_hz(), lim = FPS[g_fps];
-    int v = g_vsync && (lim < 0 || lim >= hz - 1);
-    g_eff_vsync = v;
+    int v = g_vsync && !g_vsync_fast && (lim < 0 || lim >= hz - 1);
+    g_eff_vsync = v; g_rate_hz = hz;
     t_in_vsync = 1;
     rt_call(c, FN(F_SET_VSYNC_COUNT), 2, (uint64_t)v, 0ull);
     t_in_vsync = 0;
@@ -181,6 +193,29 @@ static void apply_rate(Cpu *c) {
 }
 static void apply_fps(Cpu *c) { apply_rate(c); }
 static void apply_vsync(Cpu *c) { apply_rate(c); }
+// Once a frame: the window went to a display with another refresh rate (dragged to another monitor, or the rate
+// changed in Windows), so VSync or the frame limiter is chosen again. And VSync does not always follow the window's
+// display: a window on a 60 Hz monitor next to a 240 Hz main display was measured at 240 frames a second with VSync.
+// So when VSync stands for a limit and the game runs more than 15 % faster than it for two seconds, the frame limiter
+// takes over until the window is on a display with another rate.
+static void rate_tick(Cpu *c) {
+    static uint64_t t0;
+    static uint32_t n;
+    if (!g_rate_hz) return;
+    if (refresh_hz() != g_rate_hz) { g_vsync_fast = 0; apply_rate(c); t0 = 0; return; }
+    uint64_t now = GetTickCount64();
+    if (!t0) { t0 = now; n = 0; return; }
+    n++;
+    if (now - t0 < 2000) return;
+    int lim = FPS[g_fps];
+    double fps = n * 1000.0 / (double)(now - t0);
+    if (g_eff_vsync && lim > 0 && fps > lim * 1.15) {
+        rt_log("display: %.0f frames a second with VSync for a limit of %d: the frame limiter takes over", fps, lim);
+        g_vsync_fast = 1;
+        apply_rate(c);
+    }
+    t0 = now; n = 0;
+}
 // Borderless always covers the desktop at its own size; the chosen size is for a window or exclusive full screen.
 static void apply_display(Cpu *c) {
     int w = g_mode == M_BORDERLESS ? g_desk_w : g_res[g_k][0], h = g_mode == M_BORDERLESS ? g_desk_h : g_res[g_k][1];
@@ -552,12 +587,13 @@ static float call_float(Cpu *c, uint64_t off) {
 // A position followed frame by frame: in how many frames it moved, and how many steps were uneven (less than half or
 // more than twice the step before; a repeated picture between two moves counts as two).
 typedef struct { float prev[3], step; uint8_t have; uint32_t moved, uneven, pairs; } Track;
-static Track g_trk[3];
+static Track g_trk[4];
 static void track_step(Track *t, const float *p) {
     if (t->have) {
         float dx = p[0] - t->prev[0], dy = p[1] - t->prev[1], dz = p[2] - t->prev[2], d = sqrtf(dx * dx + dy * dy + dz * dz);
         if (d > 1e-5f) t->moved++;
-        if (d < 1.0f && (t->step > 1e-4f || d > 1e-4f)) { t->pairs++; if (d < 0.5f * t->step || d > 2.0f * t->step) t->uneven++; }
+        // steps under 1 mm (a ball pressed against a wall) are not judged: their size is noise
+        if (d < 1.0f && (t->step > 1e-3f || d > 1e-3f)) { t->pairs++; if (d < 0.5f * t->step || d > 2.0f * t->step) t->uneven++; }
         t->step = d;
     }
     memcpy(t->prev, p, sizeof t->prev);
@@ -597,6 +633,7 @@ int rt_hook_43d58c0(Cpu *c) {
         interp_tick(c);
         pc_shell_tick(c);
         gfx_opt_tick(c);
+        rate_tick(c);
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     if (!on) return 0;
@@ -621,7 +658,7 @@ int rt_hook_43d58c0(Cpu *c) {
             if (p[0] != cam_prev[i][0] || p[1] != cam_prev[i][1] || p[2] != cam_prev[i][2]) moved = 1;
             {   // evenness: a step less than half or more than twice the one before it (a frame that repeats the picture counts)
                 float dx = p[0] - cam_prev[i][0], dy = p[1] - cam_prev[i][1], dz = p[2] - cam_prev[i][2], d = sqrtf(dx * dx + dy * dy + dz * dz);
-                if (cam_step[i] > 1e-4f || d > 1e-4f) { cam_pairs++; if (d < 0.5f * cam_step[i] || d > 2.0f * cam_step[i]) cam_uneven++; }
+                if (cam_step[i] > 1e-3f || d > 1e-3f) { cam_pairs++; if (d < 0.5f * cam_step[i] || d > 2.0f * cam_step[i]) cam_uneven++; }
                 if (cam_trace < 0) cam_trace = getenv("BR_CAM_TRACE") != NULL;   // every frame: camera number, step length
                 if (cam_trace && (d > 1e-4f || cam_step[i] > 1e-4f)) {   // with the wall time since the frame before, in ms
                     static uint64_t last[8];
@@ -643,10 +680,14 @@ int rt_hook_43d58c0(Cpu *c) {
         uint64_t pl = players && (int32_t)LD32(players + 0x18) > 0 ? LD64(LD64(players + 0x10) + 0x20) : 0;
         uint64_t ball = pl ? rt_call(c, FN(0x42f6a40ull), 2, pl, 0ull) : 0;       // MgPlayer.get_ball
         uint64_t chara = pl ? LD64(pl + 0x1c8) : 0;                                // MgPlayer.m_CharaObj (GameObject)
-        uint64_t trs[2] = {ball && LD64(ball + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball, 0ull) : 0,
-                           chara && LD64(chara + 0x10) ? rt_call(c, FN(0x3f0bb40ull), 2, chara, 0ull) : 0};   // GameObject.get_transform
-        for (int k = 0; k < 3; k++) {
-            uint64_t tr = trs[k == 2 ? 1 : k];
+        // the second player's ball too (split screen, online: the other player, whose moves arrive over the network)
+        uint64_t pl2 = players && (int32_t)LD32(players + 0x18) > 1 ? LD64(LD64(players + 0x10) + 0x28) : 0;
+        uint64_t ball2 = pl2 ? rt_call(c, FN(0x42f6a40ull), 2, pl2, 0ull) : 0;
+        uint64_t trs[3] = {ball && LD64(ball + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball, 0ull) : 0,
+                           chara && LD64(chara + 0x10) ? rt_call(c, FN(0x3f0bb40ull), 2, chara, 0ull) : 0,   // GameObject.get_transform
+                           ball2 && LD64(ball2 + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball2, 0ull) : 0};
+        for (int k = 0; k < 4; k++) {
+            uint64_t tr = trs[k == 2 ? 1 : k == 3 ? 2 : k];
             if (!tr) { g_trk[k].have = 0; continue; }
             rt_call(c, FN(0x3f1a1f0ull), 2, tr, 0ull);
             float p[3];
@@ -681,12 +722,12 @@ int rt_hook_43d58c0(Cpu *c) {
                    FPS[g_fps], g_vsync);
             rt_log("fps: a camera moved in %u of %llu frames (%.1f picture changes/s), %u cameras; uneven steps %u of %u", cam_moved,
                    (unsigned long long)frames, (double)cam_moved / wall, cam_count, cam_uneven, cam_pairs);
-            static const char *const what[3] = {"ball", "monkey", "monkey seen from camera 0"};
-            for (int k = 0; k < 3; k++)
+            static const char *const what[4] = {"ball", "monkey", "monkey seen from camera 0", "second player's ball"};
+            for (int k = 0; k < 4; k++)
                 if (g_trk[k].pairs) rt_log("fps: %s moved in %u of %llu frames; uneven steps %u of %u", what[k], g_trk[k].moved,
                                            (unsigned long long)frames, g_trk[k].uneven, g_trk[k].pairs);
         }
-        for (int k = 0; k < 3; k++) g_trk[k].moved = g_trk[k].uneven = g_trk[k].pairs = 0;
+        for (int k = 0; k < 4; k++) g_trk[k].moved = g_trk[k].uneven = g_trk[k].pairs = 0;
         cam_moved = cam_uneven = cam_pairs = 0;
         t0 = now; frames = 0; time0 = t; fixed0 = ft; fc0 = fc;
         c->x[0] = x0; c->x[1] = x1; c->v[0] = v0;

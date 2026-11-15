@@ -130,7 +130,9 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_PLAYER_ARGS` | Player arguments for `run_player.sh`, e.g. `-force-vulkan`. |
 | `BR_INPUT_SCRIPT=<file>` | Scripted pad input, lines `<ms> <BUTTON> [hold ms]` (A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN). Buttons only, no sticks. |
 | `BR_STATUS=<s>` | Periodic counters (audio, pad reads, collections). |
-| `BR_FPS_LOG=1` | Every 2 s (`BR_FPS_LOG=<seconds>`: that often): measured frame rate, engine clock rate, physics step rate, engine target/vsync values, in how many frames a camera moved, and how many camera steps were less than half or more than twice the step before ("uneven"); the same for the first player's ball, monkey and the monkey's offset from camera 0. `BR_CAM_TRACE=1` adds a line per frame and camera (step length, wall time since the frame before in ms) and per frame for the ball (step, `Time.time`, `Time.fixedTime`). |
+| `BR_FPS_LOG=1` | Every 2 s (`BR_FPS_LOG=<seconds>`: that often): measured frame rate, engine clock rate, physics step rate, engine target/vsync values, in how many frames a camera moved, and how many camera steps were less than half or more than twice the step before ("uneven"); the same for the first player's ball, monkey, the monkey's offset from camera 0 and the second player's ball
+(split screen, online). Steps under 1 mm are not judged (a ball pressed against a wall jitters by fractions of a
+millimetre). `BR_CAM_TRACE=1` adds a line per frame and camera (step length, wall time since the frame before in ms) and per frame for the ball (step, `Time.time`, `Time.fixedTime`). |
 | `BR_INTERP=0\|1`, `BR_INTERP_LOG=1` | Smooth motion (see that section) forced off / on whatever the settings say; every 2 s the number of tracked transforms and blended parts, and the transforms written in both phases of a frame. |
 | `BR_CHARA_DUMP=<part>`, `BR_CHARA_DUMP_EXIT=1` | Renderer/material dump of spawned characters (see below). |
 | `BR_DLC_LOG=1` | Logs the game's own verdict for each add-on content pack (index, name, installed or not), once per pack. |
@@ -695,7 +697,13 @@ limiter with VSync off (a display without variable refresh may tear then). `vSyn
 is not usable: the game reads it back and switches its logic to 30 Hz (measured: 120 on 240 Hz gave 30 physics
 steps a second). Log line `display: frame rate limit ..., display ... Hz -> vSyncCount ..., targetFrameRate ...`.
 Seen: the limit changed in Adventure's pause menu (Help Menu > Options > Display) applies at once (60 -> 144
-measured in play after resuming, ball moving in every frame).
+measured in play after resuming, ball moving in every frame); the same from Battle's pause menu (Options).
+The refresh rate is the one of the monitor the window is on (`refresh_hz`, read again every 2 s), and `rate_tick`
+chooses again once a frame when it changes (window dragged to another monitor). VSync does not always follow the
+window's monitor: on a 60 Hz monitor next to the 240 Hz main display a window ran at 240 frames a second with
+VSync. So when VSync stands for a limit and the game runs more than 15 % faster than the limit for 2 s, the frame
+limiter takes over ("display: ... the frame limiter takes over") until the window is on a display with another
+rate. Measured: limit 60, window dragged 240 Hz -> 60 Hz -> 240 Hz: 60 frames a second on all three after 2 s.
 
 The Resolution row lists the 16:9 sizes that fit the desktop, on a 16:10 desktop the 16:10 sizes too, and the
 desktop size itself.
