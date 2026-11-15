@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rt.h"
-#include "pad_sony.h"
+#include "pad_hid.h"
 
 enum { B_A, B_B, B_X, B_Y, B_STICK_L, B_STICK_R, B_L, B_R, B_ZL, B_ZR, B_PLUS, B_MINUS, B_LEFT, B_UP, B_RIGHT, B_DOWN,
        B_SL_LEFT, B_SL_UP, B_SL_RIGHT, B_SL_DOWN, B_SR_LEFT, B_SR_UP, B_SR_RIGHT, B_SR_DOWN };
@@ -164,10 +164,10 @@ static void script_load(void) {
 }
 
 // Players and devices. Up to four pads: npad No.1..4 are the connected controllers in this order: XInput users
-// 0..3, then the directly read Sony pads by slot. The keyboard and un-prefixed scripted input always belong to No.1, which is
+// 0..3, then the pads read directly over HID (pad_hid.c) by slot. The keyboard and un-prefixed scripted input always belong to No.1, which is
 // reported connected even without a controller. BR_PADS=<n> reports n pads regardless of devices (tests).
 #define MAX_PADS 4
-typedef struct { int xinput, sony; } Dev;     // XInput user index, or -1 and the Sony pad's slot (pad_sony.c)
+typedef struct { int xinput, hid; } Dev;      // XInput user index, or -1 and the HID pad's slot (pad_hid.c)
 static XINPUT_STATE g_xs[4];
 static int g_xconn[4];
 static uint64_t g_xprobe[4], g_xlast;
@@ -200,9 +200,9 @@ static void devices_refresh(void) {
             }
             if (g_xconn[i] && n < MAX_PADS) g_dev[n++].xinput = i;
         }
-        for (int k = 0; k < SONY_SLOTS; k++) {
-            SonyPad sp;
-            if (n < MAX_PADS && rt_sony_pad(k, &sp)) { g_dev[n].xinput = -1; g_dev[n++].sony = k; }
+        for (int k = 0; k < HID_PAD_SLOTS; k++) {
+            HidPad hp;
+            if (n < MAX_PADS && rt_hid_pad(k, &hp)) { g_dev[n].xinput = -1; g_dev[n++].hid = k; }
         }
         if (n != g_ndev) rt_log("input: %d controller%s connected", n, n == 1 ? "" : "s");
         g_ndev = n;
@@ -212,15 +212,15 @@ static void devices_refresh(void) {
 }
 
 // For the glyphs (pc_glyphs.c): what is behind pad `id` (0 nothing, 1 an XInput pad, 2 DualSense, 3 DualShock 4), when
-// it last gave input, and whether the face buttons are mapped by position.
+// it last gave input, and whether the face buttons are mapped by position. (4 Switch Pro Controller)
 static uint64_t g_pad_tick[MAX_PADS];
 static int positional_layout(void) {
     static int positional = -1;
     if (positional < 0) { const char *e = getenv("BR_PAD_LAYOUT"); positional = e && !strcmp(e, "positional"); }
     return positional;
 }
-static int sony_kind(int slot) { SonyPad sp; rt_sony_pad(slot, &sp); return sp.kind ? sp.kind : 2; }
-int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev || g_dev[id].xinput == -2 ? 0 : g_dev[id].xinput >= 0 ? 1 : sony_kind(g_dev[id].sony); }
+static int hid_kind(int slot) { HidPad hp; rt_hid_pad(slot, &hp); return hp.kind ? hp.kind : PAD_KIND_DUALSENSE; }
+int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev || g_dev[id].xinput == -2 ? 0 : g_dev[id].xinput >= 0 ? 1 : hid_kind(g_dev[id].hid); }
 uint64_t rt_pad_last_input(uint32_t id) { return id < MAX_PADS ? g_pad_tick[id] : 0; }
 int rt_pad_positional(void) { return positional_layout(); }
 
@@ -256,29 +256,30 @@ static void poll(Pad *p, uint32_t id) {
         p->rx = DZ(xs.Gamepad.sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
         p->ry = DZ(xs.Gamepad.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
     }
-    SonyPad sp;
-    if (xi == -1 && rt_sony_pad(g_dev[id].sony, &sp)) {      // DualSense / DualShock 4: cross is the bottom button, like A on an Xbox pad
-        uint32_t w = sp.buttons;
-        if (w & SONY_CROSS) b |= 1ull << (positional ? B_B : B_A);
-        if (w & SONY_CIRCLE) b |= 1ull << (positional ? B_A : B_B);
-        if (w & SONY_SQUARE) b |= 1ull << (positional ? B_Y : B_X);
-        if (w & SONY_TRIANGLE) b |= 1ull << (positional ? B_X : B_Y);
-        if (w & SONY_L3) b |= 1ull << B_STICK_L;
-        if (w & SONY_R3) b |= 1ull << B_STICK_R;
-        if (w & SONY_L1) b |= 1ull << B_L;
-        if (w & SONY_R1) b |= 1ull << B_R;
-        if (w & SONY_L2) b |= 1ull << B_ZL;
-        if (w & SONY_R2) b |= 1ull << B_ZR;
-        if (w & SONY_OPTIONS) b |= 1ull << B_PLUS;
-        if (w & SONY_CREATE) b |= 1ull << B_MINUS;
-        if (w & SONY_LEFT) b |= 1ull << B_LEFT;
-        if (w & SONY_UP) b |= 1ull << B_UP;
-        if (w & SONY_RIGHT) b |= 1ull << B_RIGHT;
-        if (w & SONY_DOWN) b |= 1ull << B_DOWN;
-        if (sp.lx) p->lx = sp.lx;
-        if (sp.ly) p->ly = sp.ly;
-        if (sp.rx) p->rx = sp.rx;
-        if (sp.ry) p->ry = sp.ry;
+    HidPad hp;
+    if (xi == -1 && rt_hid_pad(g_dev[id].hid, &hp)) {        // Sony pad: south (cross) is A, like A on an Xbox pad
+        uint32_t w = hp.buttons;
+        if (hp.kind == PAD_KIND_SWITCH_PRO) positional = 1;  // Pro Controller: names and places are the Switch's own
+        if (w & PAD_SOUTH) b |= 1ull << (positional ? B_B : B_A);
+        if (w & PAD_EAST) b |= 1ull << (positional ? B_A : B_B);
+        if (w & PAD_WEST) b |= 1ull << (positional ? B_Y : B_X);
+        if (w & PAD_NORTH) b |= 1ull << (positional ? B_X : B_Y);
+        if (w & PAD_LSTICK) b |= 1ull << B_STICK_L;
+        if (w & PAD_RSTICK) b |= 1ull << B_STICK_R;
+        if (w & PAD_L) b |= 1ull << B_L;
+        if (w & PAD_R) b |= 1ull << B_R;
+        if (w & PAD_ZL) b |= 1ull << B_ZL;
+        if (w & PAD_ZR) b |= 1ull << B_ZR;
+        if (w & PAD_START) b |= 1ull << B_PLUS;
+        if (w & PAD_SELECT) b |= 1ull << B_MINUS;
+        if (w & PAD_LEFT) b |= 1ull << B_LEFT;
+        if (w & PAD_UP) b |= 1ull << B_UP;
+        if (w & PAD_RIGHT) b |= 1ull << B_RIGHT;
+        if (w & PAD_DOWN) b |= 1ull << B_DOWN;
+        if (hp.lx) p->lx = hp.lx;
+        if (hp.ly) p->ly = hp.ly;
+        if (hp.rx) p->rx = hp.rx;
+        if (hp.ry) p->ry = hp.ry;
     }
     if (have && id < MAX_PADS && (b || p->lx || p->ly || p->rx || p->ry)) g_pad_tick[id] = GetTickCount64();
     extern int rt_text_entry_active(void);
@@ -376,8 +377,8 @@ HOSTFN(_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
 HOSTFN(_ZN2nn3hid17StopSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
 // The game reads only the acceleration (Wonder.AppInput+StateNpad::getButtonState, for its Accelerometer option), in
 // g on the Switch's axes: x right, y forward (toward the triggers), z up out of the face; lying flat gives (0, 0, -1).
-// A Sony pad reports about 8192 per g with x right, y out of the face, z toward the player (SDL, Linux
-// hid-playstation). Each Switch axis takes one pad axis with a sign: BR_MOTION_MAP="-x,+z,-y" (the default).
+// pad_hid.c gives every pad it reads (Sony, Pro Controller) about 8192 per g with x right, y out of the face, z
+// toward the player (SDL, Linux hid-playstation). Each Switch axis takes one pad axis with a sign: BR_MOTION_MAP="-x,+z,-y" (the default).
 // Pads without sensors (XInput) and a window without the focus stay flat. BR_MOTION_LOG=1 logs the raw and the
 // converted values four times a second.
 static int g_mmap[3] = {-1, +3, -2};                               // +-(1 x, 2 y, 3 z) of the pad for Switch x, y, z
@@ -402,15 +403,15 @@ HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAx
     uint8_t *s = PTR(0);
     float one = 1.0f, a[3] = {0, 0, -1.0f};                        // lying flat
     uint32_t id = (LD32(X(1)) >> 24) & (MAX_PADS - 1);
-    SonyPad sp;
+    HidPad hp;
     motion_map_init();
     memset(s, 0, 0x60);
     ST64(X(0) + 8, (uint64_t)InterlockedIncrement64(&g_sampling));
-    int sony = id < (uint32_t)g_ndev && g_dev[id].xinput == -1 && rt_sony_pad(g_dev[id].sony, &sp) && sp.has_motion;
-    if (sony && focused())
+    int hid = id < (uint32_t)g_ndev && g_dev[id].xinput == -1 && rt_hid_pad(g_dev[id].hid, &hp) && hp.has_motion;
+    if (hid && focused())
         for (int i = 0; i < 3; i++) {
             int k = g_mmap[i] < 0 ? -g_mmap[i] : g_mmap[i];
-            a[i] = (g_mmap[i] < 0 ? -1.0f : 1.0f) * sp.accel[k - 1] / 8192.0f;
+            a[i] = (g_mmap[i] < 0 ? -1.0f : 1.0f) * hp.accel[k - 1] / 8192.0f;
         }
     memcpy(s + 0x10, a, 12);
     memcpy(s + 0x34, &one, 4); memcpy(s + 0x44, &one, 4); memcpy(s + 0x54, &one, 4);   // identity direction
@@ -419,14 +420,14 @@ HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAx
     uint64_t now = GetTickCount64();
     if (motion_log() && now >= next[id]) {
         next[id] = now + 250;
-        if (sony) rt_log("motion: pad %u raw accel %6d %6d %6d gyro %6d %6d %6d -> game %+.2f %+.2f %+.2f%s", id,
-                         sp.accel[0], sp.accel[1], sp.accel[2], sp.gyro[0], sp.gyro[1], sp.gyro[2], a[0], a[1], a[2],
+        if (hid) rt_log("motion: pad %u raw accel %6d %6d %6d gyro %6d %6d %6d -> game %+.2f %+.2f %+.2f%s", id,
+                         hp.accel[0], hp.accel[1], hp.accel[2], hp.gyro[0], hp.gyro[1], hp.gyro[2], a[0], a[1], a[2],
                          focused() ? "" : " (no focus: flat)");
         else rt_log("motion: pad %u has no motion sensor, flat", id);
     }
 }
 
-// Rumble. A pad has two motors (XInput: left heavy, right light; Sony pads the same). Two sources feed them and the
+// Rumble. A pad has two motors (XInput: left heavy, right light; HID pads the same). Two sources feed them and the
 // stronger wins: values the game sends directly (SendVibrationValue: the left and right linear actuator of a
 // Switch controller, each standing for one motor) and the vibration-file player further down, which is what the
 // game's own effects use (low band -> heavy motor, high band -> light motor).
@@ -447,7 +448,7 @@ static void motors_update(uint32_t id) {
         g_x_sent[id][0] = a; g_x_sent[id][1] = b;
         XINPUT_VIBRATION v = {a, b};
         XInputSetState((DWORD)g_dev[id].xinput, &v);
-    } else if (g_dev[id].xinput == -1) rt_sony_rumble(g_dev[id].sony, m[0], m[1]);
+    } else if (g_dev[id].xinput == -1) rt_hid_pad_rumble(g_dev[id].hid, m[0], m[1]);
 }
 HOSTFN(_ZN2nn3hid25GetVibrationDeviceHandlesEPNS0_21VibrationDeviceHandleEiRKjNS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE) {
     int n = 0;
@@ -549,7 +550,7 @@ static void vib_play(uint32_t id, uint32_t slot, const uint8_t *d, uint64_t size
     if (!InterlockedExchange(&g_vib_thread, 1)) CloseHandle(CreateThread(NULL, 0, vib_thread, NULL, 0, NULL));
     if (vib_log()) rt_log("vibration: pad %u slot %u plays %u samples at %u Hz (%.2f s%s), peak %.2f; pad is %s", id, slot, count, rate,
                           (double)count / rate, meta >= 12 ? ", looping" : "", peak / 255.0,
-                          id >= (uint32_t)g_ndev ? "not connected" : g_dev[id].xinput >= 0 ? "XInput" : "a Sony pad");
+                          id >= (uint32_t)g_ndev ? "not connected" : g_dev[id].xinput >= 0 ? "XInput" : "a HID pad");
 }
 // P/Invoke natives of nnUser.Util+Vibration (name after the "::"). Returns 1 when answered.
 int rt_vib_pinvoke(Cpu *c, const char *method) {

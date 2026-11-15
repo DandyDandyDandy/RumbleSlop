@@ -48,7 +48,7 @@
 #define ACTION_COUNT 187
 
 extern const uint8_t rt_glyphs_png[], rt_glyphs_png_end[];   // glyph_data.S
-extern int rt_pad_kind(uint32_t id);        // imports_hid.c: 0 no device, 1 XInput, 2 DualSense, 3 DualShock 4
+extern int rt_pad_kind(uint32_t id);        // imports_hid.c: 0 no device, 1 XInput, 2 DualSense, 3 DualShock 4, 4 Pro Controller
 extern uint64_t rt_pad_last_input(uint32_t id);
 extern int rt_pad_positional(void);
 extern uint64_t pc_kbm_last_input(void);    // pc_input.c
@@ -102,8 +102,9 @@ static int device_kind(uint32_t id) {
     static int forced = -1;
     if (forced < 0) { const char *e = getenv("BR_KIND"); forced = e ? atoi(e) : 0; }   // test: 8 PS4, 9 Xbox, 10 keyboard, 11 PS5
     if (forced) return forced;
+    // A Pro Controller (4) keeps the game's own pictures (kind 0): they are the Switch's.
     int pad = rt_pad_kind(id), kind = pad == 1 ? KIND_XBOX : pad == 2 ? KIND_PS5 : pad == 3 ? KIND_PS4 : 0;
-    if (id == 0 && pc_keyboard_actions() && (!kind || pc_kbm_last_input() > rt_pad_last_input(0))) kind = KIND_KEYBOARD;
+    if (id == 0 && pc_keyboard_actions() && (!pad || pc_kbm_last_input() > rt_pad_last_input(0))) kind = KIND_KEYBOARD;
     return kind;
 }
 // AppInput.State.CopyToActiveLayer(State) / CopyToInactiveLayer(State): each frame the pad's own state (this) is

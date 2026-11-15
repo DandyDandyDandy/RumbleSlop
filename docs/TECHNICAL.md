@@ -180,8 +180,8 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
   the goal shows a correct one. Use it to reach results, progress and the next stage, not to check times.
 * `BR_NO_REAL_INPUT=1` makes the port treat the window as never focused: real keys, mouse buttons, wheel and pad
   buttons are ignored, rumble is not sent, and the scripted cursor stays where the last `CLICK` / `MOVE` / `HOLD`
-  put it. XInput pads are not looked for, but Sony pads (DualSense, DualShock 4) are still found and listed: a
-  plugged-in one counts as a connected controller (which changes what Local Multiplayer does with the keyboard)
+  put it. XInput pads are not looked for, but HID pads (DualSense, DualShock 4, Switch Pro Controller) are still found and
+  listed: a plugged-in one counts as a connected controller (which changes what Local Multiplayer does with the keyboard)
   while its buttons do nothing. Dragging the game's window still stalls the game.
 * A test that changes a row of Options writes the same `port_*.txt` files the player uses (one file for all
   profiles): put the player's values back afterwards.
@@ -213,9 +213,14 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
   waveOut in 10 ms blocks. Do not tie releases to waveOut completions (they arrive in 10 ms steps and halve the
   audio rate). The release event is re-signalled every tick while a played buffer is uncollected, because the
   game can clear a signal it has not acted on.
-* **Input** (`imports_hid.c`, `pad_sony.c`). Up to four full-key pads: npad No.1..4 are the connected controllers
-  in this order: XInput users 0..3, then directly read DualSense / DualShock 4 pads (HID, USB or Bluetooth, up to
-  four, each in a slot it keeps while connected). No.1
+* **Input** (`imports_hid.c`, `pad_hid.c`). Up to four full-key pads: npad No.1..4 are the connected controllers
+  in this order: XInput users 0..3, then pads read directly over HID (USB or Bluetooth, up to four, each in a slot
+  it keeps while connected). `pad_hid.c` finds them and runs one reader thread per pad; each kind has its own
+  protocol file behind the `PadDriver` interface of `pad_hid_dev.h`: `pad_ps.c` (DualSense, DualShock 4) and
+  `pad_switch.c` (Switch Pro Controller: USB handshake, subcommands for motion, vibration, player LED, full
+  reports, factory stick calibration from SPI flash; written after dekuNukem's documentation and SDL). Buttons
+  come out by position (`PAD_SOUTH` ...); a Pro Controller is mapped by position (its labels are the game's own)
+  and keeps the game's own button pictures. `BR_HID_PADS=off` turns HID pads off. No.1
   exists even without a controller. The Switch controller applet (press L+R to join) is answered at once with
   every connected pad. Keyboard and mouse are not
   mapped onto a pad any more: they are devices of the game's own action system (see "Keyboard, mouse and button
@@ -227,16 +232,16 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
   split-screen stage the W key moves player 1 and (scripted) pad input moves player 2. Not run: the way back to
   single player afterwards, three players (two pads and the keyboard is not offered: the seat is only taken
   when the pads are one short of the minimum).
-* **Rumble** (`imports_hid.c`, `pad_sony.c`). The game's effects are `.bnvib` files that it hands to a native
+* **Rumble** (`imports_hid.c`, `pad_hid.c`). The game's effects are `.bnvib` files that it hands to a native
   plug-in of the Switch build (`nnUser.Util+Vibration::Play(npad, slot, bytes)`, called from
   `AppInput.StateNpad.vibrationSpecific`; the plug-in is not lifted code). The port answers those P/Invoke natives
   itself (`rt_vib_pinvoke`, asked first by `rt_pinvoke_policy`): up to four files play on a pad at once, a thread
   steps through them at the file's rate (200 Hz), the strongest low-band amplitude drives the heavy motor and the
   strongest high-band amplitude the light one. `nn::hid::SendVibrationValue` (which this game does not use) feeds
-  the same motors. Output: `XInputSetState`, or for a Sony pad its output report with only the motor fields
-  marked valid. `BR_VIB_LOG=1` logs every Play and Stop. Seen: a stage plays 0.5 s files on bumps; a DualSense on
-  USB accepted the report. Not tested: an XInput pad, a DualShock 4, Bluetooth (its report layout and CRC are
-  written from the documentation of other projects), how it feels.
+  the same motors. Output: `XInputSetState`; for a Sony pad its output report with only the motor fields
+  marked valid; for a Pro Controller report 0x10, HD rumble at 160 Hz (heavy) and 320 Hz (light) on both sides. `BR_VIB_LOG=1` logs every Play and Stop. Seen: a stage plays 0.5 s files on bumps; a DualSense on
+  USB accepted the report. A Pro Controller over Bluetooth rumbled. Not tested: an XInput pad, a DualShock 4, a Sony pad
+  over Bluetooth (its report layout and CRC are written from the documentation of other projects).
 * **Online.** Friend matches joined by a room code work between PCs running this port (next section). Everything
   else of Nintendo's online service is absent: the platform layer still says there is no network, and the
   remaining `nn.npln` natives raise `EntryPointNotFoundException` if something reaches them.
@@ -994,12 +999,12 @@ Texture facts found the hard way:
 * Online was tested with two instances on one PC only (same address, no packet loss beyond the transport test's
   simulation). Not tested: over the internet, UPnP on a router that offers it, more than two real players, a
   guest leaving in the middle of a match.
-* Controllers: XInput pads and Sony pads only (no Switch Pro Controller or other pads unless something presents
-  them as XInput). Motion controls (the game's Accelerometer option) come from Sony pads only:
+* Controllers: XInput pads, Sony pads and the Switch Pro Controller (no Joy-Cons or other pads unless something
+  presents them as XInput). Motion controls (the game's Accelerometer option) come from the HID pads:
   `GetSixAxisSensorState` fills just the acceleration, the only part the game reads
-  (`Wonder.AppInput+StateNpad::getButtonState`), from `SonyPad.accel` at 8192 per g, Switch axis = pad axis
+  (`Wonder.AppInput+StateNpad::getButtonState`), from `HidPad.accel` at 8192 per g, Switch axis = pad axis
   `-x, +z, -y` (`BR_MOTION_MAP` overrides; `BR_MOTION_LOG=1` logs raw and converted values). XInput pads and an
-  unfocused window report lying flat (0, 0, -1). Felt right with a USB DualSense; DualShock 4 and Bluetooth not tried.
+  unfocused window report lying flat (0, 0, -1). Felt right with a USB DualSense and a Bluetooth Pro Controller; DualShock 4 and a Pro Controller on USB not tried.
 * The game refuses Battle with 3 or 4 local players and online or local-wireless play with 2 local players (its
   own rule, unchanged).
 * Exclusive Full Screen has not been tried from the menu; the Reset button on the Display page ran without a
