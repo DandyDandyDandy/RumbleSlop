@@ -26,6 +26,8 @@ static const Text g_text[] = {
      "부드러운 움직임", "Movimento suave"},
     {"Dole Collaboration", "Doleコラボ", "Collaboration Dole", "Collaborazione Dole", "Dole-Kollaboration", "Colaboración con Dole", "Dole联动",
      "Dole聯動", "Dole 컬래버레이션", "Colaboração Dole"},
+    {"Mouse Sensitivity", "マウスカーソル感度", "Sensibilité de la souris", "Sensibilità mouse", "Mausempfindlichkeit",
+     "Sensibilidad del ratón", "光标灵敏度", "滑鼠游標靈敏度", "마우스 커서 감도", "Sensibilidade do mouse"},      // the game's own texts
     {"On", "オン", "Activé", "Sì", "An", "Sí", "开", "開", "켜기", "Ativado"},
     {"Off", "オフ", "Désactivé", "No", "Aus", "No", "关", "關", "끄기", "Desativado"},
     {"Borderless", "ボーダーレス", "Sans bordure", "Senza bordi", "Randlos", "Sin bordes", "无边框", "無邊框", "테두리 없음", "Sem bordas"},

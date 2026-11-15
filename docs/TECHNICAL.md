@@ -513,8 +513,19 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   46 to 49, 200 pixels) and moves the cameras of the viewing modes, right button drag moves in menus (32 to 35).
   The main-game camera has no mouse binding in the game's table (arrow keys). `BR_INPUT_DUMP=1` lists them.
   Seen: a scripted drag (`HOLD 960 540`, `MOVE 960 300`) rolls the ball forward into the goal of the first
-  stage. Not done: the Mouse Sensitivity option (not read; where its row is was not looked for), the two
-  `GestureDef` bindings (actions 61, 62), a real mouse in the hand.
+  stage. Not done: the two `GestureDef` bindings (actions 61, 62), a real mouse in the hand.
+* **Mouse Sensitivity.** The game has the option (`OptionParam.dataMouseSensitivity`, 5 in every save), its text
+  in eleven languages and the arithmetic (`AppMouse.SetSensitivityReviseParamByInt`,
+  `ActionAssignMouse.CalcRevisedSensitivity`), but this build shows no row for it and calls neither. The port
+  adds the row as the last one of Options > Controls (`ROLE_MOUSE` in `display_opt.c`, a copy of the Screen
+  Mode row like the other added rows; the page is told by its dead zone rows), 1 to 10, kept as `mouse=` in
+  `port_display.txt`, and uses the game's arithmetic on the drag length (`pc_mouse_sensitivity` in
+  `pc_input.c`): 5 = the binding's length, 1 = twice as long in four steps, 10 = a tenth in five steps. The
+  label is the game's own text. `BR_MOUSE_SENS=<n>` forces a value. Measured with the same scripted drag in a
+  stage: 40 pixels do nothing at 1 and 5 and roll the ball into the goal at 10; 100 pixels give 0 mph at 1 and
+  5 mph at 5 after the same time. Seen: the row in both games, changing it, the value in the file. The page's
+  Reset left the row where it was (whether Reset reaches any of the port's added rows was not followed up).
+  Not tried: a real mouse.
 * **Lists: wheel, scroll bar, hover.** Every list is a `UnityEngine.UI.ScrollRect` whose content the game moves
   towards the focused item, in three functions (`UIPartViewBaseVirtualScrollRect.Update`,
   `UICalcContentPosModule_Base.OnUpdate`, `UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical.Update`). The

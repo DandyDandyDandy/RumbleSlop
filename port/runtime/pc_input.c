@@ -540,7 +540,8 @@ void pc_action_reset(int action) {
 // button is held, the place where it went down is the stick's centre and the drag away from it is the stick.
 // As in the game: the drag only counts after a small distance, and the centre is then moved by that distance so
 // the value starts at zero; the action's value is the part of the drag in its direction, full at the binding's
-// sensitivity in pixels (scaled to a 1080-line window). The Mouse Sensitivity option is not read.
+// sensitivity in pixels (scaled to a 1080-line window), stretched or shortened by the Mouse Sensitivity option.
+static float g_sens_ratio = 1.0f;             // pc_mouse_sensitivity
 extern int rt_ui_mouse(float *x, float *y, int *down);      // online_ui.c: cursor in window pixels from the bottom left
 extern int rt_ui_test_held(void);
 #define VPAD_MIN 10.0f
@@ -574,8 +575,24 @@ static float vpad_value(const Binding *b) {
     uint32_t d = b->vp_dir;
     float part = d == 0x100 || d == 0x1000000 ? dy : d == 0x200 || d == 0x2000000 ? -dy : d == 0x400 || d == 0x4000000 ? -dx :
                  d == 0x800 || d == 0x8000000 ? dx : 0;
-    float v = part / (b->vp_sens ? (float)b->vp_sens : 100.0f);
+    float v = part / ((b->vp_sens ? (float)b->vp_sens : 100.0f) * g_sens_ratio);
     return v <= 0 ? 0 : v > 1 ? 1 : v;
+}
+// Options > Controls > Mouse Sensitivity (the port's row, display_opt.c). The game's own arithmetic
+// (AppMouse.SetSensitivityReviseParamByInt, ActionAssignMouse.CalcRevisedSensitivity, neither called in this
+// build): 5 is the binding's drag length as it is; 1 doubles it in four steps (less sensitive); 6..10 shorten it
+// to a tenth in five steps. BR_MOUSE_SENS=<n> forces a value.
+void pc_mouse_sensitivity(int n) {
+    static int last = -1;
+    const char *force = getenv("BR_MOUSE_SENS");
+    if (force && *force) n = atoi(force);
+    if (n == last) return;
+    last = n;
+    float p = n < 5 ? (float)(5 - n) * 0.25f : n > 5 ? -(float)(n - 5) / 5.0f : 0;
+    if (p > 1) p = 1;
+    if (p < -1) p = -1;
+    g_sens_ratio = p > 0 ? 1.0f + p : p < 0 ? 0.1f + (p + 1.0f) * 0.9f : 1.0f;
+    rt_log("mouse: sensitivity option %d, drag length x%.2f", n, (double)g_sens_ratio);
 }
 
 // ------------------------------------------------------------------------------------------------ the game's side

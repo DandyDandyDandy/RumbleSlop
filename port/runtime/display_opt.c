@@ -35,7 +35,7 @@
 #include <string.h>
 #include "rt.h"
 
-enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_SMOOTH = 5, ROLE_DOLE = 6 };
+enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_SMOOTH = 5, ROLE_DOLE = 6, ROLE_MOUSE = 8 };
 enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define FN(off) (GUEST_BASE + (off))
 #define F_GET_VALUE_STR 0x4575d40ull
@@ -51,13 +51,15 @@ enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define F_GC_ENABLE 0x469d00ull
 #define F_LIST_ADD_WITH_RESIZE 0x33bfab0ull // List<object>::AddWithResize(item, MethodInfo *)
 #define LIST_OBJECT_CLASS_SLOT 0x6175d40ull // metadata slot CheckActiveChoicesItemList takes List<object> from
+#define CONTROLS_ROW "DeadZoneInsideRangeL"   // a row class only the Controls page has
+void pc_mouse_sensitivity(int n);            // pc_input.c
 #define GAMEPLAY_ROW "DisplayTips"          // a row class only the General page (the game play settings) has
 
 static const int UNITY_MODE[M_COUNT] = {3 /* Windowed */, 1 /* FullScreenWindow */, 0 /* ExclusiveFullScreen */};
 static const int FPS[] = {30, 60, 120, 144, -1};
 #define NFPS ((int)(sizeof FPS / sizeof *FPS))
 
-static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_smooth = 1, g_dole, g_deck;
+static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_smooth = 1, g_dole, g_deck, g_mouse = 5;
 static uint64_t g_sm_klass;
 static uint32_t g_pattern_h;                // GC handle of the game's Screen Mode row object
 #define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
@@ -118,11 +120,13 @@ static BOOL CALLBACK init_once(PINIT_ONCE o, PVOID p, PVOID *ctx) {
         else if (sscanf(line, "vsync=%d", &v) == 1) g_vsync = v < 0 ? 0 : v > 4 ? 4 : v;   // the menu only sets 0 or 1
         else if (sscanf(line, "smooth=%d", &v) == 1) g_smooth = v != 0;
         else if (sscanf(line, "dole=%d", &v) == 1) g_dole = v != 0;
+        else if (sscanf(line, "mouse=%d", &v) == 1 && v >= 1 && v <= 10) g_mouse = v;
         else if (sscanf(line, "fps=%d", &v) == 1)
             for (int i = 0; i < NFPS; i++)
                 if (FPS[i] == v) g_fps = i;
     }
     if (f) fclose(f);
+    pc_mouse_sensitivity(g_mouse);
     for (int i = 0; i < g_nres; i++)
         if (g_res[i][0] == w && g_res[i][1] == h) g_k = i;
     rt_log("display: %sdesktop %dx%d, %d sizes, selected %dx%d, mode %d, frame rate limit %d", g_deck ? "Steam Deck, " : "",
@@ -134,7 +138,7 @@ static void save_cfg(void) {
     char path[MAX_PATH + 32];
     cfg_path(path, sizeof path);
     FILE *f = fopen(path, "w");
-    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\nsmooth=%d\ndole=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_smooth, g_dole); fclose(f); }
+    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\nsmooth=%d\ndole=%d\nmouse=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_smooth, g_dole, g_mouse); fclose(f); }
 }
 
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
@@ -160,6 +164,14 @@ static void apply_display(Cpu *c) {
     rt_call(c, FN(F_SET_RESOLUTION), 4, (uint64_t)w, (uint64_t)h, (uint64_t)UNITY_MODE[g_mode], 0ull);
 }
 
+// Options > Controls > Mouse Sensitivity, 1..10 (`mouse=` in the settings file; 5 = the game's drag length). The
+// game has this option and its arithmetic but shows no row for it in this build; pc_input.c applies it to the drag.
+static void set_mouse(int n) {
+    g_mouse = n < 1 ? 1 : n > 10 ? 10 : n;
+    save_cfg();
+    pc_mouse_sensitivity(g_mouse);
+}
+
 static int role_of(uint64_t item) { return (int32_t)LD32(item + 0x54); }
 static int32_t mode_value(uint64_t item) { return (int32_t)LD32(LD64(item + 0x40) + 0x10); }
 // Index in the game's own mode list of the windowed (want_window) or the full-screen value.
@@ -170,8 +182,8 @@ static int game_index(uint64_t item, int want_window) {
         if (((int32_t)LD32(items + 0x20 + 4ull * i) == MODE_VALUE_WINDOW) == !!want_window) return i;
     return want_window ? 1 : 0;
 }
-static int role_index(int role) { return role == ROLE_DOLE ? g_dole : role == ROLE_SMOOTH ? g_smooth : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
-static int role_count(int role) { return role == ROLE_SMOOTH || role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
+static int role_index(int role) { return role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_SMOOTH ? g_smooth : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
+static int role_count(int role) { return role == ROLE_MOUSE ? 10 : role == ROLE_SMOOTH || role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
 // A copy of the Screen Mode row object `pattern` with a role, appended to a page's row list.
 static void append_copy(Cpu *c, uint64_t list, uint64_t pattern, int role) {
@@ -291,6 +303,7 @@ int rt_hook_4575bf0(Cpu *c) {
     if (role == ROLE_VSYNC) { g_vsync = 1; save_cfg(); apply_vsync(c); ST32(item + 0x50, g_vsync); return 1; }
     if (role == ROLE_SMOOTH) { g_smooth = 1; save_cfg(); ST32(item + 0x50, g_smooth); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, 0); ST32(item + 0x50, 0); return 1; }
+    if (role == ROLE_MOUSE) { set_mouse(5); ST32(item + 0x50, 4); return 1; }
     t_in_init = 1; call_orig(c, F_SET_INIT_INDEX); t_in_init = 0;
     if (c->eh_unwinding) return 1;
     if (g_deck) {      // the port's setting decides; make the game's saved value agree, so the row's own text does
@@ -326,6 +339,7 @@ int rt_hook_4575ea0(Cpu *c) {
     if (role == ROLE_VSYNC) { g_vsync = idx; save_cfg(); apply_vsync(c); return 1; }
     if (role == ROLE_SMOOTH) { g_smooth = idx; save_cfg(); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, idx); return 1; }
+    if (role == ROLE_MOUSE) { set_mouse(idx + 1); return 1; }
     g_mode = idx;
     save_cfg();
     // the game's own handler stores its value and ends in set_fullScreenMode, which applies the new mode
@@ -352,6 +366,9 @@ int rt_hook_4575d40(Cpu *c) {
         c->x[0] = new_str(c, g_vsync ? "On" : "Off");
     } else if (role == ROLE_SMOOTH) {
         c->x[0] = new_str(c, g_smooth ? "On" : "Off");
+    } else if (role == ROLE_MOUSE) {
+        snprintf(s, sizeof s, "%d", g_mouse);
+        c->x[0] = new_str(c, s);
     } else if (role == ROLE_DOLE) {
         c->x[0] = new_str(c, g_dole ? "On" : "Off");
     } else if (g_mode == M_BORDERLESS) {
@@ -367,6 +384,7 @@ int rt_hook_4534720(Cpu *c) {
     uint64_t item = c->x[0];
     if (!item || !g_sm_klass || LD64(item) != g_sm_klass) return 0;
     int role = role_of(item);
+    if (role == ROLE_MOUSE) { c->x[0] = new_str(c, "Mouse Sensitivity"); return 1; }
     if (role != ROLE_DOLE && role != ROLE_SMOOTH && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
     c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_DOLE ? "Dole Collaboration" : role == ROLE_SMOOTH ? "Smooth Motion" : "VSync");
     return 1;
@@ -391,16 +409,20 @@ int rt_hook_455d030(Cpu *c) {
         // last one. BR_OPT_LOG=1 logs the row classes of every page built.
         static int opt_log = -1;
         if (opt_log < 0) opt_log = getenv("BR_OPT_LOG") != NULL;
-        int gameplay = 0;
+        int gameplay = 0, controls = 0;
         for (int i = 0; items && i < n; i++) {
             uint64_t it = LD64(items + 0x20 + 8ull * i);
             const char *name = it ? (const char *)(uintptr_t)LD64(LD64(it) + 0x10) : NULL;      // Il2CppClass.name
             if (opt_log) rt_log("options: row %d of %d: %s", i, n, name ? name : "?");
             if (name && strstr(name, GAMEPLAY_ROW)) gameplay = 1;
+            if (name && strstr(name, CONTROLS_ROW)) controls = 1;
         }
         uint64_t dole_pattern = gameplay && g_pattern_h ? rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_pattern_h) : 0;
         if (dole_pattern) append_copy(c, list, dole_pattern, ROLE_DOLE);
         else if (gameplay) rt_log("options: no Screen Mode row seen yet, the Dole Collaboration row is left out");
+        // The Controls page (told by its dead zone rows) gets the Mouse Sensitivity row as its last one.
+        uint64_t mouse_pattern = controls && g_pattern_h ? rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_pattern_h) : 0;
+        if (mouse_pattern) append_copy(c, list, mouse_pattern, ROLE_MOUSE);
         c->x[0] = list;
         return 1;
     }
