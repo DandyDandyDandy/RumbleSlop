@@ -4,6 +4,7 @@
 # port/runtime/display_opt.c: window resolution choices in the game's Screen Mode option
 3ebcda0   UnityEngine.Screen::set_fullScreenMode
 4575bf0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::setInitIndex
+4564c70   Wonder.UI.Option.UIStateOption::activate
 4575d40   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::GetValueStr
 4575d70   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToDecrease
 4575de0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::CanBeSelectedToIncrease

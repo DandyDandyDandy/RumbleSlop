@@ -185,6 +185,16 @@ static int game_index(uint64_t item, int want_window) {
 static int role_index(int role) { return role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_SMOOTH ? g_smooth : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
 static int role_count(int role) { return role == ROLE_MOUSE ? 10 : role == ROLE_SMOOTH || role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
+// The added rows of the page on screen (GC handles), so that Reset can put their picker positions back.
+static uint32_t g_copy_h[12];
+static int g_ncopy;
+static void forget_copies(Cpu *c) {
+    for (int i = 0; i < g_ncopy; i++) rt_call(c, FN(F_GCHANDLE_FREE), 1, (uint64_t)g_copy_h[i]);
+    g_ncopy = 0;
+}
+static void track_copy(Cpu *c, uint64_t obj) {
+    if (g_ncopy < 12) g_copy_h[g_ncopy++] = (uint32_t)rt_call(c, FN(F_GCHANDLE_NEW), 2, obj, 0ull);
+}
 // A copy of the Screen Mode row object `pattern` with a role, appended to a page's row list.
 static void append_copy(Cpu *c, uint64_t list, uint64_t pattern, int role) {
     rt_call(c, FN(F_GC_DISABLE), 0);      // the copy is only reachable from host locals until it is in the list
@@ -195,6 +205,7 @@ static void append_copy(Cpu *c, uint64_t list, uint64_t pattern, int role) {
         memcpy((void *)(uintptr_t)(obj + 0x10), (const void *)(uintptr_t)(pattern + 0x10), 0x44);
         ST32(obj + 0x54, role);
         set_indices(obj, role_index(role));
+        track_copy(c, obj);
         rt_call(c, FN(F_LIST_ADD_WITH_RESIZE), 3, list, obj, add_mi);
     }
     rt_call(c, FN(F_GC_ENABLE), 0);
@@ -317,6 +328,38 @@ int rt_hook_4575bf0(Cpu *c) {
     return 1;
 }
 
+// UIStateOption.activate(): it also runs when the Reset button's dialog ("Return all options to their default
+// settings?") closes. On Yes it calls ResetValue on every row of the open page's own list
+// (m_OptionCategoryDict); the port's rows are copies that exist only in the list on screen, so the game never
+// reaches them. Their settings are put back here, before the game's loop; the page is drawn anew afterwards.
+// The open page is UIStateOption.m_TabSM's current state (eInnerState, a Nullable).
+int rt_hook_4564c70(Cpu *c) {
+    uint64_t self = c->x[0], mod = self ? LD64(self + 0x90) : 0, h = mod ? LD64(mod + 0x68) : 0, sm = self ? LD64(self + 0xe0) : 0;
+    if (!h || LD32(h + 0x14) != 2 || !sm) return 0;                // m_StateHandleInit.result: 2 = Yes
+    uint64_t st = LD64(sm + 0x10);
+    if (!(st & 0xff)) return 0;
+    init();
+    uint64_t sx[31];
+    memcpy(sx, c->x, sizeof sx);
+    int page = (int)(st >> 32);
+    if (page == 0) {                                               // General
+        set_dole(c, 0);
+    } else if (page == 2) {                                        // Controls
+        set_mouse(5);
+    } else if (page == 4) {                                        // Display
+        g_k = g_def_k; g_fps = 1; g_vsync = 1; g_smooth = 1;
+        save_cfg();
+        apply_display(c); apply_fps(c); apply_vsync(c);
+    }
+    for (int i = 0; i < g_ncopy; i++) {
+        uint64_t obj = rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_copy_h[i]);
+        if (obj) set_indices(obj, role_index(role_of(obj)));
+    }
+    rt_log("options: Reset on page %d: the port's rows are back at their defaults", page);
+    memcpy(c->x, sx, sizeof sx);
+    return 0;
+}
+
 // CanBeSelectedToDecrease() / CanBeSelectedToIncrease(): bounds of each row's picker.
 int rt_hook_4575d70(Cpu *c) { init(); c->x[0] = (int32_t)LD32(c->x[0] + 0x20) > 0; return 1; }
 int rt_hook_4575de0(Cpu *c) {
@@ -398,6 +441,7 @@ int rt_hook_455d030(Cpu *c) {
     t_in_list = 1; call_orig(c, F_CHECK_ACTIVE_LIST); t_in_list = 0;
     uint64_t list = c->x[0];
     if (c->eh_unwinding || !list || !g_sm_klass) return 1;
+    forget_copies(c);
     uint64_t items = LD64(list + 0x10);
     int n = (int32_t)LD32(list + 0x18), at = -1;
     for (int i = 0; items && i < n; i++) {
@@ -440,6 +484,7 @@ int rt_hook_455d030(Cpu *c) {
         memcpy((void *)(uintptr_t)(obj + 0x10), (const void *)(uintptr_t)(real + 0x10), 0x44);
         ST32(obj + 0x54, roles[r]);
         set_indices(obj, role_index(roles[r]));
+        track_copy(c, obj);
         rt_call(c, FN(F_LIST_ADD_WITH_RESIZE), 3, list, obj, add_mi);
         if (c->eh_unwinding) break;
         added++;

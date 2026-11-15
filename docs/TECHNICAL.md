@@ -523,9 +523,19 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   `pc_input.c`): 5 = the binding's length, 1 = twice as long in four steps, 10 = a tenth in five steps. The
   label is the game's own text. `BR_MOUSE_SENS=<n>` forces a value. Measured with the same scripted drag in a
   stage: 40 pixels do nothing at 1 and 5 and roll the ball into the goal at 10; 100 pixels give 0 mph at 1 and
-  5 mph at 5 after the same time. Seen: the row in both games, changing it, the value in the file. The page's
-  Reset left the row where it was (whether Reset reaches any of the port's added rows was not followed up).
+  5 mph at 5 after the same time. Seen: the row in both games, changing it, the value in the file.
   Not tried: a real mouse.
+* **Reset and the port's rows.** The Reset button of an Options page asks "Return all options to their default
+  settings?"; on Yes, `UIStateOption.activate` (which runs again when the dialog closes) calls `ResetValue` on
+  every row of the open page's own list (`m_OptionCategoryDict`). The port's rows are copies that exist only in
+  the list on screen, so the game never reached them: Frame Rate Limit, Smooth Motion and the others stayed as
+  they were. `rt_hook_4564c70` (`display_opt.c`) sees the confirmed dialog (`m_StateHandleInit.result` 2) at the
+  start of `activate`, puts the settings of the open page's added rows back (page = `m_TabSM`'s state: 0
+  General, 2 Controls, 3 Audio, 4 Display) and gives the rows on screen their picker positions (their GC
+  handles are kept per page build). Seen: Display (Frame Rate Limit 120 and Smooth Motion Off return to 60 and
+  On, and both step correctly afterwards), Controls (Mouse Sensitivity), and in the fork General (Dole
+  Collaboration, Spin Dash) and Audio (Imported Stage Music). Not tried: Reset from the pause menu's Options,
+  Resolution changed before a Reset, a Steam Deck.
 * **Lists: wheel, scroll bar, hover.** Every list is a `UnityEngine.UI.ScrollRect` whose content the game moves
   towards the focused item, in three functions (`UIPartViewBaseVirtualScrollRect.Update`,
   `UICalcContentPosModule_Base.OnUpdate`, `UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical.Update`). The
