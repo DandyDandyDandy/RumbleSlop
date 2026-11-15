@@ -995,9 +995,11 @@ Texture facts found the hard way:
   simulation). Not tested: over the internet, UPnP on a router that offers it, more than two real players, a
   guest leaving in the middle of a match.
 * Controllers: XInput pads and Sony pads only (no Switch Pro Controller or other pads unless something presents
-  them as XInput). Motion controls are answered as "lying flat": the Sony pads' sensor values are read
-  (`SonyPad.gyro`, `.accel`) but not given to `GetSixAxisSensorState`, because which way each axis must go for the
-  game's Accelerometer option can only be found with a pad in the hand.
+  them as XInput). Motion controls (the game's Accelerometer option) come from Sony pads only:
+  `GetSixAxisSensorState` fills just the acceleration, the only part the game reads
+  (`Wonder.AppInput+StateNpad::getButtonState`), from `SonyPad.accel` at 8192 per g, Switch axis = pad axis
+  `-x, +z, -y` (`BR_MOTION_MAP` overrides; `BR_MOTION_LOG=1` logs raw and converted values). XInput pads and an
+  unfocused window report lying flat (0, 0, -1). Felt right with a USB DualSense; DualShock 4 and Bluetooth not tried.
 * The game refuses Battle with 3 or 4 local players and online or local-wireless play with 2 local players (its
   own rule, unchanged).
 * Exclusive Full Screen has not been tried from the menu; the Reset button on the Display page ran without a

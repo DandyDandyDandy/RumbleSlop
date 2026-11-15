@@ -374,14 +374,56 @@ HOSTFN(_ZN2nn3hid23GetSixAxisSensorHandlesEPNS0_19SixAxisSensorHandleEiRKjNS_4ut
 }
 HOSTFN(_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
 HOSTFN(_ZN2nn3hid17StopSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
+// The game reads only the acceleration (Wonder.AppInput+StateNpad::getButtonState, for its Accelerometer option), in
+// g on the Switch's axes: x right, y forward (toward the triggers), z up out of the face; lying flat gives (0, 0, -1).
+// A Sony pad reports about 8192 per g with x right, y out of the face, z toward the player (SDL, Linux
+// hid-playstation). Each Switch axis takes one pad axis with a sign: BR_MOTION_MAP="-x,+z,-y" (the default).
+// Pads without sensors (XInput) and a window without the focus stay flat. BR_MOTION_LOG=1 logs the raw and the
+// converted values four times a second.
+static int g_mmap[3] = {-1, +3, -2};                               // +-(1 x, 2 y, 3 z) of the pad for Switch x, y, z
+static void motion_map_init(void) {
+    static int done;
+    if (done) return;
+    done = 1;
+    const char *e = getenv("BR_MOTION_MAP");
+    int m[3], n = 0;
+    for (const char *p = e; p && *p && n < 3; p++) {
+        int sign = 1;
+        if (*p == ',' || *p == ' ') continue;
+        if (*p == '-' || *p == '+') { sign = *p == '-' ? -1 : 1; p++; }
+        if (*p < 'x' || *p > 'z') { n = -1; break; }
+        m[n++] = sign * (*p - 'x' + 1);
+    }
+    if (n == 3) memcpy(g_mmap, m, sizeof m);
+    else if (e) rt_log("input: BR_MOTION_MAP \"%s\" not understood, using -x,+z,-y", e);
+}
+static int motion_log(void) { static int v = -1; if (v < 0) { const char *e = getenv("BR_MOTION_LOG"); v = e && *e && *e != '0'; } return v; }
 HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAxisSensorHandleE) {
     uint8_t *s = PTR(0);
-    float one = 1.0f, g = -1.0f;
+    float one = 1.0f, a[3] = {0, 0, -1.0f};                        // lying flat
+    uint32_t id = (LD32(X(1)) >> 24) & (MAX_PADS - 1);
+    SonyPad sp;
+    motion_map_init();
     memset(s, 0, 0x60);
     ST64(X(0) + 8, (uint64_t)InterlockedIncrement64(&g_sampling));
-    memcpy(s + 0x10 + 8, &g, 4);                                   // acceleration (0, 0, -1): lying flat
+    int sony = id < (uint32_t)g_ndev && g_dev[id].xinput == -1 && rt_sony_pad(g_dev[id].sony, &sp) && sp.has_motion;
+    if (sony && focused())
+        for (int i = 0; i < 3; i++) {
+            int k = g_mmap[i] < 0 ? -g_mmap[i] : g_mmap[i];
+            a[i] = (g_mmap[i] < 0 ? -1.0f : 1.0f) * sp.accel[k - 1] / 8192.0f;
+        }
+    memcpy(s + 0x10, a, 12);
     memcpy(s + 0x34, &one, 4); memcpy(s + 0x44, &one, 4); memcpy(s + 0x54, &one, 4);   // identity direction
     ST32(X(0) + 0x58, 1);                                          // IsConnected
+    static uint64_t next[MAX_PADS];
+    uint64_t now = GetTickCount64();
+    if (motion_log() && now >= next[id]) {
+        next[id] = now + 250;
+        if (sony) rt_log("motion: pad %u raw accel %6d %6d %6d gyro %6d %6d %6d -> game %+.2f %+.2f %+.2f%s", id,
+                         sp.accel[0], sp.accel[1], sp.accel[2], sp.gyro[0], sp.gyro[1], sp.gyro[2], a[0], a[1], a[2],
+                         focused() ? "" : " (no focus: flat)");
+        else rt_log("motion: pad %u has no motion sensor, flat", id);
+    }
 }
 
 // Rumble. A pad has two motors (XInput: left heavy, right light; Sony pads the same). Two sources feed them and the
