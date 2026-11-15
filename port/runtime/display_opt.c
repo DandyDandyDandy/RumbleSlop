@@ -30,6 +30,9 @@
 // Object layout used (from the lifted code): item +0x20 picker index, +0x28 its copy, +0x30 option record,
 // +0x38 item table, +0x40 save element (value at +0x10), +0x48 List<int> of mode values, +0x50 initial index.
 // List<T>: items array +0x10 (elements from +0x20, capacity +0x18), size +0x18, version +0x1c.
+//
+// Every option the port adds must (docs/TECHNICAL.md, "Rule for every option the port adds"): go back to its
+// default on the page's Reset, and show its change at once, also when changed from the pause menu during a stage.
 #include <windows.h>
 #include <math.h>
 #include <stdio.h>

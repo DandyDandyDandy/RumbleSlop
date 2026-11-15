@@ -736,6 +736,20 @@ page as it is built.
 When adding more rows or options, read the file's header comment first: it lists the object layouts the hooks
 rely on.
 
+**Rule for every option the port adds** (a row in Options, the pause menu's Options or a multiplayer settings
+screen):
+
+* **Reset puts it back.** The page's Reset button ("Return all options to their default settings?", Yes) must
+  set the option to its default, save that, and show the default in the row. The port's rows take part through
+  the `ResetValue` hook and the Reset pass in `UIStateOption.activate` in `display_opt.c`: a new row is added
+  there, not left out.
+* **A change shows at once, also in a stage.** Changed from the pause menu during play, the running game must
+  follow on return, without a restart or the next stage: whatever the option changes on screen or in play is
+  updated in place (example: Dole Collaboration's `dole_tick` above). Writing a flag that only the next load
+  reads is not enough.
+
+Test both for each new option: Reset on its page, and a change from the pause menu in a stage.
+
 Quality levels. The game names its quality level `<platform><pattern>` and still says "Switch", so it selects the
 console's levels: 1 `SwitchDefault` in single-player stages, 7 / 8 in the menus, and cut-down ones elsewhere:
 2 (online Adventure), 3 (two-player split screen), 4 (three or four players), 5 (Battle), 6 (split-screen Battle).
