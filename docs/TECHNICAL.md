@@ -733,7 +733,7 @@ folder shared with a desktop PC keeps both machines' choices. Changes made in Op
 not change the screen mode there. When the Display page is built the game's saved windowed / full screen value is
 made to agree with the port's mode, so the Screen Mode row's own text is right.
 
-Dole Collaboration (Options > General, last row; Off by default, `dole=` in `port_display.txt`). Game 2.20 ended
+Dole Collaboration (Options > General, after Show Tips; Off by default, `dole=` in `port_display.txt`). Game 2.20 ended
 the collaboration: its look (the Dole logo under the start of a stage, bananas with the Dole sticker, the Dole
 deck chairs and signs of the main menu) is shown only while a selected character wears a Dole item. The game keeps
 that in one flag, `RuntimeParam.mainGame.isDoleCollabActive`, set from
@@ -746,9 +746,22 @@ yet), the bananas by `MgBananaManager.Load` with the new model and then, per ban
 (`m_RotTransform`) replaced by a copy of the new prefab's, with `m_Renderers` / `m_Materials` rebuilt as
 `MgBanana.Awake` does; the old prefabs are released afterwards. The game's own way (the character change mid-stage)
 destroys and creates the bananas, which would put back the ones already taken; this keeps each banana's state.
-Log lines `dole: ...`. The row is one more copy of the Screen Mode
+Log lines `bananas: ...`. The row is one more copy of the Screen Mode
 row object, appended to the page that has the Show Tips row. `BR_OPT_LOG=1` logs the row classes of every Options
 page as it is built.
+
+Bananas (Options > General, under Dole Collaboration; Auto by default, `bananas=` in `port_display.txt` = the
+model id, 0 Auto). Which model a stage's collectibles use. The game decides in
+`MgBananaManager.getCurrentBananaModelId`: each player's character has a banana model (`Def.Chara` BananaModel;
+`Banana.Model.eID` 1 banana, 3 rings for the Sonic characters, 5 spray cans for Beat, 6 coins for Axel, 7 notes for
+Miku, 8 trains for Godzilla, 9 pizza for the Crewmate, 11 feathers for Red, 12 Pac-Dots for PAC-MAN); when all players
+agree that model, when they differ the plain banana; the plain banana becomes the Dole one (4) while the Dole look is
+on. `MgBananaManager.load` loads that model's three prefabs (single, bunch, golden), pick-up sound and effects. The
+hook on `getCurrentBananaModelId` keeps the game's answer for Auto, gives the plain (or Dole) banana for Bananas and
+the chosen model for the others; the Battle trick item (model 2, Jewel, while `MainGameParam` +0x40 is set) is left
+alone. A hook on `load` notes the model last loaded; a change in a stage reloads and swaps the bananas in place as
+for Dole Collaboration above (`dole_tick` compares the wanted model with the loaded one). All models are in the
+game's data, add-on packs or not.
 
 When adding more rows or options, read the file's header comment first: it lists the object layouts the hooks
 rely on.

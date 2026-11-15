@@ -40,7 +40,7 @@
 #include <string.h>
 #include "rt.h"
 
-enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_DOLE = 6, ROLE_MOUSE = 8 };
+enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_DOLE = 6, ROLE_MOUSE = 8, ROLE_BANANA = 9 };
 enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define FN(off) (GUEST_BASE + (off))
 #define F_GET_VALUE_STR 0x4575d40ull
@@ -64,7 +64,12 @@ static const int UNITY_MODE[M_COUNT] = {3 /* Windowed */, 1 /* FullScreenWindow 
 static const int FPS[] = {30, 60, 120, 144, -1};
 #define NFPS ((int)(sizeof FPS / sizeof *FPS))
 
-static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_dole, g_deck, g_mouse = 5;
+static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_dole, g_deck, g_mouse = 5, g_banana;
+// Options > General > Bananas (see "Bananas" below): Auto, then the forced models (Wonder.DB.Banana.Model.eID).
+static const struct { int id; const char *name; } BANANA_CHOICE[] = {
+    {0, "Auto"}, {1, "Bananas"}, {3, "Rings"}, {5, "Spray Cans"}, {6, "Coins"}, {7, "Notes"}, {8, "Trains"},
+    {9, "Pizza"}, {11, "Feathers"}, {12, "Pac-Dots"}};
+#define NBANANA ((int)(sizeof BANANA_CHOICE / sizeof *BANANA_CHOICE))
 static uint64_t g_sm_klass;
 static uint32_t g_pattern_h;                // GC handle of the game's Screen Mode row object
 #define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
@@ -125,6 +130,10 @@ static BOOL CALLBACK init_once(PINIT_ONCE o, PVOID p, PVOID *ctx) {
         else if (sscanf(line, "vsync=%d", &v) == 1) g_vsync = v != 0;
         else if (sscanf(line, "dole=%d", &v) == 1) g_dole = v != 0;
         else if (sscanf(line, "mouse=%d", &v) == 1 && v >= 1 && v <= 10) g_mouse = v;
+        else if (sscanf(line, "bananas=%d", &v) == 1) {
+            for (int i = 0; i < NBANANA; i++)
+                if (BANANA_CHOICE[i].id == v) g_banana = i;
+        }
         else if (sscanf(line, "fps=%d", &v) == 1)
             for (int i = 0; i < NFPS; i++)
                 if (FPS[i] == v) g_fps = i;
@@ -142,7 +151,7 @@ static void save_cfg(void) {
     char path[MAX_PATH + 32];
     cfg_path(path, sizeof path);
     FILE *f = fopen(path, "w");
-    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\ndole=%d\nmouse=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_dole, g_mouse); fclose(f); }
+    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\ndole=%d\nmouse=%d\nbananas=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_dole, g_mouse, BANANA_CHOICE[g_banana].id); fclose(f); }
 }
 
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
@@ -247,8 +256,8 @@ static int game_index(uint64_t item, int want_window) {
         if (((int32_t)LD32(items + 0x20 + 4ull * i) == MODE_VALUE_WINDOW) == !!want_window) return i;
     return want_window ? 1 : 0;
 }
-static int role_index(int role) { return role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
-static int role_count(int role) { return role == ROLE_MOUSE ? 10 : role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
+static int role_index(int role) { return role == ROLE_BANANA ? g_banana : role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
+static int role_count(int role) { return role == ROLE_BANANA ? NBANANA : role == ROLE_MOUSE ? 10 : role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
 // The added rows of the page on screen (GC handles), so that Reset can put their picker positions back.
 static uint32_t g_copy_h[12];
@@ -295,15 +304,51 @@ static void append_copy(Cpu *c, uint64_t list, uint64_t pattern, int role) {
 // The old prefabs are released after that.
 #define F_GET_MAIN_GAME 0x43db8d0ull        // Wonder.RuntimeParam::get_mainGame (static): null before the object exists
 #define MAINGAME_DOLE_ACTIVE 0x42
-static int g_dole_pending;
+static int g_dole_pending, g_banana_pending;
 static void set_dole(Cpu *c, int on) {
     g_dole = on != 0;
     save_cfg();
     uint64_t mg = rt_call(c, FN(F_GET_MAIN_GAME), 1, 0ull);
-    if (mg && !c->eh_unwinding) { ST8(mg + MAINGAME_DOLE_ACTIVE, g_dole); g_dole_pending = 1; }
+    if (mg && !c->eh_unwinding) { ST8(mg + MAINGAME_DOLE_ACTIVE, g_dole); g_dole_pending = g_banana_pending = 1; }
 }
 int rt_hook_4444bc0(Cpu *c) { init(); c->x[0] = (uint64_t)g_dole; return 1; }
 int rt_hook_443b3b0(Cpu *c) { init(); c->x[0] = (uint64_t)g_dole; return 1; }
+
+// ------------------------------------------------------------------------------------------------- Bananas
+// Which model a stage's collectibles use. The game decides in MgBananaManager.getCurrentBananaModelId: each player's
+// character has a banana model (Def.Chara BananaModel: rings for the SEGA characters, notes for Miku, feathers for
+// Red, ...); when all players agree that one, when they differ the plain banana; the plain banana becomes the Dole
+// banana while the Dole look is on. MgBananaManager.load takes that id to load the three prefabs (single, bunch,
+// golden), the pick-up sound and effects. The row Options > General > Bananas (`bananas=` in port_display.txt, the
+// model id; 0 = Auto) is Auto by default = the game's choice; Bananas = the plain (or Dole) banana for every
+// character; the other values = that model for everyone. The game's Battle trick item (its Jewel model while
+// MainGameParam +0x40 is set) is left as it is. A change during a stage swaps the models at once (dole_tick).
+#define MAINGAME_TRICK_ACTIVE 0x40
+static __thread int t_in_model;
+static int g_next_is_load, g_loaded_model;   // the model id the prefabs were last loaded for (0: none yet)
+static void set_banana(int idx) {
+    g_banana = idx < 0 ? 0 : idx >= NBANANA ? NBANANA - 1 : idx;
+    save_cfg();
+    g_banana_pending = 1;
+}
+int rt_hook_4296600(Cpu *c) {      // Wonder.MgBananaManager::getCurrentBananaModelId (instance)
+    if (t_in_model) return 0;
+    init();
+    int load = g_next_is_load;
+    g_next_is_load = 0;
+    t_in_model = 1; call_orig(c, 0x4296600ull); t_in_model = 0;
+    if (c->eh_unwinding) return 1;
+    int id = (int)(uint32_t)c->x[0], force = BANANA_CHOICE[g_banana].id;
+    if (force && id) {
+        uint64_t mg = rt_call(c, FN(F_GET_MAIN_GAME), 1, 0ull);
+        if (mg && !LD8(mg + MAINGAME_TRICK_ACTIVE)) id = force == BANANA_CHOICE[1].id && LD8(mg + MAINGAME_DOLE_ACTIVE) ? 4 : force;
+    }
+    c->x[0] = (uint64_t)(uint32_t)id;
+    if (load) g_loaded_model = id;
+    return 1;
+}
+// Wonder.MgBananaManager::load (instance): its first call is getCurrentBananaModelId, whose answer is the model loaded.
+int rt_hook_4295bd0(Cpu *c) { (void)c; g_next_is_load = 1; return 0; }
 
 #define F_MAIN_GAME_STAGE 0x42cf030ull      // Wonder.MainGame::get_mainGameStage (static): null outside a stage
 #define F_SETUP_DOLE 0x4324310ull           // Wonder.MainGameStage::SetupDole()
@@ -356,15 +401,6 @@ static uint64_t banana_mgr(Cpu *c) {
     return rt_call(c, FN(F_SINGLETON_GET_), 1, LD64(LD64(FN(SLOT_BANANA_MGR_GET))));
 }
 static int obj_alive(Cpu *c, uint64_t o) { return o && (rt_call(c, FN(F_OBJ_ALIVE_), 2, o, 0ull) & 1); }
-static int name_has_dole(Cpu *c, uint64_t o) {
-    uint64_t s = o ? rt_call(c, FN(F_OBJ_NAME_), 2, o, 0ull) : 0;
-    if (!s) return 0;
-    int n = (int)LD32(s + 0x10);
-    const uint16_t *p = (const uint16_t *)(uintptr_t)(s + 0x14);
-    for (int i = 0; i + 4 <= n; i++)
-        if (p[i] == 'D' && p[i + 1] == 'o' && p[i + 2] == 'l' && p[i + 3] == 'e') return 1;
-    return 0;
-}
 static void set_ref(Cpu *c, uint64_t slot, uint64_t v) { ST64(slot, v); rt_call(c, FN(F_WRITE_BARRIER_), 2, slot, v); }
 static void release_old_loaders(Cpu *c) {
     uint64_t mi = LD64(LD64(FN(SLOT_LOADER_UNLOAD)));
@@ -433,7 +469,7 @@ static void swap_all_bananas(Cpu *c, uint64_t mgr) {
         swap_banana_visual(c, b, prefab[kind], mi_renderers, mi_add_range);
         done++;
     }
-    rt_log("dole: %d of %d bananas now %s", done, n, g_dole ? "Dole" : "plain");
+    rt_log("bananas: %d of %d bananas now model %d", done, n, g_loaded_model);
 }
 
 static void dole_tick(Cpu *c) {
@@ -451,24 +487,24 @@ static void dole_tick(Cpu *c) {
         release_old_loaders(c);
         return;
     }
-    if (!g_dole_pending) return;
-    g_dole_pending = 0;
+    if (!g_dole_pending && !g_banana_pending) return;
+    int dole = g_dole_pending;
+    g_dole_pending = g_banana_pending = 0;
     uint64_t stage = rt_call(c, FN(F_MAIN_GAME_STAGE), 1, 0ull);
     if (!stage || c->eh_unwinding) return;
-    rt_call(c, FN(F_SETUP_DOLE), 2, stage, 0ull);
+    if (dole) rt_call(c, FN(F_SETUP_DOLE), 2, stage, 0ull);
     uint64_t mgr = banana_mgr(c);
     if (!mgr) return;
+    // the model the game would load now (the row and the Dole look applied), against the one loaded
     int want = (int)rt_call(c, FN(F_BANANA_MODEL_ID), 1, 0ull);
-    if (want != BANANA_MODEL_PLAIN && want != BANANA_MODEL_DOLE) return;   // a character with bananas of its own
-    uint64_t cur = rt_call(c, FN(F_BANANA_PREFAB), 1, 0ull);
-    if (!cur || name_has_dole(c, cur) == (want == BANANA_MODEL_DOLE)) return;
+    if (!want || !g_loaded_model || want == g_loaded_model || !rt_call(c, FN(F_BANANA_PREFAB), 1, 0ull)) return;
     for (int i = 0; i < 3; i++) {
         uint64_t l = LD64(mgr + MGR_LOADERS + 8ull * i);
         g_old_loader_h[i] = l ? (uint32_t)rt_call(c, FN(F_GCHANDLE_NEW), 2, l, 0ull) : 0;
     }
     rt_call(c, FN(F_BANANA_LOAD), 1, 0ull);
     g_banana_wait = 1;
-    rt_log("dole: loading the %s banana model for a stage in progress", want == BANANA_MODEL_DOLE ? "Dole" : "plain");
+    rt_log("bananas: loading model %d for a stage in progress", want);
 }
 
 
@@ -554,6 +590,7 @@ int rt_hook_4575bf0(Cpu *c) {
     if (role == ROLE_FPS) { g_fps = 1; save_cfg(); apply_fps(c); ST32(item + 0x50, g_fps); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = 1; save_cfg(); apply_vsync(c); ST32(item + 0x50, g_vsync); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, 0); ST32(item + 0x50, 0); return 1; }
+    if (role == ROLE_BANANA) { set_banana(0); ST32(item + 0x50, 0); return 1; }
     if (role == ROLE_MOUSE) { set_mouse(5); ST32(item + 0x50, 4); return 1; }
     t_in_init = 1; call_orig(c, F_SET_INIT_INDEX); t_in_init = 0;
     if (c->eh_unwinding) return 1;
@@ -584,6 +621,7 @@ int rt_hook_4564c70(Cpu *c) {
     int page = (int)(st >> 32);
     if (page == 0) {                                               // General
         set_dole(c, 0);
+        set_banana(0);
     } else if (page == 2) {                                        // Controls
         set_mouse(5);
     } else if (page == 4) {                                        // Display
@@ -621,6 +659,7 @@ int rt_hook_4575ea0(Cpu *c) {
     if (role == ROLE_FPS) { g_fps = idx; save_cfg(); apply_fps(c); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = idx; save_cfg(); apply_vsync(c); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, idx); return 1; }
+    if (role == ROLE_BANANA) { set_banana(idx); return 1; }
     if (role == ROLE_MOUSE) { set_mouse(idx + 1); return 1; }
     g_mode = idx;
     save_cfg();
@@ -651,6 +690,8 @@ int rt_hook_4575d40(Cpu *c) {
         c->x[0] = new_str(c, s);
     } else if (role == ROLE_DOLE) {
         c->x[0] = new_str(c, g_dole ? "On" : "Off");
+    } else if (role == ROLE_BANANA) {
+        c->x[0] = new_str(c, BANANA_CHOICE[g_banana].name);
     } else if (g_mode == M_BORDERLESS) {
         c->x[0] = new_str(c, "Borderless");
     } else {      // the game's localized "Windowed" / "Full Screen"
@@ -665,6 +706,7 @@ int rt_hook_4534720(Cpu *c) {
     if (!item || !g_sm_klass || LD64(item) != g_sm_klass) return 0;
     int role = role_of(item);
     if (role == ROLE_MOUSE) { c->x[0] = new_str(c, "Mouse Sensitivity"); return 1; }
+    if (role == ROLE_BANANA) { c->x[0] = new_str(c, "Bananas"); return 1; }
     if (role != ROLE_DOLE && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
     c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_DOLE ? "Dole Collaboration" : "VSync");
     return 1;
@@ -686,8 +728,8 @@ int rt_hook_455d030(Cpu *c) {
         if (it && LD64(it) == g_sm_klass && role_of(it) == ROLE_MODE) at = i;
     }
     if (at < 0) {
-        // Not the Display page. The General page (told by a row of its own) gets the Dole Collaboration row as its
-        // last one. BR_OPT_LOG=1 logs the row classes of every page built.
+        // Not the Display page. The General page (told by a row of its own) gets the Dole Collaboration and Bananas
+        // rows as its last ones. BR_OPT_LOG=1 logs the row classes of every page built.
         static int opt_log = -1;
         if (opt_log < 0) opt_log = getenv("BR_OPT_LOG") != NULL;
         int gameplay = 0, controls = 0;
@@ -700,6 +742,7 @@ int rt_hook_455d030(Cpu *c) {
         }
         uint64_t dole_pattern = gameplay && g_pattern_h ? rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_pattern_h) : 0;
         if (dole_pattern) append_copy(c, list, dole_pattern, ROLE_DOLE);
+        if (dole_pattern) append_copy(c, list, dole_pattern, ROLE_BANANA);
         else if (gameplay) rt_log("options: no Screen Mode row seen yet, the Dole Collaboration row is left out");
         // The Controls page (told by its dead zone rows) gets the Mouse Sensitivity row as its last one.
         uint64_t mouse_pattern = controls && g_pattern_h ? rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_pattern_h) : 0;

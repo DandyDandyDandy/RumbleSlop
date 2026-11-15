@@ -13,6 +13,8 @@
 455d030   Wonder.UI.Option.UIOptionScrollModule::CheckActiveChoicesItemList
 4444bc0   Wonder.Util+CharaCustomize::IsExistDoleItemSelectedChara   (the Dole Collaboration row decides)
 443b3b0   Wonder.Util+CharaCustomize::IsExistDoleItemCoordinate
+4296600   Wonder.MgBananaManager::getCurrentBananaModelId   (the Bananas row decides)
+4295bd0   Wonder.MgBananaManager::load
 3ea81e0   UnityEngine.Application::set_targetFrameRate
 3ec1de0   UnityEngine.QualitySettings::set_vSyncCount
 43d58c0   Wonder.MultiPlatformManager::LateUpdate   (BR_FPS_LOG measurement)
