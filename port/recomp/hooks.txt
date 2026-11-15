@@ -124,6 +124,7 @@
 4400890   Wonder.ShopItemParamCharacter::GetItem(Def.Chara.eID, Def.Chara.Table)
 43fa930   Wonder.SaveUserParam+ShopItemParam::OnCreate
 43faae0   Wonder.SaveUserParam+ShopItemParam::OnAfterLoad
+47cdba0   Wonder.DB.Def.Chara.Record::IsCustomize   (Style menu for the add-on characters, chara_style.c)
 45220f0   Wonder.UI.UIPartViewBaseVirtualScrollRect::Update   (lists do not follow the focus while the mouse is used, pc_input.c)
 45594c0   Wonder.UI.Scroll.UICalcContentPosModule_Base::OnUpdate
 455a260   Wonder.UI.Scroll.UIPartView_ScrollRect_ChoicesOp_Duplicatoin_Vertical::Update

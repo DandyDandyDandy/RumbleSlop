@@ -678,6 +678,18 @@ The paid add-on characters (`Def.Chara.eID` 13..18) are not touched: they come f
 content files (see above). That these six only need their unlock rule changed was found by iswimfly's mod
 "Delisted Character Fix"; the port takes a different route and uses nothing of it.
 
+### Style menu for the add-on characters (`chara_style.c`)
+
+Whether a character has a Style entry is the `IsCustomize` flag of its row in the character table `Def_Chara`,
+read only through `Wonder.DB.Def.Chara.Record::IsCustomize` (`47cdba0`). The save makes a
+`CharaCustomizeCharacter` per character with the flag (`SaveUserParam.CharaCustomizeParam.GetCharacterParam`,
+on demand, so old saves get it too), and the character select screen shows the Style button only when that entry
+exists. The table has the flag off for the SEGA characters and the five collaboration characters
+(`Def.Chara.eID` 13..23), so they had no Style button. The hook answers yes for them. `IsCustomizeFull` stays as
+the table has it (off for them, as for Dr. Bad-Boon): they get his reduced Style menu, ball and ball effect, with the
+outfit tabs greyed out. `BR_STYLE_LOG=1` logs each character's two table flags once (the five collaboration
+characters: both 0).
+
 ### Entry hooks
 
 `port\recomp\hooks.txt` lists NSO offsets. The generator makes each listed function start with
