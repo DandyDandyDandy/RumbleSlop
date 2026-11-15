@@ -44,7 +44,8 @@ enum { P = 1, R = 2, S = 4, NCOMP = 3 };
 typedef struct {
     uint32_t step;                          // the fixed step that wrote this part last
     uint8_t have_cur, ovr, snap, same;
-    float prev[4], cur[4];
+    uint8_t have2, snap2, dirty;            // prev2 valid; prev2 -> prev was a jump; a blend was written this frame
+    float prev2[4], prev[4], cur[4];        // before the step before, before the last step, after it
 } Comp;
 typedef struct { uint64_t obj; uint32_t handle; uint8_t both; Comp c[NCOMP]; } Entry;
 
@@ -149,14 +150,36 @@ static void restore(void) {
         if (!alive(e)) continue;
         for (int j = 0; j < NCOMP; j++) {
             Comp *m = &e->c[j];
-            if (m->step == g_step && m->have_cur && !m->ovr && !m->snap && !m->same) eng_set(e->obj, j, m->cur);
+            if (m->step == g_step && m->dirty && !m->ovr) eng_set(e->obj, j, m->cur);
+            m->dirty = 0;
         }
     }
 }
+// The moment a frame shows. Time.time is when the frame began, and that is uneven when the display paces the frames
+// (VSync): the frame that runs a fixed step takes longer and the frames queued behind it start early, so at 240 Hz
+// frames began 3.3, 8.1, 2.2, 2.2 ms apart while the display shows them 4.2 ms apart (measured); blending by
+// Time.time puts that 60 Hz rhythm back into the motion. The render clock advances by the average frame time each
+// frame and is pulled gently towards Time.time minus a lead of a quarter step, so it never runs ahead of the
+// simulation. Behind the last step's start it blends the step before (prev2 -> prev).
+static double render_time(double t, double dt) {
+    static double r = -1, last = -1, avg;
+    double lead = 0.25 * dt, iv = t - last;
+    last = t;
+    if (r < 0 || !(iv > 0) || iv > 0.1) {               // first frame, pause (time stands), a hitch: start again
+        avg = iv > 0 && iv < 0.1 ? iv : dt;
+        return r = t - lead;
+    }
+    avg += (iv - avg) * 0.05;
+    r += avg;
+    r += (t - lead - r) * 0.1;
+    if (r > t) r = t;
+    if (r < t - dt) r = t - dt;
+    return r;
+}
 static void apply(void) {
     double t = o_time_d ? o_time_d() : (double)o_time_f(), ft = o_fixed_d ? o_fixed_d() : (double)o_fixed_f(), dt = (double)o_fixed_dt();
-    float a = dt > 0 ? (float)((t - ft) / dt) : 1.0f;
-    if (!(a >= 0)) a = 0;
+    float a = dt > 0 ? (float)((render_time(t, dt) - ft) / dt) : 1.0f;
+    if (!(a >= -1)) a = -1;
     if (a > 1) a = 1;
     int dead = 0;
     for (int i = 0; i < g_n; i++) {
@@ -178,10 +201,19 @@ static void apply(void) {
         if (snap) for (int j = 0; j < NCOMP; j++) if (e->c[j].step == g_step) e->c[j].snap = 1;   // the whole transform jumps
         for (int j = 0; j < NCOMP; j++) {
             Comp *m = &e->c[j];
-            if (m->step != g_step || m->ovr || m->snap || m->same) continue;
+            if (m->step != g_step || m->ovr || m->snap) continue;
             float v[4];
-            blend(j, m->prev, m->cur, a, v);
+            if (a >= 0) {
+                if (m->same) continue;
+                blend(j, m->prev, m->cur, a, v);
+            } else if (m->have2 && !m->snap2) {
+                blend(j, m->prev2, m->prev, a + 1, v);
+            } else {
+                if (m->same) continue;
+                memcpy(v, m->prev, sizeof v);
+            }
             eng_set(e->obj, j, v);
+            m->dirty = 1;
             g_stat_blend++;
         }
     }
@@ -222,10 +254,19 @@ static void wrote(void *self, int mask, int ph) {
     for (int j = 0; j < NCOMP; j++) {
         Comp *m = &e->c[j];
         if (!(mask >> j & 1) || m->step == g_step) continue;
-        if (m->step + 1 == g_step && m->have_cur) memcpy(m->prev, m->cur, sizeof m->prev);   // the value after the last step
-        else eng_get(obj, j, m->prev);
+        if (m->step + 1 == g_step && m->have_cur && !m->ovr) {    // written in the step before too: keep its start
+            memcpy(m->prev2, m->prev, sizeof m->prev);
+            memcpy(m->prev, m->cur, sizeof m->prev);                // the value after the last step
+            m->have2 = 1;
+            m->snap2 = m->snap;
+        } else {
+            eng_get(obj, j, m->prev);
+            memcpy(m->prev2, m->prev, sizeof m->prev);             // it stood still before this step
+            m->have2 = 1;
+            m->snap2 = 0;
+        }
         m->step = g_step;
-        m->have_cur = m->ovr = m->snap = m->same = 0;
+        m->have_cur = m->ovr = m->snap = m->same = m->dirty = 0;
     }
 }
 

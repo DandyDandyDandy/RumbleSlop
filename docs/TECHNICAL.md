@@ -130,7 +130,7 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 | `BR_PLAYER_ARGS` | Player arguments for `run_player.sh`, e.g. `-force-vulkan`. |
 | `BR_INPUT_SCRIPT=<file>` | Scripted pad input, lines `<ms> <BUTTON> [hold ms]` (A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN). Buttons only, no sticks. |
 | `BR_STATUS=<s>` | Periodic counters (audio, pad reads, collections). |
-| `BR_FPS_LOG=1` | Every 2 s (`BR_FPS_LOG=<seconds>`: that often): measured frame rate, engine clock rate, physics step rate, engine target/vsync values, in how many frames a camera moved, and how many camera steps were less than half or more than twice the step before ("uneven"). `BR_CAM_TRACE=1` adds a line per frame and camera: step length and the wall time since the frame before in ms. |
+| `BR_FPS_LOG=1` | Every 2 s (`BR_FPS_LOG=<seconds>`: that often): measured frame rate, engine clock rate, physics step rate, engine target/vsync values, in how many frames a camera moved, and how many camera steps were less than half or more than twice the step before ("uneven"); the same for the first player's ball, monkey and the monkey's offset from camera 0. `BR_CAM_TRACE=1` adds a line per frame and camera (step length, wall time since the frame before in ms) and per frame for the ball (step, `Time.time`, `Time.fixedTime`). |
 | `BR_INTERP=0\|1`, `BR_INTERP_LOG=1` | Smooth motion (see that section) forced off / on whatever the settings say; every 2 s the number of tracked transforms and blended parts, and the transforms written in both phases of a frame. |
 | `BR_CHARA_DUMP=<part>`, `BR_CHARA_DUMP_EXIT=1` | Renderer/material dump of spawned characters (see below). |
 | `BR_DLC_LOG=1` | Logs the game's own verdict for each add-on content pack (index, name, installed or not), once per pack. |
@@ -584,12 +584,12 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
 * **Reset and the port's rows.** The Reset button of an Options page asks "Return all options to their default
   settings?"; on Yes, `UIStateOption.activate` (which runs again when the dialog closes) calls `ResetValue` on
   every row of the open page's own list (`m_OptionCategoryDict`). The port's rows are copies that exist only in
-  the list on screen, so the game never reached them: Frame Rate Limit, Smooth Motion and the others stayed as
+  the list on screen, so the game never reached them: Frame Rate Limit, VSync and the others stayed as
   they were. `rt_hook_4564c70` (`display_opt.c`) sees the confirmed dialog (`m_StateHandleInit.result` 2) at the
   start of `activate`, puts the settings of the open page's added rows back (page = `m_TabSM`'s state: 0
   General, 2 Controls, 3 Audio, 4 Display) and gives the rows on screen their picker positions (their GC
-  handles are kept per page build). Seen: Display (Frame Rate Limit 120 and Smooth Motion Off return to 60 and
-  On, and both step correctly afterwards), Controls (Mouse Sensitivity), and in the fork General (Dole
+  handles are kept per page build). Seen: Display (Frame Rate Limit 120 and the then Smooth Motion row Off return to
+  60 and On, and both step correctly afterwards), Controls (Mouse Sensitivity), and in the fork General (Dole
   Collaboration, Spin Dash) and Audio (Imported Stage Music). Not tried: Reset from the pause menu's Options,
   Resolution changed before a Reset, a Steam Deck.
 * **Lists: wheel, scroll bar, hover.** Every list is a `UnityEngine.UI.ScrollRect` whose content the game moves
@@ -682,11 +682,20 @@ function's address. Managed methods are called from host code with `rt_call(c, a
 ### Display options (`display_opt.c`)
 
 The game's own Options > Display page is extended with Screen Mode (Windowed / Borderless / Full Screen),
-Resolution, Frame Rate Limit, VSync and Smooth Motion. The added rows are copies of the game's Screen Mode row object,
+Resolution, Frame Rate Limit and VSync. The added rows are copies of the game's Screen Mode row object,
 inserted after it when the page's row list is built; each copy carries a role number in a padding word and the
 hooks answer by role. Settings are stored in `port_display.txt`. The game pins `targetFrameRate` to 60 and
 resets `vSyncCount` with every quality change, so both setters are hooked to keep the port's values. Game time
 and the 60 Hz physics step were measured to be independent of frame rate.
+
+Frame Rate Limit with VSync On (`apply_rate`): Unity ignores `targetFrameRate` while `vSyncCount` > 0, so until
+2026-11-15 the limit did nothing with VSync on (measured: limit 144 on a 240 Hz display ran at 239 fps). Now VSync
+is used only when the limit is Unlimited or at least the refresh rate; a lower limit runs the engine's frame
+limiter with VSync off (a display without variable refresh may tear then). `vSyncCount` 2 (every second refresh)
+is not usable: the game reads it back and switches its logic to 30 Hz (measured: 120 on 240 Hz gave 30 physics
+steps a second). Log line `display: frame rate limit ..., display ... Hz -> vSyncCount ..., targetFrameRate ...`.
+Seen: the limit changed in Adventure's pause menu (Help Menu > Options > Display) applies at once (60 -> 144
+measured in play after resuming, ball moving in every frame).
 
 The Resolution row lists the 16:9 sizes that fit the desktop, on a 16:10 desktop the 16:10 sizes too, and the
 desktop size itself.
@@ -778,9 +787,16 @@ itself is untouched, so physics, replays and online play are as before.
 * **Jumps.** More than 6 units in one step (restart, wormhole, camera cut) is shown at once.
 * **Lifetime.** Tracked Transform objects are held by strong GC handles (host memory is not scanned); an entry
   goes when the object is destroyed or was not written for two seconds. A stage tracks 10 to 50 transforms.
-* **When.** Options > Display > Smooth Motion (On by default, `smooth=` in `port_display.txt`), and only while the
-  picture can be drawn more than 60 times a second: VSync on a display above 60 Hz, or VSync off with a limit
-  above 60 (`rt_display_above_60`). At 60 and below a blend would only add its delay.
+* **When.** Whenever the picture can be drawn more than 60 times a second: VSync on a display above 60 Hz, or a
+  limit above 60 (`rt_display_above_60`). At 60 and below a blend would only add its delay. There is no row for it
+  any more (the Smooth Motion row was removed 2026-11-15; a `smooth=` line in `port_display.txt` is ignored).
+* **Render clock.** The blend is not taken at `Time.time` (when the frame began) but at a smoothed clock that
+  advances by the average frame time and is pulled towards `Time.time` minus a quarter step (`render_time`). With
+  VSync the frame that runs a fixed step takes longer and the queued frames behind it start early (at 240 Hz:
+  3.3, 8.1, 2.2, 2.2 ms apart, shown 4.2 ms apart), which put a 60 Hz rhythm back into the motion. Behind the start
+  of the last step the clock blends the step before (`prev2` -> `prev`). Measured at 240 Hz with VSync, first
+  stage, rolling: ball 0 uneven steps of 120 (about 50 before), camera 0 of 238 (about 40 % before). Cost: a
+  quarter step (4 ms) more delay.
 
 Measured on a 240 Hz display (`BR_FPS_LOG`): first Adventure stage, steering: a camera moved in 30 of 120 frames
 with it off (every step uneven) and in 120 of 120 with it on (0 to 2 uneven steps of 240). An imported stage with

@@ -22,8 +22,6 @@ static const Text g_text[] = {
      "프레임 제한", "Limite de quadros"},
     {"VSync", "垂直同期", "Synchro verticale", "Sincronia verticale", "VSync", "Sincronización vertical", "垂直同步", "垂直同步", "수직 동기화",
      "Sincronização vertical"},
-    {"Smooth Motion", "なめらかな動き", "Mouvement fluide", "Movimento fluido", "Flüssige Bewegung", "Movimiento fluido", "流畅动作", "流暢動作",
-     "부드러운 움직임", "Movimento suave"},
     {"Dole Collaboration", "Doleコラボ", "Collaboration Dole", "Collaborazione Dole", "Dole-Kollaboration", "Colaboración con Dole", "Dole联动",
      "Dole聯動", "Dole 컬래버레이션", "Colaboração Dole"},
     {"Mouse Sensitivity", "マウスカーソル感度", "Sensibilité de la souris", "Sensibilità mouse", "Mausempfindlichkeit",

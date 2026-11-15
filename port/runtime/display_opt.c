@@ -8,7 +8,9 @@
 //                     desktop size
 //   Frame Rate Limit  30 / 60 / 120 / 144 / Unlimited
 //   VSync             Off / On   (the game has a VSync option object but does not list it on this page; with
-//                     VSync on, Unity ignores the frame rate limit and follows the display)
+//                     VSync on the limit still applies, see apply_rate)
+// Motion between the game's 60 Hz steps is blended (interp.c) whenever more than 60 frames a second are drawn; there
+// is no row for it.
 // A change applies at once, as the game's own rows do.
 //
 // Steam Deck: detected at start-up (is_steam_deck). There the game starts borderless at the display's own size
@@ -35,7 +37,7 @@
 #include <string.h>
 #include "rt.h"
 
-enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_SMOOTH = 5, ROLE_DOLE = 6, ROLE_MOUSE = 8 };
+enum { MODE_VALUE_WINDOW = 1, MAX_RES = 16, ROLE_MODE = 0, ROLE_RES = 1, ROLE_FPS = 2, ROLE_VSYNC = 3, ROLE_DOLE = 6, ROLE_MOUSE = 8 };
 enum { M_WINDOWED, M_BORDERLESS, M_FULLSCREEN, M_COUNT };
 #define FN(off) (GUEST_BASE + (off))
 #define F_GET_VALUE_STR 0x4575d40ull
@@ -59,7 +61,7 @@ static const int UNITY_MODE[M_COUNT] = {3 /* Windowed */, 1 /* FullScreenWindow 
 static const int FPS[] = {30, 60, 120, 144, -1};
 #define NFPS ((int)(sizeof FPS / sizeof *FPS))
 
-static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_smooth = 1, g_dole, g_deck, g_mouse = 5;
+static int g_res[MAX_RES][2], g_nres, g_k, g_desk_w, g_desk_h, g_mode = -1, g_fps = 1, g_def_k, g_vsync = 1, g_dole, g_deck, g_mouse = 5;
 static uint64_t g_sm_klass;
 static uint32_t g_pattern_h;                // GC handle of the game's Screen Mode row object
 #define F_GCHANDLE_NEW 0x469da0ull          // il2cpp_gchandle_new(obj, pinned)
@@ -117,8 +119,7 @@ static BOOL CALLBACK init_once(PINIT_ONCE o, PVOID p, PVOID *ctx) {
         if (sscanf(line, "mode=%d", &v) == 1 && v >= 0 && v < M_COUNT) g_mode = v;
         else if (sscanf(line, "width=%d", &v) == 1) w = v;
         else if (sscanf(line, "height=%d", &v) == 1) h = v;
-        else if (sscanf(line, "vsync=%d", &v) == 1) g_vsync = v < 0 ? 0 : v > 4 ? 4 : v;   // the menu only sets 0 or 1
-        else if (sscanf(line, "smooth=%d", &v) == 1) g_smooth = v != 0;
+        else if (sscanf(line, "vsync=%d", &v) == 1) g_vsync = v != 0;
         else if (sscanf(line, "dole=%d", &v) == 1) g_dole = v != 0;
         else if (sscanf(line, "mouse=%d", &v) == 1 && v >= 1 && v <= 10) g_mouse = v;
         else if (sscanf(line, "fps=%d", &v) == 1)
@@ -138,22 +139,48 @@ static void save_cfg(void) {
     char path[MAX_PATH + 32];
     cfg_path(path, sizeof path);
     FILE *f = fopen(path, "w");
-    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\nsmooth=%d\ndole=%d\nmouse=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_smooth, g_dole, g_mouse); fclose(f); }
+    if (f) { fprintf(f, "mode=%d\nwidth=%d\nheight=%d\nfps=%d\nvsync=%d\ndole=%d\nmouse=%d\n", g_mode, g_res[g_k][0], g_res[g_k][1], FPS[g_fps], g_vsync, g_dole, g_mouse); fclose(f); }
 }
 
 static void call_orig(Cpu *c, uint64_t off) { c->pc = FN(off); rt_dispatch(c); }
 uint64_t rt_tr_str(Cpu *c, const char *english);      // port_text.c: the text in the game's language
 static uint64_t new_str(Cpu *c, const char *s) { return rt_tr_str(c, s); }
-static void apply_fps(Cpu *c) {
-    t_in_fps = 1;
-    rt_call(c, FN(F_SET_TARGET_FRAME_RATE), 2, (uint64_t)(uint32_t)FPS[g_fps], 0ull);
-    t_in_fps = 0;
+// The primary display's refresh rate in Hz, read again at most every two seconds.
+static int refresh_hz(void) {
+    static uint64_t at;
+    static int hz = 60;
+    uint64_t now = GetTickCount64();
+    if (!at || now - at > 2000) {
+        DEVMODEW dm = {.dmSize = sizeof dm};
+        at = now;
+        if (EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1) hz = (int)dm.dmDisplayFrequency;
+    }
+    return hz;
 }
-static void apply_vsync(Cpu *c) {
+// Frame Rate Limit and VSync together. Unity ignores targetFrameRate while vSyncCount > 0 (it follows the display),
+// so a limit below the refresh rate is made by the engine's frame limiter with VSync off, also when the VSync row is
+// On (144 on a 240 Hz display; a display without variable refresh may tear then). Syncing to every second refresh
+// (vSyncCount 2) is no way out: the game reads vSyncCount back and then runs its logic at 30 Hz, as on the console
+// (measured: 120 on a 240 Hz display gave 30 physics steps a second). g_eff_vsync is what the engine runs with.
+static int g_eff_vsync = 1;
+static void apply_rate(Cpu *c) {
+    int hz = refresh_hz(), lim = FPS[g_fps];
+    int v = g_vsync && (lim < 0 || lim >= hz - 1);
+    g_eff_vsync = v;
     t_in_vsync = 1;
-    rt_call(c, FN(F_SET_VSYNC_COUNT), 2, (uint64_t)g_vsync, 0ull);
+    rt_call(c, FN(F_SET_VSYNC_COUNT), 2, (uint64_t)v, 0ull);
     t_in_vsync = 0;
+    t_in_fps = 1;
+    rt_call(c, FN(F_SET_TARGET_FRAME_RATE), 2, (uint64_t)(uint32_t)lim, 0ull);
+    t_in_fps = 0;
+    static int said_v = -1, said_lim = -2, said_hz;
+    if (v != said_v || lim != said_lim || hz != said_hz) {
+        said_v = v; said_lim = lim; said_hz = hz;
+        rt_log("display: frame rate limit %d, VSync %s, display %d Hz -> vSyncCount %d, targetFrameRate %d", lim, g_vsync ? "on" : "off", hz, v, lim);
+    }
 }
+static void apply_fps(Cpu *c) { apply_rate(c); }
+static void apply_vsync(Cpu *c) { apply_rate(c); }
 // Borderless always covers the desktop at its own size; the chosen size is for a window or exclusive full screen.
 static void apply_display(Cpu *c) {
     int w = g_mode == M_BORDERLESS ? g_desk_w : g_res[g_k][0], h = g_mode == M_BORDERLESS ? g_desk_h : g_res[g_k][1];
@@ -182,8 +209,8 @@ static int game_index(uint64_t item, int want_window) {
         if (((int32_t)LD32(items + 0x20 + 4ull * i) == MODE_VALUE_WINDOW) == !!want_window) return i;
     return want_window ? 1 : 0;
 }
-static int role_index(int role) { return role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_SMOOTH ? g_smooth : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
-static int role_count(int role) { return role == ROLE_MOUSE ? 10 : role == ROLE_SMOOTH || role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
+static int role_index(int role) { return role == ROLE_MOUSE ? g_mouse - 1 : role == ROLE_DOLE ? g_dole : role == ROLE_RES ? g_k : role == ROLE_FPS ? g_fps : role == ROLE_VSYNC ? g_vsync : g_mode < 0 ? M_BORDERLESS : g_mode; }
+static int role_count(int role) { return role == ROLE_MOUSE ? 10 : role == ROLE_DOLE ? 2 : role == ROLE_RES ? g_nres : role == ROLE_FPS ? NFPS : role == ROLE_VSYNC ? 2 : M_COUNT; }
 static void set_indices(uint64_t item, int idx) { ST32(item + 0x20, idx); ST32(item + 0x28, idx); ST32(item + 0x50, idx); }
 // The added rows of the page on screen (GC handles), so that Reset can put their picker positions back.
 static uint32_t g_copy_h[12];
@@ -242,7 +269,7 @@ int rt_hook_3ebcda0(Cpu *c) {
     const char *force = getenv("BR_DISPLAY_MODE");      // testing: 0 windowed, 1 borderless, 2 full screen
     if (force && *force >= '0' && *force <= '2') g_mode = *force - '0';
     apply_display(c);
-    if (first) { first = 0; apply_vsync(c); apply_fps(c); }
+    if (first) { first = 0; apply_rate(c); }
     return 1;
 }
 
@@ -258,7 +285,7 @@ int rt_hook_3ea81e0(Cpu *c) {
 int rt_hook_3ec1de0(Cpu *c) {
     if (t_in_vsync) return 0;
     init();
-    c->x[0] = (uint64_t)g_vsync;
+    c->x[0] = (uint64_t)g_eff_vsync;
     return 0;
 }
 
@@ -289,8 +316,8 @@ int rt_hook_3ec1ab0(Cpu *c) {
     inside = 1; call_orig(c, 0x3ec1ab0ull); inside = 0;
     { extern void gfx_quality_changed(Cpu *c); gfx_quality_changed(c); }      // gfx_opt.c: the graphics rows are applied again
     int was = (int32_t)rt_call(c, FN(0x3ec1da0ull), 1, 0ull);        // QualitySettings.get_vSyncCount
-    apply_vsync(c);
-    if (was != g_vsync) rt_log("display: quality level %d asks for vSyncCount %d; kept at %d", level, was, g_vsync);
+    apply_rate(c);
+    if (was != g_eff_vsync) rt_log("display: quality level %d asks for vSyncCount %d; kept at %d", level, was, g_eff_vsync);
     return 1;
 }
 
@@ -312,7 +339,6 @@ int rt_hook_4575bf0(Cpu *c) {
     if (role == ROLE_RES) { g_k = g_def_k; save_cfg(); apply_display(c); ST32(item + 0x50, g_k); return 1; }
     if (role == ROLE_FPS) { g_fps = 1; save_cfg(); apply_fps(c); ST32(item + 0x50, g_fps); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = 1; save_cfg(); apply_vsync(c); ST32(item + 0x50, g_vsync); return 1; }
-    if (role == ROLE_SMOOTH) { g_smooth = 1; save_cfg(); ST32(item + 0x50, g_smooth); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, 0); ST32(item + 0x50, 0); return 1; }
     if (role == ROLE_MOUSE) { set_mouse(5); ST32(item + 0x50, 4); return 1; }
     t_in_init = 1; call_orig(c, F_SET_INIT_INDEX); t_in_init = 0;
@@ -347,9 +373,9 @@ int rt_hook_4564c70(Cpu *c) {
     } else if (page == 2) {                                        // Controls
         set_mouse(5);
     } else if (page == 4) {                                        // Display
-        g_k = g_def_k; g_fps = 1; g_vsync = 1; g_smooth = 1;
+        g_k = g_def_k; g_fps = 1; g_vsync = 1;
         save_cfg();
-        apply_display(c); apply_fps(c); apply_vsync(c);
+        apply_display(c); apply_rate(c);
     }
     for (int i = 0; i < g_ncopy; i++) {
         uint64_t obj = rt_call(c, FN(F_GCHANDLE_TARGET), 1, (uint64_t)g_copy_h[i]);
@@ -380,7 +406,6 @@ int rt_hook_4575ea0(Cpu *c) {
     if (role == ROLE_RES) { g_k = idx; save_cfg(); apply_display(c); return 1; }
     if (role == ROLE_FPS) { g_fps = idx; save_cfg(); apply_fps(c); return 1; }
     if (role == ROLE_VSYNC) { g_vsync = idx; save_cfg(); apply_vsync(c); return 1; }
-    if (role == ROLE_SMOOTH) { g_smooth = idx; save_cfg(); return 1; }
     if (role == ROLE_DOLE) { set_dole(c, idx); return 1; }
     if (role == ROLE_MOUSE) { set_mouse(idx + 1); return 1; }
     g_mode = idx;
@@ -407,8 +432,6 @@ int rt_hook_4575d40(Cpu *c) {
         c->x[0] = new_str(c, s);
     } else if (role == ROLE_VSYNC) {
         c->x[0] = new_str(c, g_vsync ? "On" : "Off");
-    } else if (role == ROLE_SMOOTH) {
-        c->x[0] = new_str(c, g_smooth ? "On" : "Off");
     } else if (role == ROLE_MOUSE) {
         snprintf(s, sizeof s, "%d", g_mouse);
         c->x[0] = new_str(c, s);
@@ -428,8 +451,8 @@ int rt_hook_4534720(Cpu *c) {
     if (!item || !g_sm_klass || LD64(item) != g_sm_klass) return 0;
     int role = role_of(item);
     if (role == ROLE_MOUSE) { c->x[0] = new_str(c, "Mouse Sensitivity"); return 1; }
-    if (role != ROLE_DOLE && role != ROLE_SMOOTH && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
-    c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_DOLE ? "Dole Collaboration" : role == ROLE_SMOOTH ? "Smooth Motion" : "VSync");
+    if (role != ROLE_DOLE && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
+    c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_DOLE ? "Dole Collaboration" : "VSync");
     return 1;
 }
 
@@ -476,7 +499,7 @@ int rt_hook_455d030(Cpu *c) {
     rt_call(c, FN(F_GC_DISABLE), 0);
     uint64_t cls = LD64(LD64(FN(LIST_OBJECT_CLASS_SLOT)));
     uint64_t add_mi = LD64(LD64(LD64(cls + 0x20) + 0xc0) + 0x70);
-    static const int roles[] = {ROLE_RES, ROLE_FPS, ROLE_VSYNC, ROLE_SMOOTH};
+    static const int roles[] = {ROLE_RES, ROLE_FPS, ROLE_VSYNC};
     int added = 0;
     for (size_t r = 0; r < sizeof roles / sizeof *roles; r++) {
         uint64_t obj = rt_call(c, FN(F_OBJECT_NEW), 1, g_sm_klass);
@@ -503,21 +526,12 @@ int rt_hook_455d030(Cpu *c) {
     return 1;
 }
 
-// Is motion to be blended between the 60 Hz steps (interp.c)? When the Smooth Motion row is on and the picture can be
-// drawn more than 60 times a second with the current settings; at 60 and below a blend would only add its 16.7 ms
-// of delay. With VSync on the engine follows the display and ignores the limit.
+// Is motion to be blended between the 60 Hz steps (interp.c)? Whenever the picture can be drawn more than 60 times a
+// second with the current settings (there is no row for it: it follows the frame rate); at 60 and below a blend would
+// only add its 16.7 ms of delay.
 int rt_display_above_60(void) {
-    static uint64_t at;
-    static int hz = 60;
-    uint64_t now = GetTickCount64();
-    if (now - at > 2000) {
-        DEVMODEW dm = {.dmSize = sizeof dm};
-        at = now;
-        if (EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1) hz = (int)dm.dmDisplayFrequency;
-    }
     init();
-    if (!g_smooth) return 0;
-    if (g_vsync) return hz > 62;
+    if (g_eff_vsync > 0) return refresh_hz() / g_eff_vsync > 62;
     return FPS[g_fps] < 0 || FPS[g_fps] > 60;
 }
 
@@ -534,6 +548,20 @@ static float call_float(Cpu *c, uint64_t off) {
     float f;
     memcpy(&f, &c->v[0], sizeof f);
     return f;
+}
+// A position followed frame by frame: in how many frames it moved, and how many steps were uneven (less than half or
+// more than twice the step before; a repeated picture between two moves counts as two).
+typedef struct { float prev[3], step; uint8_t have; uint32_t moved, uneven, pairs; } Track;
+static Track g_trk[3];
+static void track_step(Track *t, const float *p) {
+    if (t->have) {
+        float dx = p[0] - t->prev[0], dy = p[1] - t->prev[1], dz = p[2] - t->prev[2], d = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (d > 1e-5f) t->moved++;
+        if (d < 1.0f && (t->step > 1e-4f || d > 1e-4f)) { t->pairs++; if (d < 0.5f * t->step || d > 2.0f * t->step) t->uneven++; }
+        t->step = d;
+    }
+    memcpy(t->prev, p, sizeof t->prev);
+    t->have = 1;
 }
 int rt_hook_43d58c0(Cpu *c) {
     static int on = -1;
@@ -607,6 +635,28 @@ int rt_hook_43d58c0(Cpu *c) {
         }
         cam_moved += (uint32_t)moved;
         cam_count = (uint32_t)n;
+        // The first player: its ball, its character (the monkey) and the monkey's offset from camera 0 (what the eye
+        // sees: a smooth camera over a monkey that moves 60 times a second makes the monkey judder on screen).
+        float cam0[3] = {0};
+        if (n > 0) memcpy(cam0, cam_prev[0], sizeof cam0);
+        uint64_t players = rt_call(c, FN(0x42cf6c0ull), 1, 0ull);   // MainGame.playerList (null outside a stage)
+        uint64_t pl = players && (int32_t)LD32(players + 0x18) > 0 ? LD64(LD64(players + 0x10) + 0x20) : 0;
+        uint64_t ball = pl ? rt_call(c, FN(0x42f6a40ull), 2, pl, 0ull) : 0;       // MgPlayer.get_ball
+        uint64_t chara = pl ? LD64(pl + 0x1c8) : 0;                                // MgPlayer.m_CharaObj (GameObject)
+        uint64_t trs[2] = {ball && LD64(ball + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball, 0ull) : 0,
+                           chara && LD64(chara + 0x10) ? rt_call(c, FN(0x3f0bb40ull), 2, chara, 0ull) : 0};   // GameObject.get_transform
+        for (int k = 0; k < 3; k++) {
+            uint64_t tr = trs[k == 2 ? 1 : k];
+            if (!tr) { g_trk[k].have = 0; continue; }
+            rt_call(c, FN(0x3f1a1f0ull), 2, tr, 0ull);
+            float p[3];
+            for (int q = 0; q < 3; q++) { uint32_t u = (uint32_t)c->v[q]; memcpy(&p[q], &u, 4); if (k == 2) p[q] -= cam0[q]; }
+            track_step(&g_trk[k], p);
+            if (k == 0 && cam_trace > 0) {      // BR_CAM_TRACE: the ball's step, the frame's time and its place between two fixed steps
+                float t = call_float(c, F_TIME_GET_TIME), ft = call_float(c, F_TIME_GET_FIXED_TIME);
+                rt_log("ball %.5f t %.5f ft %.5f", (double)g_trk[0].step, (double)t, (double)ft);
+            }
+        }
         memcpy(c->x, sx, sizeof sx); memcpy(c->v, sv, sizeof sv);
     }
     uint64_t now = rt_ticks();
@@ -631,7 +681,12 @@ int rt_hook_43d58c0(Cpu *c) {
                    FPS[g_fps], g_vsync);
             rt_log("fps: a camera moved in %u of %llu frames (%.1f picture changes/s), %u cameras; uneven steps %u of %u", cam_moved,
                    (unsigned long long)frames, (double)cam_moved / wall, cam_count, cam_uneven, cam_pairs);
+            static const char *const what[3] = {"ball", "monkey", "monkey seen from camera 0"};
+            for (int k = 0; k < 3; k++)
+                if (g_trk[k].pairs) rt_log("fps: %s moved in %u of %llu frames; uneven steps %u of %u", what[k], g_trk[k].moved,
+                                           (unsigned long long)frames, g_trk[k].uneven, g_trk[k].pairs);
         }
+        for (int k = 0; k < 3; k++) g_trk[k].moved = g_trk[k].uneven = g_trk[k].pairs = 0;
         cam_moved = cam_uneven = cam_pairs = 0;
         t0 = now; frames = 0; time0 = t; fixed0 = ft; fc0 = fc;
         c->x[0] = x0; c->x[1] = x1; c->v[0] = v0;

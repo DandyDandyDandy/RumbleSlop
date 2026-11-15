@@ -20,7 +20,7 @@ of the same engine version.
 - The game's graphics rows work: render scale, shadow quality, post-processing, anti-aliasing, texture filtering,
   HUD size
 - Real motion above 60 frames a second: the game simulates at 60 Hz and the port blends every frame in between
-  (Options > Display > Smooth Motion)
+  (automatic whenever more than 60 frames a second are drawn)
 - Wide screens (21:9, 32:9) and 16:10, Steam Deck detection
 - The Dole collaboration look (stage logo, bananas, main menu) can be switched on again: Options > General >
   Dole Collaboration
