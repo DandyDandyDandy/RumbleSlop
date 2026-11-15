@@ -777,8 +777,16 @@ screen):
   follow on return, without a restart or the next stage: whatever the option changes on screen or in play is
   updated in place (example: Dole Collaboration's `dole_tick` above). Writing a flag that only the next load
   reads is not enough.
+* **It has a caption.** The line under the Options list explains the row in focus. The game looks the row's
+  option up in `Option_OptionCaptionMessage`; the port's rows are copies of the Screen Mode row, whose caption is
+  blank (so are the captions of the game's own PC rows: Screen Mode, VSync, Mouse Sensitivity and the five graphics
+  rows). The hook on `UIOptionScrollModule.onUpdateFocusIndex` (`4560720`, `display_opt.c`, "captions") sets the
+  port's text after the game's: by role for a Screen Mode row (`ROLE_CAPTION`), by class name for the game's rows
+  (`CLASS_CAPTION`). A new row gets a line there and its translations in `port_text.c`, in the game's style ("Set
+  ...!", "Toggle ... ON or OFF!", at most two lines of about 60 characters: the box is full at that width).
 
-Test both for each new option: Reset on its page, and a change from the pause menu in a stage.
+Test both for each new option: Reset on its page, and a change from the pause menu in a stage; and look at its
+caption.
 
 Quality levels. The game names its quality level `<platform><pattern>` and still says "Switch", so it selects the
 console's levels: 1 `SwitchDefault` in single-player stages, 7 / 8 in the menus, and cut-down ones elsewhere:

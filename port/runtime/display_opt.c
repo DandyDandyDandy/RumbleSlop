@@ -32,7 +32,8 @@
 // List<T>: items array +0x10 (elements from +0x20, capacity +0x18), size +0x18, version +0x1c.
 //
 // Every option the port adds must (docs/TECHNICAL.md, "Rule for every option the port adds"): go back to its
-// default on the page's Reset, and show its change at once, also when changed from the pause menu during a stage.
+// default on the page's Reset, show its change at once, also when changed from the pause menu during a stage, and
+// have a caption (see "captions" below).
 #include <windows.h>
 #include <math.h>
 #include <stdio.h>
@@ -709,6 +710,61 @@ int rt_hook_4534720(Cpu *c) {
     if (role == ROLE_BANANA) { c->x[0] = new_str(c, "Bananas"); return 1; }
     if (role != ROLE_DOLE && role != ROLE_RES && role != ROLE_FPS && role != ROLE_VSYNC) return 0;
     c->x[0] = new_str(c, role == ROLE_RES ? "Resolution" : role == ROLE_FPS ? "Frame Rate Limit" : role == ROLE_DOLE ? "Dole Collaboration" : "VSync");
+    return 1;
+}
+
+// --------------------------------------------------------------------------------------------- captions
+// The line under the Options list that explains the row in focus: UIOptionScrollModule.onUpdateFocusIndex(self,
+// index, item) looks the row's option up in Option_OptionCaptionMessage and hands the text to the view. The game's
+// own PC rows (Screen Mode, VSync, Mouse Sensitivity and the five graphics rows) have a blank caption there, and the
+// port's rows are copies of the Screen Mode row object, so all of them get the port's text (port_text.c translates
+// it). The game's text is drawn first, then replaced in the same call.
+#define F_SET_CAPTION_TEXT 0x4509340ull     // Wonder.UI.UIViewOption::SetCaptionText(string)
+#define SCROLL_MODULE_VIEW 0x18             // UIOptionScrollModule: the UIViewOption
+// by role of a Screen Mode row (0 = the game's own row; 4 and 7 exist in RumbleManiaSlop only)
+static const char *const ROLE_CAPTION[10] = {
+    "Choose whether the game is shown in a window,\nborderless, or in full screen!",
+    "Set the resolution of the game!\n*Borderless always uses the size of your desktop.",
+    "Set the maximum frame rate!\nThe higher the number, the smoother the motion!",
+    "Toggle syncing the picture to your monitor ON or OFF!\nWhen set to ON, screen tearing is prevented!",
+    "Choose which soundtrack plays on imported Stages!",
+    NULL,
+    "Toggle the Dole collaboration look ON or OFF!\nWhen set to ON, Dole bananas and logos appear!",
+    "Toggle Spin Dash ON or OFF when playing alone!",
+    "Set how much the Stage tilts when dragging the mouse!\nThe higher the number, the more the Stage will tilt!",
+    "Choose what you collect in Stages!\nAuto uses each character's own collectible!",
+};
+// the game's own PC rows whose caption is blank, by class name
+static const struct { const char *cls, *text; } CLASS_CAPTION[] = {
+    {"UIOptionChoicesItemData_VSync", "Toggle syncing the picture to your monitor ON or OFF!\nWhen set to ON, screen tearing is prevented!"},
+    {"UIOptionChoicesItemData_MouseSensitivity", "Set how much the Stage tilts when dragging the mouse!\nThe higher the number, the more the Stage will tilt!"},
+    {"UIOptionChoicesItemData_GraphicSetting", "Set picture sharpness and the detail of distant models!\nHigher settings need a faster PC!"},
+    {"UIOptionChoicesItemData_ShadowResolution", "Set the quality of shadows!\nThe higher the setting, the sharper the shadows!"},
+    {"UIOptionChoicesItemData_PostEffect", "Set screen effects such as glow and color tone!\nThe highest setting also smooths jagged edges!"},
+    {"UIOptionChoicesItemData_Antialiasing", "Toggle smoothing of jagged edges ON or OFF!"},
+    {"UIOptionChoicesItemData_TextureAnisotropicFiltering", "Toggle keeping textures sharp at steep angles ON or OFF!"},
+};
+static const char *caption_of(uint64_t item) {
+    if (!item) return NULL;
+    const char *cls = (const char *)(uintptr_t)LD64(LD64(item) + 0x10);      // Il2CppClass.name
+    if (!cls) return NULL;
+    if (!strcmp(cls, "UIOptionChoicesItemData_ScreenMode")) {
+        int role = role_of(item);
+        return role >= 0 && role < 10 ? ROLE_CAPTION[role] : NULL;
+    }
+    for (size_t i = 0; i < sizeof CLASS_CAPTION / sizeof *CLASS_CAPTION; i++)
+        if (!strcmp(cls, CLASS_CAPTION[i].cls)) return CLASS_CAPTION[i].text;
+    return NULL;
+}
+int rt_hook_4560720(Cpu *c) {
+    static __thread int inside;
+    if (inside) return 0;
+    uint64_t self = c->x[0], item = c->x[2];
+    inside = 1; call_orig(c, 0x4560720ull); inside = 0;
+    if (c->eh_unwinding) return 1;
+    const char *text = caption_of(item);
+    uint64_t view = self ? LD64(self + SCROLL_MODULE_VIEW) : 0;
+    if (text && view) rt_call(c, FN(F_SET_CAPTION_TEXT), 3, view, new_str(c, text), 0ull);
     return 1;
 }
 

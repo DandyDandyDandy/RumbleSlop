@@ -11,6 +11,7 @@
 4575ea0   Wonder.UI.Option.UIOptionChoicesItemData_ScreenMode::ChangeValue
 4534720   Wonder.UI.UIOptionChoicesItemData::GetContentStr
 455d030   Wonder.UI.Option.UIOptionScrollModule::CheckActiveChoicesItemList
+4560720   Wonder.UI.Option.UIOptionScrollModule::onUpdateFocusIndex   (captions of the PC rows)
 4444bc0   Wonder.Util+CharaCustomize::IsExistDoleItemSelectedChara   (the Dole Collaboration row decides)
 443b3b0   Wonder.Util+CharaCustomize::IsExistDoleItemCoordinate
 4296600   Wonder.MgBananaManager::getCurrentBananaModelId   (the Bananas row decides)
