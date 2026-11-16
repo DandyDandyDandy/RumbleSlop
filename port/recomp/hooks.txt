@@ -111,6 +111,7 @@
 428e050   Wonder.MgPhotoModeCamera::collideStage
 428e3b0   Wonder.MgPhotoModeCamera::updateRotAndDist
 428f750   Wonder.MgPhotoModeController::Begin
+46222f0   Wonder.UI.Pause.UIStatePhotoModeMenu::LateUpdate   (HUD On/Off from the keyboard)
 43b5b60   Wonder.AppInput::FixedUpdate
 451d2a0   Wonder.UI.UIPartViewButtonBase::SetMouseAction
 4508710   Wonder.UI.UIStateOptionKeyConfigEdit::exec

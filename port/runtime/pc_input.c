@@ -953,6 +953,22 @@ int rt_hook_428e3b0(Cpu *c) {
 }
 // MgPhotoModeController.Begin: photo mode is opening (its guide is drawn before its camera runs).
 int rt_hook_428f750(Cpu *c) { (void)c; g_photo_opening = GetTickCount64(); if (getenv("BR_PHOTO_LOG")) rt_log("photo cam: photo mode begins"); return 0; }
+// The photo menu's HUD On/Off (its guide names action 72, MainGame_PhotoHudToggle, Left Ctrl) is a button input of
+// the menu's choices module that the keyboard never gives: when the action's key goes down,
+// UIStatePhotoModeMenu.onHudOnOffButton (which only uses the menu) is called from the menu's LateUpdate.
+#define ACTION_PHOTO_HUD 72
+#define F_PHOTO_HUD_ON_OFF 0x4622ac0ull
+static int binding_active(const Binding *b, const KeySet *s, int kind, uint32_t action);
+int rt_hook_46222f0(Cpu *c) {                                    // UIStatePhotoModeMenu.LateUpdate
+    uint64_t self = X(0), mi = X(1);
+    const Binding *b = pc_binding(ACTION_PHOTO_HUD);
+    if (enabled() && b && b->nkeys && binding_active(b, &g_frame, 1, ACTION_PHOTO_HUD)) {
+        rt_call(c, FN(F_PHOTO_HUD_ON_OFF), 6, self, 0ull, 0ull, 0ull, 0ull, 0ull);
+        if (getenv("BR_PHOTO_LOG")) rt_log("photo cam: HUD on/off from the keyboard");
+        c->x[0] = self; c->x[1] = mi;
+    }
+    return 0;
+}
 // MgPhotoModeCamera.collideStage(Vector3 targetPos) -> Vector3: a freely placed camera is left where it is.
 int rt_hook_428e050(Cpu *c) { return enabled() && g_ph_free && photo_active(); }
 

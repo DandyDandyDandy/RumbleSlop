@@ -709,7 +709,9 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   mode, and the keyboard player's controller kind reads as an Xbox pad for 50 ms soon after: switching back makes
   the game draw its glyphs again. Default keys: the menu's choices (66..69) on the arrows, the camera's move
   (74..77) on W A S D so its guide reads "Move Camera"; turn and zoom (55..60) had no keys (the mouse's on PC):
-  I J K L, = / -. `BR_PHOTO_LOG=1` logs the free camera and clicks.
+  I J K L, = / -. HUD On/Off (Left Ctrl, action 72) is a button input of the menu's choices module that the keyboard
+  never gives: the menu's `LateUpdate` (hooked) calls `UIStatePhotoModeMenu.onHudOnOffButton` when the action's key
+  goes down. `BR_PHOTO_LOG=1` logs the free camera, clicks and the HUD key.
 * **Mouse for the game's cameras.** Photo mode and View Stage read `State.GetMouseButton` / `GetMouseButtonDown` /
   `mousePosition` / `mouseScrollDelta`, whose device functions the Switch build never sets; the port answers them
   for player 1. View Stage: left drag turns, middle or right drag moves, wheel zooms. Positions are in pixels of a
