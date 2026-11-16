@@ -201,6 +201,13 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
 * **Collector.** Stop-the-world suspends only threads registered with the lifted Boehm. Any host lock the
   collector thread can take while the world is stopped must be covered in `gc_stop_world` (heap gate, process
   heap, object table, big-block table and log are).
+* **Write barrier.** The collector is incremental, and the game's code calls `Il2CppCodeGenWriteBarrier`
+  (main+0x450610) after every reference store. Port code that stores a managed reference into a managed object or
+  array uses `rt_set_ref` (rt.h), never a bare `ST64`/`memcpy`: without the barrier an object reachable only through
+  the new reference is freed during a collection cycle and its memory reused while still referenced. Seen as a FATAL
+  in `TMP_SpriteAsset.SearchForSpriteByHashCodeInternal` (a sprite asset's lookup Dictionary whose `_entries` read
+  0x100000001, the size and version the glyph code had written into the List that was freed). Moving entries
+  within one array, and storing null, need no barrier.
 * **No null checks.** The game is built without IL2CPP null checks, so a managed null dereference is a hard
   access violation logged as FATAL in `port.log`, not a `NullReferenceException`. There are no array bounds
   checks either: an index past the end silently writes into the next heap object, and the fault comes later,

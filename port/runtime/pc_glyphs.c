@@ -296,7 +296,7 @@ static void add_fallback(Cpu *c, uint64_t asset, uint64_t ours) {
         if (!mi || (mi & 1)) { rt_call(c, FN(F_INIT_METADATA), 1, LD64(FN(M_LIST_SPRITE_ASSET_ADD))); mi = LD64(LD64(FN(M_LIST_SPRITE_ASSET_ADD))); }
         list = rt_call(c, FN(F_OBJECT_NEW), 1, LD64(mi + 0x20));     // MethodInfo.klass
         rt_call(c, FN(F_LIST_CTOR), 2, list, mi);
-        ST64(asset + ASSET_FALLBACKS, list);
+        rt_set_ref(c, asset + ASSET_FALLBACKS, list);
     }
     uint64_t items = LD64(list + LIST_ITEMS);
     int n = (int)LD32(list + LIST_SIZE), cap = items ? (int)LD32(items + ARR_LEN) : 0;
@@ -305,11 +305,11 @@ static void add_fallback(Cpu *c, uint64_t asset, uint64_t ours) {
     if (!items) { rt_log("glyphs: a sprite asset's fallback list has no storage"); return; }
     if (n >= cap) {
         uint64_t bigger = rt_call(c, FN(F_SZARRAY_NEW), 2, LD64(items), (uint64_t)(n + 4));
-        memcpy((void *)(uintptr_t)(bigger + ARR_DATA), (void *)(uintptr_t)(items + ARR_DATA), 8 * (size_t)n);
-        ST64(list + LIST_ITEMS, bigger);
+        for (int i = 0; i < n; i++) rt_set_ref(c, bigger + ARR_DATA + 8 * (uint64_t)i, LD64(items + ARR_DATA + 8 * (uint64_t)i));
+        rt_set_ref(c, list + LIST_ITEMS, bigger);
         items = bigger;
     }
-    ST64(items + ARR_DATA + 8 * (uint64_t)n, ours);
+    rt_set_ref(c, items + ARR_DATA + 8 * (uint64_t)n, ours);
     ST32(list + LIST_SIZE, n + 1);
     ST32(list + LIST_SIZE + 4, LD32(list + LIST_SIZE + 4) + 1);      // version
 }
@@ -357,8 +357,8 @@ static int emoji_asset(Cpu *c, uint64_t module) {
     rt_call(c, FN(F_OBJ_SET_HIDE_FLAGS), 3, mat, 32ull, 0ull);
     rt_call(c, FN(F_MAT_SET_MAIN_TEX), 3, mat, tex, 0ull);
     int hash = (int)rt_call(c, FN(F_SIMPLE_HASH), 2, str8(c, "BRGlyphs"), 0ull);
-    ST64(clone + ASSET_MATERIAL, mat);
-    ST64(clone + ASSET_SHEET, tex);
+    rt_set_ref(c, clone + ASSET_MATERIAL, mat);
+    rt_set_ref(c, clone + ASSET_SHEET, tex);
     ST32(clone + ASSET_HASH, hash);
     uint64_t cl = LD64(clone + ASSET_CHARS), gl = LD64(clone + ASSET_GLYPHS);
     uint64_t carr = rt_call(c, FN(F_SZARRAY_NEW), 2, LD64(LD64(cl + LIST_ITEMS)), (uint64_t)(NCELLS + NALIAS));
@@ -375,10 +375,10 @@ static int emoji_asset(Cpu *c, uint64_t module) {
         snprintf(nm, sizeof nm, "br_%03d", cell);
         uint64_t ns = str8(c, nm);
         ST32(ch + 0x14, 0xe000 + cell);                                                   // unicode (private use)
-        ST64(ch + 0x18, clone); ST64(ch + 0x20, g); ST32(ch + 0x28, cell);                // asset, glyph, glyph index
-        ST64(ch + 0x30, ns); ST32(ch + 0x38, (uint32_t)rt_call(c, FN(F_SIMPLE_HASH), 2, ns, 0ull));
-        ST64(carr + ARR_DATA + 8 * (uint64_t)cell, ch);
-        ST64(garr + ARR_DATA + 8 * (uint64_t)cell, g);
+        rt_set_ref(c, ch + 0x18, clone); rt_set_ref(c, ch + 0x20, g); ST32(ch + 0x28, cell);   // asset, glyph, glyph index
+        rt_set_ref(c, ch + 0x30, ns); ST32(ch + 0x38, (uint32_t)rt_call(c, FN(F_SIMPLE_HASH), 2, ns, 0ull));
+        rt_set_ref(c, carr + ARR_DATA + 8 * (uint64_t)cell, ch);
+        rt_set_ref(c, garr + ARR_DATA + 8 * (uint64_t)cell, g);
     }
     // Not every text asks the hooked tag functions for a name: a group of actions that is one stick or the d-pad
     // (replaceInputActionGroupToEmoji: "tilt the stage with <left stick>") takes the name straight from the DB
@@ -397,13 +397,13 @@ static int emoji_asset(Cpu *c, uint64_t module) {
             uint64_t ch = rt_call(c, FN(F_OBJECT_NEW), 1, LD64(tc));
             memcpy((void *)(uintptr_t)(ch + 0x10), (void *)(uintptr_t)(tc + 0x10), 0x30);
             ST32(ch + 0x14, 0xe000 + nchars);
-            ST64(ch + 0x18, clone); ST64(ch + 0x20, LD64(garr + ARR_DATA + 8 * (uint64_t)cell)); ST32(ch + 0x28, cell);
-            ST64(ch + 0x30, ns); ST32(ch + 0x38, (uint32_t)rt_call(c, FN(F_SIMPLE_HASH), 2, ns, 0ull));
-            ST64(carr + ARR_DATA + 8 * (uint64_t)nchars, ch);
+            rt_set_ref(c, ch + 0x18, clone); rt_set_ref(c, ch + 0x20, LD64(garr + ARR_DATA + 8 * (uint64_t)cell)); ST32(ch + 0x28, cell);
+            rt_set_ref(c, ch + 0x30, ns); ST32(ch + 0x38, (uint32_t)rt_call(c, FN(F_SIMPLE_HASH), 2, ns, 0ull));
+            rt_set_ref(c, carr + ARR_DATA + 8 * (uint64_t)nchars, ch);
             nchars++;
         }
-    ST64(cl + LIST_ITEMS, carr); ST32(cl + LIST_SIZE, nchars);
-    ST64(gl + LIST_ITEMS, garr); ST32(gl + LIST_SIZE, NCELLS);
+    rt_set_ref(c, cl + LIST_ITEMS, carr); ST32(cl + LIST_SIZE, nchars);
+    rt_set_ref(c, gl + LIST_ITEMS, garr); ST32(gl + LIST_SIZE, NCELLS);
     ST32(clone + ASSET_DIRTY, (LD32(clone + ASSET_DIRTY) & ~0xffu) | 1);
     rt_call(c, FN(F_UPDATE_LOOKUP), 2, clone, 0ull);
     rt_call(c, FN(F_ADD_SPRITE_ASSET), 3, (uint64_t)(uint32_t)hash, clone, 0ull);

@@ -238,7 +238,7 @@ static void make_button(Cpu *c, uint64_t det, uint64_t registered, const char *b
             set_v2(c, F_RT_SET_ANCHOR_MIN, gt, 1, 0); set_v2(c, F_RT_SET_ANCHOR_MAX, gt, 1, 0); set_v2(c, F_RT_SET_PIVOT, gt, 0.5f, 0.5f);
             set_v2(c, F_RT_SET_ANCHORED_POS, gt, 4, 17);
             rt_call(c, FN(F_SET_ACTIVE), 3, rt_call(c, FN(F_GET_GAMEOBJECT), 2, guide, 0ull), 1ull, 0ull);
-            ST64(btn + BTN_GUIDE, guide);
+            rt_set_ref(c, btn + BTN_GUIDE, guide);
         }
     }
     if (input == INPUT_NONE) {                                      // no glyph

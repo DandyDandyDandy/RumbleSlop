@@ -81,6 +81,13 @@ void rt_threads_unlock(void);
 // returns unwinding. rt_call_checked additionally converts a guest exception that escapes into a host unwind to the
 // innermost guest->host thunk (or a fatal error when there is none).
 uint64_t rt_call(Cpu *c, uint64_t fn, int n, ...);
+// Store a managed reference into a managed object or array. The game's collector is incremental: every reference
+// store must be followed by the write barrier (Il2CppCodeGenWriteBarrier, main+0x450610), as the game's own code
+// does, or an object that is only reachable through the new reference can be freed while still in use.
+static inline void rt_set_ref(Cpu *c, uint64_t slot, uint64_t v) {
+    *(uint64_t *)(uintptr_t)slot = v;
+    if (v) rt_call(c, 0x7000000000ull + 0x450610ull, 2, slot, v);
+}
 void rt_call_regs(Cpu *c, uint64_t fn);      // registers already set up
 void rt_escape_check(Cpu *c, const char *what);
 
