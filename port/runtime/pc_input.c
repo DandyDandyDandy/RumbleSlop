@@ -182,6 +182,7 @@ typedef struct {
 } List;
 static List g_lists[MAX_LISTS];
 static uint32_t g_list_frame;
+static uint32_t g_click_action, g_click_frame;    // a header button's click: its action reads as pressed in that frame
 static int g_list_count;                      // lists on screen that can scroll
 static uint64_t g_drag_sr;                    // the list whose bar is being dragged
 static uint64_t g_mouse_tick, g_key_tick;     // last use of the mouse on the UI / of a keyboard key
@@ -775,6 +776,8 @@ int rt_hook_43c8530(Cpu *c) {
         const Binding *b = pc_binding((int)action);
         if (which >= 0 && b && (b->nkeys || b->mouse || action == ACTION_TITLE_DECIDE || action == ACTION_MOVIE_SKIP) && state_takes_input(c, state, action))
             r = (uint64_t)binding_active(b, which < 4 ? &g_frame : &g_fixed, which & 3, action);
+        if (!r && which == 1 && action == g_click_action && g_list_frame == g_click_frame && state_takes_input(c, state, action))
+            r = 1;                                                   // a click on a header button (ui_mouse)
     }
     // A click sent the slice: the wheel's button reads as let go until it really is, so a button still held after
     // the click does not open the wheel again.
@@ -946,6 +949,32 @@ static int name_has(Cpu *c, uint64_t view, const char *part) {
 // leaves the screen), and the click is taken by the first.
 static uint64_t g_back_click;
 static uint32_t g_back_frame;
+// Header buttons such as Options' Practice Stage and Reset (UIPartViewIndependentButton) get their mouse action on
+// one player module's detector, which the screen never polls; the pad reaches the screen because the same input is
+// added to every detector's action list. So a click on such a button is a one-frame press of the action its button
+// guide shows, read by every detector as the pad's press would be (rt_hook_43c8530).
+#define VIEW_GUIDE 0x50                     // UIPartViewButtonBase.m_ButtonGuideView
+#define GUIDE_MODULE 0x38                   // UIPartViewBtnGuide_ForInputAction.m_DisplayModule
+#define GUIDE_ACTION 0x48                   // UIBtnGuideDisplayModule_ForInputAction.m_InputAction
+static uint32_t guide_action(Cpu *c, uint64_t v) {
+    uint64_t g = LD64(v + VIEW_GUIDE), m;
+    if (!g || !(rt_call(c, FN(F_OBJ_ALIVE), 2, g, 0ull) & 1) || !(m = LD64(g + GUIDE_MODULE))) return 0;
+    uint32_t a = LD32(m + GUIDE_ACTION);
+    return a < ACTION_COUNT ? a : 0;
+}
+static uint64_t unpolled_button_at(Cpu *c, uint32_t layer, uint32_t *action) {
+    uint64_t best = 0;
+    float best_area = 0;
+    for (int i = 0; i < MAX_BUTTONS; i++) {
+        uint64_t v = g_buttons[i].view, ma = v ? LD64(v + VIEW_MOUSE_ACTION) : 0, d;
+        if (!ma || (LD32(ma + MA_SELECTABLE) & 0xff) || !(d = LD64(ma + MA_DETECTOR)) || polled_now(d) || LD32(d + DET_LAYER) != layer) continue;
+        if (!(rt_call(c, FN(F_OBJ_ALIVE), 2, v, 0ull) & 1) || (LD32(v + VIEW_DISABLED) & 0xff)) continue;
+        float area = rt_ui_hit(c, v, 0);
+        uint32_t a;
+        if (area > 0 && (!best || area < best_area) && (a = guide_action(c, v)) != 0) { best = v; best_area = area; *action = a; }
+    }
+    return best;
+}
 static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
     if (g_back_click && g_back_frame == g_list_frame && (uint32_t)r == 0 && LD64(det + DET_RETURN_BUTTON) == g_back_click &&
         (uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) == LD32(det + DET_LAYER)) {
@@ -975,6 +1004,14 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
             rt_call(c, FN(F_MOUSE_ON_CLICK), 3, LD64(v + VIEW_MOUSE_ACTION), v, 0ull);
             g_kbm_tick = GetTickCount64();
             return LD32(det + DET_USER_INPUT);
+        }
+        uint32_t action = 0;
+        if ((v = unpolled_button_at(c, layer, &action)) != 0) {
+            rt_ui_click_consume();
+            rt_ui_press_anim(c, v);
+            g_click_action = action; g_click_frame = g_list_frame + 1;
+            g_kbm_tick = GetTickCount64();
+            if (getenv("BR_CLICK_LOG")) rt_log("click: header button, action %u", action);
         }
         return r;
     }

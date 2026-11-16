@@ -584,6 +584,11 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   same frame, as Esc is: the Style screen polls two and leaves on the second one's Cancel). A
   screen that is not polling (dialog on top, fade) is therefore not clickable. This covers menu entries, cards,
   list rows, option arrows, dialog buttons and the corner buttons (eye, copy, name, Change Character, ...).
+  Header buttons whose handler sits on a detector the screen never polls (Options' Practice Stage and Reset: the
+  game gives an independent button one player module's detector and adds its input to every detector's action
+  list, which is how the pad reaches it) are found the same way among the unpolled detectors of the current layer;
+  their click becomes a one-frame press of the action the button's guide shows (`m_ButtonGuideView` ->
+  `m_DisplayModule.m_InputAction`), read by `checkAction` like a key press. `BR_CLICK_LOG=1` logs it.
 * **Mouse drag as a stick.** The game's default table also binds actions to the mouse as a "virtual pad"
   (`ActionAssignMouse.VirtualPadDef(button, direction, sensitivity)`; the component that would read them,
   `AppActionMouse`, does not run in this build). The port captures the definitions like the keys and does what
