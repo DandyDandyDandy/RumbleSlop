@@ -273,7 +273,9 @@ static void widen_walk(Cpu *c, uint64_t t, int depth) {
         set_v2(c, F_RT_SET_SIZE_DELTA, t, sd[0] + g_cur_w - r[2], sd[1] + g_cur_h - r[3]);
         return;
     }
-    if (depth >= 6) return;
+    // 8: the result photo's white Flash is at depth 7 (canvas > SafeMargin > BottomRoot > PlayerViewsRoot >
+    // ViewPortType_Full_Root > ui_View_MainGame_Player_Default > ui_PartView_PhotoShooting > Flash).
+    if (depth >= 8) return;
     for (int i = 0; i < n; i++) {
         uint64_t ch = rt_call(c, FN(F_GET_CHILD), 3, t, (uint64_t)i, 0ull);
         if (ch) widen_walk(c, ch, depth + 1);
