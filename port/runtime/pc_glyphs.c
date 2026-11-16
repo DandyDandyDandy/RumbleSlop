@@ -222,6 +222,7 @@ int rt_hook_4543c80(Cpu *c) {
     }
     if (kind == KIND_XBOX || kind == KIND_PS5 || kind == KIND_PS4) cell = pad_cell(kind, icon);
     else if (kind == KIND_KEYBOARD) cell = t_action ? action_cell(t_action) : t_kbicon ? kbicon_cell(t_kbicon) : button_action_cell(c, icon);
+    else return 0;
     if (kind == KIND_KEYBOARD && getenv("BR_GLYPH_LOG")) {           // each keyboard glyph once: where it comes from
         static uint32_t seen[256];
         static int nseen;
@@ -230,7 +231,6 @@ int rt_hook_4543c80(Cpu *c) {
         while (i < nseen && seen[i] != key) i++;
         if (i == nseen && nseen < 256) { seen[nseen++] = key; rt_log("glyphs: keyboard icon %d action %d key icon %d -> cell %d", icon, t_action, t_kbicon, cell); }
     }
-    else return 0;
     c->x[0] = glyph_sprite(c, cell);
     return 1;
 }
