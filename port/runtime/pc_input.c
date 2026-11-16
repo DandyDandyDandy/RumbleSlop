@@ -42,6 +42,8 @@
 #define ACTION_COUNT 187
 #define ACTION_TITLE_DECIDE 13              // "press any button": any key too
 #define ACTION_MOVIE_SKIP 101
+#define ACTION_REWIND_FORWARD 90          // MainGame_Rewind_Forward (game's key: RightArrow)
+#define ACTION_REWIND_BACKWARD 91         // MainGame_Rewind_Backward (LeftArrow)
 #define NKEY 112                            // UnityEngine.InputSystem.Key values 1..110
 #define MAX_KEYS 4
 
@@ -497,7 +499,12 @@ int rt_hook_43c3150(Cpu *c) { g_pending.vp_button = (uint8_t)W(0); g_pending.vp_
 int rt_hook_43c31e0(Cpu *c) { g_pending.gesture = 1; g_pending.vp_dir = W(0); g_pending.vp_sens = (uint16_t)W(1); return 0; }
 static int datum(Cpu *c) {                    // ActionAssignDatum..ctor(Action.eID in_ActionID, ...): seven overloads
     uint32_t a = W(1);
-    if (a < ACTION_COUNT) { g_default[a] = g_pending; g_captured++; }
+    if (a < ACTION_COUNT) {
+        // The Helper's rewind steps with the arrow keys only; players who move with WASD get D / A as well.
+        if ((a == ACTION_REWIND_FORWARD || a == ACTION_REWIND_BACKWARD) && g_pending.nkeys == 1)
+            g_pending.keys[g_pending.nkeys++] = (uint8_t)pc_key_by_name(a == ACTION_REWIND_FORWARD ? "D" : "A");
+        g_default[a] = g_pending; g_captured++;
+    }
     memset(&g_pending, 0, sizeof g_pending);
     return 0;
 }
