@@ -924,17 +924,45 @@ static int list_rows_polled(Cpu *c, uint64_t content) {
     }
     return seen ? 0 : -1;
 }
-// The button of this detector under the click (or the cursor): the smallest one when several overlap.
+// How far the point is from the nearest shown child of the button (its label or picture), in pixels. Buttons that
+// share one rectangle - the pause menu's tabs "Game Menu" and "Help Menu" both span the whole header strip - are
+// told apart by what is drawn of them.
+#define F_T_CHILD_COUNT 0x3f1e1f0ull        // Transform.get_childCount
+#define F_T_GET_CHILD 0x3f1ea10ull          // Transform.GetChild(int)
+extern int rt_ui_rect(Cpu *c, uint64_t view, float r[4]);
+static float child_distance(Cpu *c, uint64_t v, float x, float y) {
+    uint64_t t = rt_call(c, FN(F_GET_TRANSFORM_), 2, v, 0ull);
+    int n = t ? (int)rt_call(c, FN(F_T_CHILD_COUNT), 2, t, 0ull) : 0;
+    float best = 1e30f;
+    for (int i = 0; i < n && i < 16; i++) {
+        float r[4];
+        uint64_t ch = rt_call(c, FN(F_T_GET_CHILD), 3, t, (uint64_t)i, 0ull);
+        if (!ch || !rt_ui_rect(c, ch, r) || r[2] <= 0 || r[3] <= 0) continue;
+        float dx = x < r[0] ? r[0] - x : x > r[0] + r[2] ? x - r[0] - r[2] : 0;
+        float dy = y < r[1] ? r[1] - y : y > r[1] + r[3] ? y - r[1] - r[3] : 0;
+        float d = dx * dx + dy * dy;
+        if (d < best) best = d;
+    }
+    return best;
+}
+// The button of this detector under the click (or the cursor): the smallest one when several overlap; of buttons
+// with the very same rectangle, the one whose drawn part is nearest.
 static uint64_t button_at(Cpu *c, uint64_t det, int hover) {
     uint64_t best = 0;
-    float best_area = 0;
+    float best_area = 0, best_dist = -1, x, y;
+    rt_ui_point(hover, &x, &y);
     for (int i = 0; i < MAX_BUTTONS; i++) {
         uint64_t v = g_buttons[i].view, ma = v ? LD64(v + VIEW_MOUSE_ACTION) : 0;
         if (!ma || LD64(ma + MA_DETECTOR) != det) continue;
         if (!(rt_call(c, FN(F_OBJ_ALIVE), 2, v, 0ull) & 1)) continue;
-        float area = rt_ui_hit(c, v, hover), x, y;
-        if (area > 0 && (rt_ui_point(hover, &x, &y), list_hides(c, v, x, y))) continue;
-        if (area > 0 && (!best || area < best_area)) { best = v; best_area = area; }
+        float area = rt_ui_hit(c, v, hover);
+        if (area <= 0 || list_hides(c, v, x, y)) continue;
+        if (best && area == best_area) {                             // a twin: the nearer drawn part wins
+            if (best_dist < 0) best_dist = child_distance(c, best, x, y);
+            float d = child_distance(c, v, x, y);
+            if (!hover && getenv("BR_CLICK_LOG")) rt_log("click: twin buttons at (%.0f, %.0f): distances %g and %g", x, y, best_dist, d);
+            if (d < best_dist) { best = v; best_dist = d; }
+        } else if (!best || area < best_area) { best = v; best_area = area; best_dist = -1; }
     }
     return best;
 }
@@ -975,6 +1003,37 @@ static uint64_t unpolled_button_at(Cpu *c, uint32_t layer, uint32_t *action) {
     }
     return best;
 }
+// Tabs that share one rectangle (the pause menu's "Game Menu" and "Help Menu" both span the header strip; the
+// label tells them apart, button_at). The game's click on such a tab acts on the button it last pointed at, not
+// on the clicked one, so only the first click switches. A click on the leftmost or rightmost label is therefore
+// a click on the group's arrow on that side (ui_PartView_TabSide_Button_Left / _Right, the Q and E buttons),
+// which walks the tabs as the keys do; on the tab already shown the arrow does nothing.
+static float label_x(Cpu *c, uint64_t v) {
+    uint64_t t = rt_call(c, FN(F_GET_TRANSFORM_), 2, v, 0ull), ch;
+    float r[4];
+    if (!t || !rt_call(c, FN(F_T_CHILD_COUNT), 2, t, 0ull) || !(ch = rt_call(c, FN(F_T_GET_CHILD), 3, t, 0ull, 0ull)) || !rt_ui_rect(c, ch, r)) return 0;
+    return r[0] + r[2] / 2;
+}
+static uint64_t tab_arrow_for(Cpu *c, uint64_t det, uint64_t v) {
+    float rv[4], r[4];
+    if (!rt_ui_rect(c, v, rv)) return v;
+    float xv = label_x(c, v);
+    int twins = 0, left_of = 0, right_of = 0;
+    uint64_t arrow_l = 0, arrow_r = 0;
+    for (int i = 0; i < MAX_BUTTONS; i++) {
+        uint64_t b = g_buttons[i].view, ma = b ? LD64(b + VIEW_MOUSE_ACTION) : 0;
+        if (!ma || b == v || LD64(ma + MA_DETECTOR) != det || !(rt_call(c, FN(F_OBJ_ALIVE), 2, b, 0ull) & 1)) continue;
+        if (name_has(c, b, "TabSide_Button_Left")) { arrow_l = b; continue; }
+        if (name_has(c, b, "TabSide_Button_Right")) { arrow_r = b; continue; }
+        if (!rt_ui_rect(c, b, r) || r[0] != rv[0] || r[1] != rv[1] || r[2] != rv[2] || r[3] != rv[3]) continue;
+        twins++;
+        if (label_x(c, b) < xv) left_of++; else right_of++;
+    }
+    if (!twins) return v;
+    uint64_t arrow = !left_of ? arrow_l : !right_of ? arrow_r : 0;
+    if (getenv("BR_CLICK_LOG")) rt_log("click: tab label (%d left of it, %d right): %s", left_of, right_of, arrow == arrow_l && arrow ? "left arrow" : arrow ? "right arrow" : "the tab");
+    return arrow && (rt_call(c, FN(F_OBJ_ALIVE), 2, arrow, 0ull) & 1) ? arrow : v;
+}
 static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
     if (g_back_click && g_back_frame == g_list_frame && (uint32_t)r == 0 && LD64(det + DET_RETURN_BUTTON) == g_back_click &&
         (uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) == LD32(det + DET_LAYER)) {
@@ -999,6 +1058,7 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
             return INPUT_CANCEL;
         }
         if ((v = button_at(c, det, 0)) != 0) {
+            v = tab_arrow_for(c, det, v);
             rt_ui_click_consume();
             if (name_has(c, v, "DisplayPassword") || name_has(c, v, "CopyRoomName")) rt_ui_press_anim(c, v);
             rt_call(c, FN(F_MOUSE_ON_CLICK), 3, LD64(v + VIEW_MOUSE_ACTION), v, 0ull);

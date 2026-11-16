@@ -589,6 +589,11 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   list, which is how the pad reaches it) are found the same way among the unpolled detectors of the current layer;
   their click becomes a one-frame press of the action the button's guide shows (`m_ButtonGuideView` ->
   `m_DisplayModule.m_InputAction`), read by `checkAction` like a key press. `BR_CLICK_LOG=1` logs it.
+  Tabs that share one rectangle (the pause menu's "Game Menu" and "Help Menu" each span the whole header strip)
+  are told apart by their drawn children: of buttons with the same rectangle, the one whose label is nearest the
+  cursor is hit (click and hover). The game's click on such a tab acts on the button it last pointed at, so a click
+  on the leftmost or rightmost label is sent to the group's arrow on that side (`ui_PartView_TabSide_Button_Left`
+  / `_Right`, the Q and E buttons), which walks the tabs as the keys do (`tab_arrow_for`).
 * **Mouse drag as a stick.** The game's default table also binds actions to the mouse as a "virtual pad"
   (`ActionAssignMouse.VirtualPadDef(button, direction, sensitivity)`; the component that would read them,
   `AppActionMouse`, does not run in this build). The port captures the definitions like the keys and does what
