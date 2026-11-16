@@ -692,16 +692,23 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   from each other with the pack's lettering made large (shrunk pack keys side by side overlapped).
 * **Photo mode on PC: a free camera like the port's stage editor** (`pc_input.c`, "free photo camera"; the
   controller keeps the game's controls). W A S D fly forward / left / back / right along the view, Q / E down / up,
-  Shift three times faster, R back to the start; left drag turns (the game's own), right, middle or Shift + left
-  drag moves the view, the wheel zooms; I J K L turn and = / - zoom too. The menu's choices are on the arrow keys.
+  Shift three times faster, R back to the start; left drag (started above the menu) orbits, right, middle or
+  Shift + left drag moves the view, the wheel zooms; I J K L turn and = / - zoom too. The menu (Frame, Effect,
+  Expression, Pose) is clicked: a click on a picker's value focuses it, on its upper / lower arrow changes it
+  (`photo_click` turns the click into queued arrow-key taps; it runs before the generic menu mouse code, whose
+  mouse action does nothing there). The arrow keys still work. While photo mode runs, W A S D Q E R reach no
+  action of the game (its menus read WASD as directions).
   How: the port runs the game's `MgPhotoModeCamera.updateTRS` (point looked at = player + clamped pan, camera = that
   point + yaw / pitch / distance) and then moves both points by a free offset of its own and scales the distance
-  by an unclamped zoom; once moved freely, `collideStage` leaves the camera where it is. Default keys: the menu's
-  choices (actions 66..69, WASD in the game's PC table) on the arrows, the camera's move (74..77, the arrows) on
-  WASD so its guide reads "Move Camera"; while photo mode runs the keyboard does not feed that clamped pan. The
-  guide's "Select" is a DB guide with the WASD keyboard icon: drawn as the arrows while the photo menu
-  (`UIStatePhotoModeMenu`, hooked) is open. Turn and zoom (55..60) had no keys at all (the mouse's on PC): I J K L,
-  = / -.
+  by an unclamped zoom; once moved freely, `collideStage` leaves the camera where it is. `updateRotAndDist`
+  re-reads distance and angles from where the camera is; while the zoom is on, the game's own distance is kept
+  (else the zoom feeds into it). Orbiting changes the game's `m_rotX` / `m_rotY` before `updateTRS`.
+  Guide: "Select" is the menu directions (actions 14..17, four key tags); in photo mode it is one left-mouse tag.
+  The guides are drawn before photo mode's camera runs, so `MgPhotoModeController.Begin` (hooked) marks photo
+  mode, and the keyboard player's controller kind reads as an Xbox pad for 50 ms soon after: switching back makes
+  the game draw its glyphs again. Default keys: the menu's choices (66..69) on the arrows, the camera's move
+  (74..77) on W A S D so its guide reads "Move Camera"; turn and zoom (55..60) had no keys (the mouse's on PC):
+  I J K L, = / -. `BR_PHOTO_LOG=1` logs the free camera and clicks.
 * **Mouse for the game's cameras.** Photo mode and View Stage read `State.GetMouseButton` / `GetMouseButtonDown` /
   `mousePosition` / `mouseScrollDelta`, whose device functions the Switch build never sets; the port answers them
   for player 1. View Stage: left drag turns, middle or right drag moves, wheel zooms. Positions are in pixels of a

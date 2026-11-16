@@ -128,6 +128,7 @@ static int window_focused(void) {
 #define F_MAIN_GAME_STATE 0x42cfd10ull      // Wonder.MainGame.get_mainGameState (static): 4 = a stage is being played
 static volatile LONG g_wheel;                // notches not yet played: > 0 up (away from the user), < 0 down
 static volatile LONG g_wheel_cam;            // the same notches for the photo / View Stage cameras (mouse camera)
+static void photo_taps(uint64_t now);
 static uint64_t g_cam_tick;                  // when such a camera last read the wheel
 static WNDPROC g_wheel_old_proc;
 static int g_wheel_blocked;
@@ -427,6 +428,7 @@ static void sample(KeySet *s) {
     int focus = window_focused(), text = rt_text_entry_active();
     s->stamp = now;
     if (dt > 0.25f) dt = 0.25f;
+    if (s == &g_frame) photo_taps(now);
     s->mouse_prev = s->mouse;
     s->mouse = 0;
     if (focus) {
@@ -678,6 +680,18 @@ extern int rt_ui_client_h(void);              // online_ui.c
 static int enabled(void);
 static uint64_t g_photo_tick;                 // photo mode's camera ran (its updateTRS) at this time
 static int photo_active(void) { return g_photo_tick && GetTickCount64() - g_photo_tick < 250; }
+static uint64_t g_photo_opening;
+int pc_photo_active(void) { return photo_active() || (g_photo_opening && GetTickCount64() - g_photo_opening < 3000); }
+uint64_t pc_photo_opening(void) { return g_photo_opening; }
+// While photo mode runs, the free camera's keys (W A S D Q E R) belong to it alone: the game's menus read WASD as
+// directions (the photo menu would change its choices), so they reach no action of the game.
+static int photo_fly_key(int k) {
+    static int keys[7];
+    if (!keys[0]) { static const char *const n[7] = {"W", "A", "S", "D", "Q", "E", "R"}; for (int i = 0; i < 7; i++) keys[i] = pc_key_by_name(n[i]); }
+    if (!photo_active()) return 0;
+    for (int i = 0; i < 7; i++) if (keys[i] == k) return 1;
+    return 0;
+}
 static int shift_held(void) {
     static int ls, rs;
     if (!ls) { ls = pc_key_by_name("LeftShift"); rs = pc_key_by_name("RightShift"); }
@@ -686,9 +700,8 @@ static int shift_held(void) {
 static int cam_state_ok(uint64_t state) { return enabled() && state && LD32(state + STATE_ID) == 0 && !rt_text_entry_active(); }
 static int cam_buttons(int mask, int which) {  // which: 0 held, 1 went down this frame
     int cur = g_frame.mouse, prev = g_frame.mouse_prev;
-    if (photo_active()) {                     // only the left button turns; Shift + left, right and middle move (free camera)
-        cur = shift_held() ? 0 : cur & 1;
-        prev &= 1;
+    if (photo_active()) {                     // the free camera does it all (photo_orbit, photo_free)
+        cur = prev = 0;
     } else {
         if (cur & 2) cur |= 4;                // right = middle
         if (prev & 2) prev |= 4;
@@ -730,6 +743,7 @@ int rt_hook_43ca4d0(Cpu *c) {                                                   
 #define PH_TARGET_POS 0x28c
 static float g_ph_off[3], g_ph_zoom = 1.0f, g_ph_last_x, g_ph_last_y;
 static int g_ph_dragging, g_ph_free;
+static uint64_t g_ph_hold;                    // until then the game's distance is kept (the view glides back after R)
 static double g_ph_time;
 static double now_s(void) {
     static LARGE_INTEGER f;
@@ -737,6 +751,115 @@ static double now_s(void) {
     if (!f.QuadPart) QueryPerformanceFrequency(&f);
     QueryPerformanceCounter(&t);
     return (double)t.QuadPart / (double)f.QuadPart;
+}
+// Left drag: orbit (as the port's stage editor), done here on the game's own angles (m_rotX pitch, m_rotY yaw; the
+// game re-reads them from the camera afterwards, as it does for its stick). Only a drag that starts above the photo
+// menu turns: clicks on the menu are for the menu.
+#define PH_ROT_X 0x2d8
+#define PH_ROT_Y 0x2dc
+#define PH_ROT_X_MIN 0x2f0
+#define PH_ROT_X_MAX 0x2f4
+#define PH_MENU_TOP 350.0f                  // the photo menu's panel ends this many 1080-line pixels above the bottom
+static int g_ph_orbit;
+static float g_ph_orbit_x, g_ph_orbit_y;
+static void photo_orbit(uint64_t self) {
+    float x, y;
+    int down, h = rt_ui_client_h(), m = g_frame.mouse, prev = g_frame.mouse_prev;
+    int inside = rt_ui_mouse(&x, &y, &down);
+    float k = h > 0 ? 1080.0f / (float)h : 1.0f;
+    int left = (m & 1) && !shift_held();
+    if (!left || !inside) { g_ph_orbit = 0; return; }
+    if (!g_ph_orbit) {                                               // a new press: above the menu only
+        if (!(prev & 1) && y * k > PH_MENU_TOP) { g_ph_orbit = 1; g_ph_orbit_x = x; g_ph_orbit_y = y; }
+        return;
+    }
+    float dx = (x - g_ph_orbit_x) * k / g_sens_ratio, dy = (y - g_ph_orbit_y) * k / g_sens_ratio;
+    g_ph_orbit_x = x; g_ph_orbit_y = y;
+    float rx = ldf(self + PH_ROT_X) - dy * 0.3f, ry = ldf(self + PH_ROT_Y) + dx * 0.3f;
+    float lo = ldf(self + PH_ROT_X_MIN), hi = ldf(self + PH_ROT_X_MAX);
+    if (lo < hi) { if (rx < lo) rx = lo; if (rx > hi) rx = hi; }
+    stf(self + PH_ROT_X, rx); stf(self + PH_ROT_Y, ry);
+}
+// Clicks on the photo menu: its four pickers (Frame, Effect, Expression, Pose; ui_PartView_Template_Vertical_Picker_N
+// with a value box, an increase arrow above it and a decrease arrow below) take the click as the arrow keys would:
+// Left / Right to the clicked picker (the focused one has an active ImageBackGround_Line_Sel), then Up on the upper
+// arrow, Down on the lower one. The taps are queued (photo_taps) and played one by one.
+#define F_GO_FIND_ 0x3f0c5a0ull             // GameObject.Find(string) (static)
+#define F_GO_TRANSFORM 0x3f0bb40ull         // GameObject.transform
+#define F_STRING_NEW_UTF16_ 0x45af94ull
+#define F_CHILD_COUNT_ 0x3f1e1f0ull
+#define F_GET_CHILD_ 0x3f1ea10ull
+#define F_GO_ACTIVE_IN_HIER_ 0x3f0bdd0ull
+#define F_GET_GAMEOBJECT_ 0x3f07fb0ull      // Component.gameObject
+#define F_OBJ_NAME_ 0x3f10820ull            // Object.name
+extern void rt_ui_point(int hover, float *x, float *y);
+extern int rt_ui_click_pending(void);
+extern void rt_ui_click_consume(void);
+static int g_ph_taps[16], g_ph_ntaps;
+static uint64_t ph_str(Cpu *c, const char *s) {
+    uint16_t w[64];
+    int n = 0;
+    for (; s[n] && n < 63; n++) w[n] = (uint8_t)s[n];
+    return rt_call(c, FN(F_STRING_NEW_UTF16_), 2, (uint64_t)(uintptr_t)w, (uint64_t)n);
+}
+static uint64_t ph_child(Cpu *c, uint64_t t, const char *name, int depth) {     // active transform named `name` under t
+    int n = t ? (int)rt_call(c, FN(F_CHILD_COUNT_), 2, t, 0ull) : 0;
+    for (int i = 0; i < n; i++) {
+        uint64_t ch = rt_call(c, FN(F_GET_CHILD_), 3, t, (uint64_t)i, 0ull);
+        uint64_t go = rt_call(c, FN(F_GET_GAMEOBJECT_), 2, ch, 0ull);
+        if (!(rt_call(c, FN(F_GO_ACTIVE_IN_HIER_), 2, go, 0ull) & 1)) continue;
+        uint64_t s = rt_call(c, FN(F_OBJ_NAME_), 2, go, 0ull);
+        int len = s ? (int)LD32(s + 0x10) : 0, k = 0;
+        for (; k < len && name[k] && LD16(s + 0x14 + 2 * (uint64_t)k) == (uint8_t)name[k]; k++) {}
+        if (k == len && !name[k]) return ch;
+        uint64_t hit = depth > 0 ? ph_child(c, ch, name, depth - 1) : 0;
+        if (hit) return hit;
+    }
+    return 0;
+}
+static int ph_in(Cpu *c, uint64_t view, float x, float y, float pad) {
+    float r[4];
+    return view && rt_ui_rect(c, view, r) && x >= r[0] - pad && x <= r[0] + r[2] + pad && y >= r[1] - pad && y <= r[1] + r[3] + pad;
+}
+static int photo_click(Cpu *c) {
+    if (!rt_ui_click_pending()) return 0;
+    float x, y;
+    rt_ui_point(0, &x, &y);
+    uint64_t go = rt_call(c, FN(F_GO_FIND_), 2, ph_str(c, "ui_View_PhotoModeMenu"), 0ull);
+    uint64_t root = go ? rt_call(c, FN(F_GO_TRANSFORM), 2, go, 0ull) : 0;
+    if (getenv("BR_PHOTO_LOG")) rt_log("photo cam: click at %.0f %.0f, menu %s", x, y, root ? "found" : "not found");
+    if (!root) return 0;
+    int cur = -1, hit = -1, arrow = 0;
+    for (int i = 0; i < 4; i++) {
+        char nm[48];
+        snprintf(nm, sizeof nm, "ui_PartView_Template_Vertical_Picker_%d", i);
+        uint64_t p = ph_child(c, root, nm, 4);
+        if (!p) continue;
+        uint64_t bg = ph_child(c, p, "ImageBackGround", 0), inc = ph_child(c, p, "ui_PartView_PickerIncreaseArrow", 0),
+                 dec = ph_child(c, p, "ui_PartView_PickerDecreaseArrow", 0);
+        if (bg && ph_child(c, bg, "ImageBackGround_Line_Sel", 0)) cur = i;
+        if (ph_in(c, inc, x, y, 22)) { hit = i; arrow = 1; }
+        else if (ph_in(c, dec, x, y, 22)) { hit = i; arrow = -1; }
+        else if (ph_in(c, bg, x, y, 4)) hit = i;
+    }
+    if (hit < 0) return 0;
+    rt_ui_click_consume();
+    if (cur < 0) cur = hit;
+    int left = pc_key_by_name("LeftArrow"), right = pc_key_by_name("RightArrow");
+    g_ph_ntaps = 0;
+    for (int i = cur; i != hit && g_ph_ntaps < 8; i += hit > cur ? 1 : -1) g_ph_taps[g_ph_ntaps++] = hit > cur ? right : left;
+    if (arrow) g_ph_taps[g_ph_ntaps++] = pc_key_by_name(arrow > 0 ? "UpArrow" : "DownArrow");
+    if (getenv("BR_PHOTO_LOG")) rt_log("photo cam: click on picker %d (focus %d), arrow %d, %d taps", hit, cur, arrow, g_ph_ntaps);
+    return 1;
+}
+// Plays the queued taps, one every PH_TAP_MS (called from sample()).
+#define PH_TAP_MS 90
+static void photo_taps(uint64_t now) {
+    static uint64_t next;
+    if (!g_ph_ntaps || now < next) return;
+    g_test_until[g_ph_taps[0]] = now + PH_TAP_MS / 2;
+    memmove(g_ph_taps, g_ph_taps + 1, sizeof(int) * (size_t)--g_ph_ntaps);
+    next = now + PH_TAP_MS;
 }
 static int key_held(const char *name) { int k = pc_key_by_name(name); return k > 0 && k < NKEY && g_frame.cur[k]; }
 static void photo_free(Cpu *c, uint64_t self) {
@@ -753,6 +876,10 @@ static void photo_free(Cpu *c, uint64_t self) {
     float ti[3], tp[3], d[3];
     for (int i = 0; i < 3; i++) { ti[i] = ldf(self + PH_TARGET_INTR + 4 * i); tp[i] = ldf(self + PH_TARGET_POS + 4 * i); d[i] = tp[i] - ti[i]; }
     float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (getenv("BR_PHOTO_LOG")) {
+        static double said;
+        if (t - said > 0.5) { said = t; rt_log("photo cam: game distance %.2f, zoom %.2f, offset %.2f %.2f %.2f", len, g_ph_zoom, g_ph_off[0], g_ph_off[1], g_ph_off[2]); }
+    }
     if (!(len > 1e-4f)) return;
     float fw[3] = {-d[0] / len, -d[1] / len, -d[2] / len};          // camera -> point looked at
     float rt[3] = {fw[2], 0, -fw[0]};                                // Unity: right = Cross(up, forward)
@@ -784,7 +911,7 @@ static void photo_free(Cpu *c, uint64_t self) {
             if (len * g_ph_zoom < 0.3f) g_ph_zoom = 0.3f / len;
             if (len * g_ph_zoom > 400.0f) g_ph_zoom = 400.0f / len;
         }
-        if (pc_key_pressed(pc_key_by_name("R"))) { g_ph_off[0] = g_ph_off[1] = g_ph_off[2] = 0; g_ph_zoom = 1.0f; }
+        if (pc_key_pressed(pc_key_by_name("R"))) { g_ph_off[0] = g_ph_off[1] = g_ph_off[2] = 0; if (g_ph_zoom != 1.0f) g_ph_hold = GetTickCount64() + 1500; g_ph_zoom = 1.0f; }
     }
     g_ph_free = g_ph_off[0] != 0 || g_ph_off[1] != 0 || g_ph_off[2] != 0 || g_ph_zoom != 1.0f;
     for (int i = 0; i < 3; i++) {
@@ -797,12 +924,30 @@ int rt_hook_428de60(Cpu *c) {                                    // MgPhotoModeC
     static __thread int inside;
     if (inside || !enabled()) return 0;
     uint64_t self = X(0);
+    if (!rt_text_entry_active()) { photo_orbit(self); photo_click(c); }
     inside = 1;
     rt_call(c, FN(F_PHOTO_UPDATE_TRS), 1, self);
     inside = 0;
     if (!c->eh_unwinding) photo_free(c, self);
     return 1;
 }
+// MgPhotoModeCamera.updateRotAndDist() reads the distance back from where the camera now is, which includes the
+// free zoom; while that zoom is on, the game's own distance is kept as it was, or the zoom would feed into it.
+#define F_PHOTO_ROT_AND_DIST 0x428e3b0ull
+#define PH_DIST 0x2cc
+int rt_hook_428e3b0(Cpu *c) {
+    static __thread int inside;
+    if (inside || !enabled()) return 0;
+    uint64_t self = X(0);
+    float dist = ldf(self + PH_DIST);
+    inside = 1;
+    rt_call(c, FN(F_PHOTO_ROT_AND_DIST), 1, self);
+    inside = 0;
+    if (!c->eh_unwinding && (g_ph_zoom != 1.0f || GetTickCount64() < g_ph_hold) && photo_active()) stf(self + PH_DIST, dist);   // the game's own distance stays
+    return 1;
+}
+// MgPhotoModeController.Begin: photo mode is opening (its guide is drawn before its camera runs).
+int rt_hook_428f750(Cpu *c) { (void)c; g_photo_opening = GetTickCount64(); if (getenv("BR_PHOTO_LOG")) rt_log("photo cam: photo mode begins"); return 0; }
 // MgPhotoModeCamera.collideStage(Vector3 targetPos) -> Vector3: a freely placed camera is left where it is.
 int rt_hook_428e050(Cpu *c) { return enabled() && g_ph_free && photo_active(); }
 
@@ -912,7 +1057,7 @@ static int state_takes_input(Cpu *c, uint64_t state, uint32_t action) {
 static int binding_active(const Binding *b, const KeySet *s, int kind, uint32_t action) {
     for (int i = 0; i < b->nkeys; i++) {
         int k = b->keys[i];
-        if (k <= 0 || k >= NKEY) continue;
+        if (k <= 0 || k >= NKEY || photo_fly_key(k)) continue;
         if (kind == 0 ? s->cur[k] : kind == 1 ? (s->cur[k] && !s->prev[k]) : kind == 2 ? (!s->cur[k] && s->prev[k]) : s->repeat[k]) return 1;
     }
     if (b->mouse) {
@@ -980,7 +1125,7 @@ int rt_hook_43c8d50(Cpu *c) {
         if (mv > v) v = mv;
         for (int i = 0; i < b->nkeys; i++) {
             int k = b->keys[i];
-            float kv = k > 0 && k < NKEY ? (b->analog ? g_analog[k] : (float)g_frame.cur[k]) : 0;
+            float kv = k > 0 && k < NKEY && !photo_fly_key(k) ? (b->analog ? g_analog[k] : (float)g_frame.cur[k]) : 0;
             if (kv > v) v = kv;
         }
     }
@@ -1218,6 +1363,7 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
     if ((uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) != layer) return r;
     if ((layer & ~1u) != 4 && !(rt_call(c, FN(F_CHECK_FADE), 2, det, 0ull) & 1)) return r;
     if (wheel_editor_click(c, det)) { ST32(det + DET_USER_INPUT, INPUT_DECIDE); return INPUT_DECIDE; }
+    if (rt_ui_click_pending() && photo_active() && photo_click(c)) return r;     // the photo menu's pickers (free photo camera)
     if (rt_ui_click_pending()) {
         uint64_t back = LD64(det + DET_RETURN_BUTTON), v;
         if (back && (rt_call(c, FN(F_OBJ_ALIVE), 2, back, 0ull) & 1) && rt_ui_hit(c, back, 0) > 0) {   // the standing Back button: Cancel

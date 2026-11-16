@@ -109,8 +109,8 @@
 43ca4d0   Wonder.AppInput+State::get_mouseScrollDelta
 428de60   Wonder.MgPhotoModeCamera::updateTRS   (free photo camera)
 428e050   Wonder.MgPhotoModeCamera::collideStage
-4622310   Wonder.UI.Pause.UIStatePhotoModeMenu::initializeCoroutine   (pc_glyphs.c: photo menu open)
-46222f0   Wonder.UI.Pause.UIStatePhotoModeMenu::LateUpdate
+428e3b0   Wonder.MgPhotoModeCamera::updateRotAndDist
+428f750   Wonder.MgPhotoModeController::Begin
 43b5b60   Wonder.AppInput::FixedUpdate
 451d2a0   Wonder.UI.UIPartViewButtonBase::SetMouseAction
 4508710   Wonder.UI.UIStateOptionKeyConfigEdit::exec
