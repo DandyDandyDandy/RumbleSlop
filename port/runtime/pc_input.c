@@ -45,6 +45,8 @@
 #define ACTION_REWIND_FORWARD 90          // MainGame_Rewind_Forward (game's key: RightArrow)
 #define ACTION_REWIND_BACKWARD 91         // MainGame_Rewind_Backward (LeftArrow)
 #define ACTION_CAMERA_UP 55               // MainGame_Camera_Up, _Down, _Left, _Right, _ZoomIn, _ZoomOut (55..60)
+#define ACTION_PHOTO_SELECT 66            // MainGame_PhotoFacialNext, _Previous, EffectNext, _Previous (66..69)
+#define ACTION_CAMERA_PAN_UP 74           // MainGame_Camera_Pan_Up, _Down, _Left, _Right (74..77)
 #define NKEY 112                            // UnityEngine.InputSystem.Key values 1..110
 #define MAX_KEYS 4
 
@@ -509,6 +511,16 @@ static int datum(Cpu *c) {                    // ActionAssignDatum..ctor(Action.
         // The photo mode / View Stage camera (turn up, down, left, right, zoom in, out) has no keys in the game's PC
         // table (it is the mouse's there); WASD selects in photo mode and the arrows move the camera, so turning gets
         // I J K L and zoom + and -.
+        // Photo mode on PC flies with WASD (the free camera): the menu's choices (66..69, WASD in the game's table) go
+        // to the arrows, and the camera's move (74..77, the arrows) to WASD, so the guide names them so.
+        if (a >= ACTION_PHOTO_SELECT && a <= ACTION_PHOTO_SELECT + 3 && g_pending.nkeys == 1) {
+            static const char *const sel[4] = {"RightArrow", "LeftArrow", "DownArrow", "UpArrow"};
+            g_pending.keys[0] = (uint8_t)pc_key_by_name(sel[a - ACTION_PHOTO_SELECT]);
+        }
+        if (a >= ACTION_CAMERA_PAN_UP && a <= ACTION_CAMERA_PAN_UP + 3 && g_pending.nkeys == 1) {
+            static const char *const mvk[4] = {"W", "S", "A", "D"};
+            g_pending.keys[0] = (uint8_t)pc_key_by_name(mvk[a - ACTION_CAMERA_PAN_UP]);
+        }
         if (a >= ACTION_CAMERA_UP && a <= ACTION_CAMERA_UP + 5 && !g_pending.nkeys) {
             static const char *const cam_keys[6] = {"I", "K", "J", "L", "Equals", "Minus"};
             g_pending.keys[0] = (uint8_t)pc_key_by_name(cam_keys[a - ACTION_CAMERA_UP]);
@@ -657,17 +669,30 @@ void pc_mouse_sensitivity(int n) {
 // Photo mode (MgPhotoModeCamera) and View Stage (MgViewStageCamera) have the game's own PC mouse control: a left
 // drag turns the camera, a middle drag moves it, the wheel zooms. They read the mouse through State.GetMouseButton
 // / GetMouseButtonDown / mousePosition / mouseScrollDelta, whose device functions the Switch build never sets, so
-// they always read "no mouse". The port answers them for player 1. As in the port's stage editor, a right drag
-// moves the camera as well (it stands for the middle button). Positions are in pixels of a 1080-line window
+// they always read "no mouse". The port answers them for player 1. Positions are in pixels of a 1080-line window
 // stretched by the Mouse Sensitivity option, so a drag turns as far at any window size. While one of these cameras
 // reads the wheel, its notches are not played as arrow-key taps.
+// View Stage: a right drag moves the camera as well (it stands for the middle button), as in the port's stage editor.
+// Photo mode has the free camera below instead: the game's left drag turns; moving and the wheel are the port's.
 extern int rt_ui_client_h(void);              // online_ui.c
 static int enabled(void);
+static uint64_t g_photo_tick;                 // photo mode's camera ran (its updateTRS) at this time
+static int photo_active(void) { return g_photo_tick && GetTickCount64() - g_photo_tick < 250; }
+static int shift_held(void) {
+    static int ls, rs;
+    if (!ls) { ls = pc_key_by_name("LeftShift"); rs = pc_key_by_name("RightShift"); }
+    return g_frame.cur[ls] || g_frame.cur[rs];
+}
 static int cam_state_ok(uint64_t state) { return enabled() && state && LD32(state + STATE_ID) == 0 && !rt_text_entry_active(); }
 static int cam_buttons(int mask, int which) {  // which: 0 held, 1 went down this frame
     int cur = g_frame.mouse, prev = g_frame.mouse_prev;
-    if (cur & 2) cur |= 4;                    // right = middle
-    if (prev & 2) prev |= 4;
+    if (photo_active()) {                     // only the left button turns; Shift + left, right and middle move (free camera)
+        cur = shift_held() ? 0 : cur & 1;
+        prev &= 1;
+    } else {
+        if (cur & 2) cur |= 4;                // right = middle
+        if (prev & 2) prev |= 4;
+    }
     return which ? (cur & ~prev & mask) != 0 : (cur & mask) != 0;
 }
 int rt_hook_43c9f30(Cpu *c) { c->x[0] = cam_state_ok(X(0)) && cam_buttons((int)W(1), 0); return 1; }    // GetMouseButton
@@ -684,10 +709,102 @@ int rt_hook_43ca4d0(Cpu *c) {                                                   
     uint64_t now = GetTickCount64();
     if (now - g_cam_tick > 250) InterlockedExchange(&g_wheel_cam, 0);      // notches from before the camera was on
     g_cam_tick = now;
-    LONG n = cam_state_ok(X(0)) ? InterlockedExchange(&g_wheel_cam, 0) : 0;
+    LONG n = cam_state_ok(X(0)) && !photo_active() ? InterlockedExchange(&g_wheel_cam, 0) : 0;   // photo mode: the free camera's
     rt_setf(c, 0, 0); rt_setf(c, 1, (float)n);
     return 1;
 }
+
+// ------------------------------------------------------------------------------------------------ free photo camera
+// Photo mode on PC moves like the port's stage editor and a 3D editor's fly camera. The game's camera
+// (MgPhotoModeCamera.updateTRS) puts its point of interest at the player plus a pan offset, the camera at that point
+// plus yaw / pitch / distance, both clamped to a small range; then it pushes the camera out of the stage
+// (collideStage) and smooths. The port runs updateTRS and then moves both points by a free offset of its own and
+// scales the distance by a free zoom; the controller keeps the game's controls on top. Keyboard and mouse (player 1):
+//   W A S D   fly forward / left / back / right (along the view)     Q / E   down / up      Shift   three times faster
+//   left drag turns (the game's)    right, middle or Shift + left drag moves the view    wheel zooms    R   back to start
+// The menu's choices are on the arrow keys (actions 66..69); WASD is the camera's (74..77, its guide says
+// "Move Camera"), and while photo mode runs the keyboard does not feed the game's own clamped pan. Once moved
+// freely, the camera is not pushed out of the stage (it may go anywhere, as in an editor).
+#define F_PHOTO_UPDATE_TRS 0x428de60ull     // MgPhotoModeCamera.updateTRS()
+#define PH_TARGET_INTR 0x274                // Vector3 m_TargetIntr (point looked at), m_TargetPos at 0x28c
+#define PH_TARGET_POS 0x28c
+static float g_ph_off[3], g_ph_zoom = 1.0f, g_ph_last_x, g_ph_last_y;
+static int g_ph_dragging, g_ph_free;
+static double g_ph_time;
+static double now_s(void) {
+    static LARGE_INTEGER f;
+    LARGE_INTEGER t;
+    if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t);
+    return (double)t.QuadPart / (double)f.QuadPart;
+}
+static int key_held(const char *name) { int k = pc_key_by_name(name); return k > 0 && k < NKEY && g_frame.cur[k]; }
+static void photo_free(Cpu *c, uint64_t self) {
+    double t = now_s();
+    float dt = (float)(t - g_ph_time);
+    if (dt > 0.5f || dt < 0) {                                       // photo mode (re)opened: start from the game's view
+        g_ph_off[0] = g_ph_off[1] = g_ph_off[2] = 0; g_ph_zoom = 1.0f; g_ph_dragging = 0; g_ph_free = 0;
+        InterlockedExchange(&g_wheel_cam, 0);
+        dt = 0;
+    }
+    if (dt > 0.1f) dt = 0.1f;
+    g_ph_time = t;
+    g_photo_tick = g_cam_tick = GetTickCount64();
+    float ti[3], tp[3], d[3];
+    for (int i = 0; i < 3; i++) { ti[i] = ldf(self + PH_TARGET_INTR + 4 * i); tp[i] = ldf(self + PH_TARGET_POS + 4 * i); d[i] = tp[i] - ti[i]; }
+    float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!(len > 1e-4f)) return;
+    float fw[3] = {-d[0] / len, -d[1] / len, -d[2] / len};          // camera -> point looked at
+    float rt[3] = {fw[2], 0, -fw[0]};                                // Unity: right = Cross(up, forward)
+    float rl = sqrtf(rt[0] * rt[0] + rt[2] * rt[2]);
+    if (rl < 1e-4f) { rt[0] = 1; rt[2] = 0; } else { rt[0] /= rl; rt[2] /= rl; }
+    float up[3] = {fw[1] * rt[2] - fw[2] * rt[1], fw[2] * rt[0] - fw[0] * rt[2], fw[0] * rt[1] - fw[1] * rt[0]};   // Cross(forward, right)
+    float eff = len * g_ph_zoom;
+    int ok = enabled() && !rt_text_entry_active();
+    if (ok) {
+        float sp = (eff > 1.5f ? eff : 1.5f) * 1.2f * (shift_held() ? 3.0f : 1.0f) * dt, mv[3] = {0, 0, 0};
+        float f = (float)(key_held("W") - key_held("S")), s = (float)(key_held("D") - key_held("A")), v = (float)(key_held("E") - key_held("Q"));
+        for (int i = 0; i < 3; i++) mv[i] = (fw[i] * f + rt[i] * s) * sp;
+        mv[1] += v * sp;
+        // a drag with the right or middle button, or Shift + left, moves the view (the scene follows the cursor)
+        float x, y;
+        int down, h = rt_ui_client_h(), m = g_frame.mouse;
+        int inside = rt_ui_mouse(&x, &y, &down), pan = (m & 6) || ((m & 1) && shift_held());
+        if (pan && inside) {
+            if (g_ph_dragging) {
+                float k = eff * 0.0016f * (h > 0 ? 1080.0f / (float)h : 1.0f) / g_sens_ratio, dx = x - g_ph_last_x, dy = y - g_ph_last_y;
+                for (int i = 0; i < 3; i++) mv[i] += (-rt[i] * dx - up[i] * dy) * k;
+            }
+            g_ph_dragging = 1; g_ph_last_x = x; g_ph_last_y = y;
+        } else g_ph_dragging = 0;
+        for (int i = 0; i < 3; i++) g_ph_off[i] += mv[i];
+        LONG n = InterlockedExchange(&g_wheel_cam, 0);                // wheel: zoom toward the point looked at
+        if (n) {
+            g_ph_zoom *= expf(-0.15f * (float)n);
+            if (len * g_ph_zoom < 0.3f) g_ph_zoom = 0.3f / len;
+            if (len * g_ph_zoom > 400.0f) g_ph_zoom = 400.0f / len;
+        }
+        if (pc_key_pressed(pc_key_by_name("R"))) { g_ph_off[0] = g_ph_off[1] = g_ph_off[2] = 0; g_ph_zoom = 1.0f; }
+    }
+    g_ph_free = g_ph_off[0] != 0 || g_ph_off[1] != 0 || g_ph_off[2] != 0 || g_ph_zoom != 1.0f;
+    for (int i = 0; i < 3; i++) {
+        stf(self + PH_TARGET_INTR + 4 * i, ti[i] + g_ph_off[i]);
+        stf(self + PH_TARGET_POS + 4 * i, ti[i] + d[i] * g_ph_zoom + g_ph_off[i]);
+    }
+    (void)c;
+}
+int rt_hook_428de60(Cpu *c) {                                    // MgPhotoModeCamera.updateTRS
+    static __thread int inside;
+    if (inside || !enabled()) return 0;
+    uint64_t self = X(0);
+    inside = 1;
+    rt_call(c, FN(F_PHOTO_UPDATE_TRS), 1, self);
+    inside = 0;
+    if (!c->eh_unwinding) photo_free(c, self);
+    return 1;
+}
+// MgPhotoModeCamera.collideStage(Vector3 targetPos) -> Vector3: a freely placed camera is left where it is.
+int rt_hook_428e050(Cpu *c) { return enabled() && g_ph_free && photo_active(); }
 
 // ------------------------------------------------------------------------------------------------ chat wheel
 // The chat wheel (UIChoicesGroupModule_SelectCommAction, in play and in the wheel editor of Options / the lobby)
@@ -828,6 +945,7 @@ int rt_hook_43c8530(Cpu *c) {
         for (int i = 0; i < 8 && which < 0; i++)
             if (LD64(state + STATE_FUNCS + 8 * (uint64_t)i) == func) which = i;
         const Binding *b = pc_binding((int)action);
+        if (action >= ACTION_CAMERA_PAN_UP && action <= ACTION_CAMERA_PAN_UP + 3 && photo_active()) which = -1;   // WASD flies (free photo camera)
         if (which >= 0 && b && (b->nkeys || b->mouse || action == ACTION_TITLE_DECIDE || action == ACTION_MOVIE_SKIP) && state_takes_input(c, state, action))
             r = (uint64_t)binding_active(b, which < 4 ? &g_frame : &g_fixed, which & 3, action);
         if (!r && which == 1 && action == g_click_action && g_list_frame == g_click_frame && state_takes_input(c, state, action))
@@ -856,6 +974,7 @@ int rt_hook_43c8d50(Cpu *c) {
     float wv = wheel_value(state, action);
     if (wv > v) v = wv;
     const Binding *b = action < ACTION_COUNT ? pc_binding((int)action) : NULL;
+    if (action >= ACTION_CAMERA_PAN_UP && action <= ACTION_CAMERA_PAN_UP + 3 && photo_active()) b = NULL;   // WASD flies (free photo camera)
     if (b && (b->nkeys || b->vp_button) && v < 1.0f && state_takes_input(c, state, action)) {
         float mv = vpad_value(b);
         if (mv > v) v = mv;

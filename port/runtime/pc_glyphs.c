@@ -189,6 +189,19 @@ static int button_action_cell(Cpu *c, int icon) {
 }
 
 static __thread int t_action, t_kbicon;      // what the caller of GetSprite is drawing (0 = unknown)
+// Photo mode on PC flies with WASD (pc_input.c, free photo camera); its menu's choices are on the arrow keys, so the
+// game's guide for them (KeyboardKeyIcon WASD) shows the arrows there.
+#define KBICON_WASD 101
+// The photo menu (UIStatePhotoModeMenu) is open: its initializeCoroutine ran less than 2 s ago, or its LateUpdate
+// less than 0.25 s ago. (Not MainGame.photoMode: it does not check that the stage's resources exist.)
+static uint64_t g_photo_menu_init, g_photo_menu_tick;
+int rt_hook_4622310(Cpu *c) { (void)c; g_photo_menu_init = GetTickCount64(); return 0; }   // initializeCoroutine
+int rt_hook_46222f0(Cpu *c) { (void)c; g_photo_menu_tick = GetTickCount64(); return 0; }   // LateUpdate
+static int photo_mode(Cpu *c) {
+    uint64_t now = GetTickCount64();
+    (void)c;
+    return (g_photo_menu_init && now - g_photo_menu_init < 2000) || (g_photo_menu_tick && now - g_photo_menu_tick < 250);
+}
 // UIIconSpriteManager_ControllerBtn.GetSprite(ButtonIcon.eID, ControllerKind.eID)
 int rt_hook_4543c80(Cpu *c) {
     int icon = (int)W(1), kind = (int)W(2), cell;
@@ -212,7 +225,15 @@ int rt_hook_4543c80(Cpu *c) {
         }
     }
     if (kind == KIND_XBOX || kind == KIND_PS5 || kind == KIND_PS4) cell = pad_cell(kind, icon);
-    else if (kind == KIND_KEYBOARD) cell = t_action ? action_cell(t_action) : t_kbicon ? kbicon_cell(t_kbicon) : button_action_cell(c, icon);
+    else if (kind == KIND_KEYBOARD) cell = t_action ? action_cell(t_action) : t_kbicon ? (t_kbicon == KBICON_WASD && photo_mode(c) ? CELL_ARROWS : kbicon_cell(t_kbicon)) : button_action_cell(c, icon);
+    if (kind == KIND_KEYBOARD && getenv("BR_GLYPH_LOG")) {           // each keyboard glyph once: where it comes from
+        static uint32_t seen[256];
+        static int nseen;
+        uint32_t key = (uint32_t)icon | (uint32_t)t_action << 8 | (uint32_t)t_kbicon << 16;
+        int i = 0;
+        while (i < nseen && seen[i] != key) i++;
+        if (i == nseen && nseen < 256) { seen[nseen++] = key; rt_log("glyphs: keyboard icon %d action %d key icon %d -> cell %d", icon, t_action, t_kbicon, cell); }
+    }
     else return 0;
     c->x[0] = glyph_sprite(c, cell);
     return 1;

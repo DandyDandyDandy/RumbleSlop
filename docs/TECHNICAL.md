@@ -690,14 +690,24 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   the DLL by `glyph_data.S`. Cells: `family * 32 + ButtonIcon.eID` (Xbox, PS5, PS4), `96 + Key`, mouse and the
   WASD / arrows groups from 208. The two groups are drawn by the script (`key_cluster`): four keycaps apart
   from each other with the pack's lettering made large (shrunk pack keys side by side overlapped).
-* **Photo mode and View Stage camera.** The game's PC table gives the camera actions (55..60, turn up / down / left
-  / right, zoom in / out) no keys: on PC they were the mouse's. The port gives them I J K L and = / - (WASD selects
-  in photo mode, the arrows move the camera); the game's guide shows them by itself. The mouse is the game's own
-  PC scheme: both cameras read `State.GetMouseButton` / `GetMouseButtonDown` / `mousePosition` /
-  `mouseScrollDelta`, whose device functions the Switch build never sets; the port answers them for player 1
-  (`pc_input.c`, "mouse camera"): left drag turns, middle or right drag moves (right as in the port's stage editor),
-  the wheel zooms. Positions are in pixels of a 1080-line window stretched by Mouse Sensitivity. While a camera
-  reads the wheel its notches are not arrow-key taps. The Rewind's steps (actions 90 / 91) also take D / A.
+* **Photo mode on PC: a free camera like the port's stage editor** (`pc_input.c`, "free photo camera"; the
+  controller keeps the game's controls). W A S D fly forward / left / back / right along the view, Q / E down / up,
+  Shift three times faster, R back to the start; left drag turns (the game's own), right, middle or Shift + left
+  drag moves the view, the wheel zooms; I J K L turn and = / - zoom too. The menu's choices are on the arrow keys.
+  How: the port runs the game's `MgPhotoModeCamera.updateTRS` (point looked at = player + clamped pan, camera = that
+  point + yaw / pitch / distance) and then moves both points by a free offset of its own and scales the distance
+  by an unclamped zoom; once moved freely, `collideStage` leaves the camera where it is. Default keys: the menu's
+  choices (actions 66..69, WASD in the game's PC table) on the arrows, the camera's move (74..77, the arrows) on
+  WASD so its guide reads "Move Camera"; while photo mode runs the keyboard does not feed that clamped pan. The
+  guide's "Select" is a DB guide with the WASD keyboard icon: drawn as the arrows while the photo menu
+  (`UIStatePhotoModeMenu`, hooked) is open. Turn and zoom (55..60) had no keys at all (the mouse's on PC): I J K L,
+  = / -.
+* **Mouse for the game's cameras.** Photo mode and View Stage read `State.GetMouseButton` / `GetMouseButtonDown` /
+  `mousePosition` / `mouseScrollDelta`, whose device functions the Switch build never sets; the port answers them
+  for player 1. View Stage: left drag turns, middle or right drag moves, wheel zooms. Positions are in pixels of a
+  1080-line window stretched by Mouse Sensitivity. While a camera reads the wheel its notches are not arrow-key
+  taps. Do not call `MainGame.photoMode` from port code: it reads the stage resources without a null check
+  (FATAL in the menus). The Rewind's steps (actions 90 / 91) also take D / A.
 * **Rumble and the keyboard.** Player 1 is the keyboard and the first controller together; while the keyboard or
   mouse gave the last input (or neither has been used yet), that controller does not rumble (`motors_update` in
   `imports_hid.c`; `BR_VIB_LOG=1` logs "kept still"). Measured with a DualSense: a fall steered by keys was kept
