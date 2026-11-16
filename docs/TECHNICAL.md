@@ -134,6 +134,7 @@ A new save first asks whether to skip the intro tutorial (see below), which shif
 (split screen, online). Steps under 1 mm are not judged (a ball pressed against a wall jitters by fractions of a
 millimetre). `BR_CAM_TRACE=1` adds a line per frame and camera (step length, wall time since the frame before in ms) and per frame for the ball (step, `Time.time`, `Time.fixedTime`). |
 | `BR_INTERP=0\|1`, `BR_INTERP_LOG=1` | Smooth motion (see that section) forced off / on whatever the settings say; every 2 s the number of tracked transforms and blended parts, and the transforms written in both phases of a frame. |
+| `BR_INTERP_ANIM=0` | Smooth motion leaves Animators that the game steps in the fixed step (stage motion) at 60 Hz (comparison test). |
 | `BR_CHARA_DUMP=<part>`, `BR_CHARA_DUMP_EXIT=1` | Renderer/material dump of spawned characters (see below). |
 | `BR_DLC_LOG=1` | Logs the game's own verdict for each add-on content pack (index, name, installed or not), once per pack. |
 | `BR_AUDIO_DEBUG=1` | Audio pacing report, stall report, Start/Stop calls. `BR_AUDIO=off` skips the device. |
@@ -899,6 +900,16 @@ itself is untouched, so physics, replays and online play are as before.
 * **Ownership.** A part that a script writes outside the fixed step belongs to that script until a fixed step
   writes it again: it is neither blended nor written back (`BR_INTERP_LOG=1` names such transforms).
 * **Jumps.** More than 6 units in one step (restart, wormhole, camera cut) is shown at once.
+* **Animators stepped by the game.** `MainGameStage.FixedUpdate` calls `Animator.Update` for the stage's
+  `m_StageAnimators` inside the fixed step (on imported Mania stages that is all stage motion), and the engine writes
+  those transforms itself, past the Transform wrappers. So the `UnityEngine.Animator::Update` icall is wrapped too:
+  in a fixed step it first notes every transform below the Animator (`Transform.GetChild` walk, up to 4096) as
+  written, then lets the Animator run; parts the clip leaves alone come out unchanged and are not blended. Measured
+  at 144 fps on the fork's SMB2 Expert 12 (Brandished, about 180 transforms below its Animator): a moving part changed
+  in 120 of 288 frames, every step uneven, without it (`BR_INTERP_ANIM=0`), and in 288 of 288 frames with 0 to 1
+  uneven steps with it; ball, monkey and camera rolling over it 288 of 288. `BR_FPS_LOG` reports the part as
+  "moving stage part" (the transform below a stepped Animator that moved farthest, under 1 unit, in a step).
+  Rumble's own World 1-1 has no such Animator (no calls seen).
 * **Lifetime.** Tracked Transform objects are held by strong GC handles (host memory is not scanned); an entry
   goes when the object is destroyed or was not written for two seconds. A stage tracks 10 to 50 transforms.
 * **When.** Whenever the picture can be drawn more than 60 times a second: VSync on a display above 60 Hz, or a
@@ -921,7 +932,7 @@ real duration (the frame that runs a two-player fixed step takes about 7.5 ms, m
 that is frame pacing, not the blend. Not looked at: Battle modes, replays, three and four players, a display
 between 60 and 240 Hz, how it feels in the hand (only numbers and stills). What is not covered: motion the
 engine itself makes in the fixed step without a script setter (Rigidbody-driven objects, Animators in physics
-mode) and values that are not transforms (a texture scrolled in FixedUpdate).
+mode that nothing steps by hand) and values that are not transforms (a texture scrolled in FixedUpdate).
 
 ### Wide screens (`ultrawide.c`)
 

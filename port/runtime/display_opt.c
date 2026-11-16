@@ -865,7 +865,7 @@ static float call_float(Cpu *c, uint64_t off) {
 // A position followed frame by frame: in how many frames it moved, and how many steps were uneven (less than half or
 // more than twice the step before; a repeated picture between two moves counts as two).
 typedef struct { float prev[3], step; uint8_t have; uint32_t moved, uneven, pairs; } Track;
-static Track g_trk[4];
+static Track g_trk[5];
 static void track_step(Track *t, const float *p) {
     if (t->have) {
         float dx = p[0] - t->prev[0], dy = p[1] - t->prev[1], dz = p[2] - t->prev[2], d = sqrtf(dx * dx + dy * dy + dz * dz);
@@ -965,8 +965,9 @@ int rt_hook_43d58c0(Cpu *c) {
         uint64_t trs[3] = {ball && LD64(ball + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball, 0ull) : 0,
                            chara && LD64(chara + 0x10) ? rt_call(c, FN(0x3f0bb40ull), 2, chara, 0ull) : 0,   // GameObject.get_transform
                            ball2 && LD64(ball2 + 0x10) ? rt_call(c, FN(0x3f07f60ull), 2, ball2, 0ull) : 0};
-        for (int k = 0; k < 4; k++) {
-            uint64_t tr = trs[k == 2 ? 1 : k == 3 ? 2 : k];
+        extern uint64_t interp_anim_probe(void);           // a stage part an Animator moves in the fixed step
+        for (int k = 0; k < 5; k++) {
+            uint64_t tr = k == 4 ? interp_anim_probe() : trs[k == 2 ? 1 : k == 3 ? 2 : k];
             if (!tr) { g_trk[k].have = 0; continue; }
             rt_call(c, FN(0x3f1a1f0ull), 2, tr, 0ull);
             float p[3];
@@ -1001,12 +1002,12 @@ int rt_hook_43d58c0(Cpu *c) {
                    FPS[g_fps], g_vsync);
             rt_log("fps: a camera moved in %u of %llu frames (%.1f picture changes/s), %u cameras; uneven steps %u of %u", cam_moved,
                    (unsigned long long)frames, (double)cam_moved / wall, cam_count, cam_uneven, cam_pairs);
-            static const char *const what[4] = {"ball", "monkey", "monkey seen from camera 0", "second player's ball"};
-            for (int k = 0; k < 4; k++)
+            static const char *const what[5] = {"ball", "monkey", "monkey seen from camera 0", "second player's ball", "moving stage part"};
+            for (int k = 0; k < 5; k++)
                 if (g_trk[k].pairs) rt_log("fps: %s moved in %u of %llu frames; uneven steps %u of %u", what[k], g_trk[k].moved,
                                            (unsigned long long)frames, g_trk[k].uneven, g_trk[k].pairs);
         }
-        for (int k = 0; k < 4; k++) g_trk[k].moved = g_trk[k].uneven = g_trk[k].pairs = 0;
+        for (int k = 0; k < 5; k++) g_trk[k].moved = g_trk[k].uneven = g_trk[k].pairs = 0;
         cam_moved = cam_uneven = cam_pairs = 0;
         t0 = now; frames = 0; time0 = t; fixed0 = ft; fc0 = fc;
         c->x[0] = x0; c->x[1] = x1; c->v[0] = v0;

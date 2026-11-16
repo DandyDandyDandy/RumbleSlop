@@ -290,6 +290,65 @@ SET3(SetPositionAndRotation_Injected, P | R) SET3(SetLocalPositionAndRotation_In
 SET3(Internal_LookAt_Injected, R) SET3(SetParent, P | R | S)
 SETF(RotateAroundInternal_Injected, R) SETF(RotateAroundLocal_Injected, R) SETF(RotateAround_Injected, R)
 
+// ---- Animators the game steps itself during a fixed step (MainGameStage.FixedUpdate: the Animators of a stage's
+// m_StageAnimators, which on imported Mania stages is all their motion; measured on SMB2 Expert 12 Brandished: 60
+// updates a second, so at 144 fps the parts moved in 120 of 288 frames, every step uneven; with this 288 of 288).
+// Animator.Update writes the transforms inside the engine, past the
+// wrappers above, so before it runs every transform below the Animator is noted as written in this step, as a setter
+// would note it; parts the clip does not move come out unchanged and are not blended. BR_INTERP_ANIM=0 leaves them
+// at 60 Hz (test).
+#define MAX_TREE 4096
+static void (*o_anim_update)(void *, float);
+static void *(*o_comp_transform)(void *);
+static int (*o_child_count)(void *);
+static void *(*o_get_child)(void *, int);
+static void (*o_get_pos)(void *, float *);
+static int g_anim = -1, g_probe_on = -1;
+static uint64_t g_probe;                    // BR_FPS_LOG: the animated transform that moved farthest (under 1) in a step
+static uint64_t g_anim_calls, g_anim_noted;
+static int tree(void *animator, void **out) {
+    void *root = o_comp_transform(animator);
+    if (!root) return 0;
+    int n = 0;
+    out[n++] = root;
+    for (int i = 0; i < n; i++) {
+        int k = o_child_count(out[i]);
+        for (int j = 0; j < k && n < MAX_TREE; j++) {
+            void *ch = o_get_child(out[i], j);
+            if (ch) out[n++] = ch;
+        }
+    }
+    return n;
+}
+static void w_anim_update(void *self, float dt) {
+    int ph = phase();
+    if (ph != 1 || !self || !LD64((uint64_t)(uintptr_t)self + CACHED_PTR) || !o_comp_transform || !o_child_count || !o_get_child) {
+        o_anim_update(self, dt);
+        return;
+    }
+    if (g_anim < 0) { const char *e = getenv("BR_INTERP_ANIM"); g_anim = !(e && *e == '0'); }
+    if (g_probe_on < 0) g_probe_on = getenv("BR_FPS_LOG") != NULL && o_get_pos;
+    static void *t[MAX_TREE];
+    static float before[MAX_TREE][3];
+    int n = tree(self, t);
+    if (g_anim) for (int i = 0; i < n; i++) wrote(t[i], P | R | S, 1);
+    g_anim_calls++; g_anim_noted += (uint64_t)n;
+    int pick = g_probe_on && (!g_probe || !LD64(g_probe + CACHED_PTR));
+    if (pick) for (int i = 0; i < n; i++) o_get_pos(t[i], before[i]);
+    o_anim_update(self, dt);
+    if (pick) {
+        float best = 1e-4f;
+        for (int i = 0; i < n; i++) {
+            float p[3];
+            o_get_pos(t[i], p);
+            float dx = p[0] - before[i][0], dy = p[1] - before[i][1], dz = p[2] - before[i][2], d = dx * dx + dy * dy + dz * dz;
+            if (d > best && d < 1.0f) { best = d; g_probe = (uint64_t)(uintptr_t)t[i]; }   // BR_FPS_LOG judges steps under 1
+        }
+    }
+}
+// for BR_FPS_LOG (display_opt.c): a stage part moved by an Animator in the fixed step, 0 if none
+uint64_t interp_anim_probe(void) { return g_probe && LD64(g_probe + CACHED_PTR) ? g_probe : 0; }
+
 typedef struct { const char *name; void **orig; void *wrap; } Wrap;
 #define WR(id) {"UnityEngine.Transform::" #id, (void **)&o_##id, (void *)w_##id}
 #define TAKE(name, var) {name, (void **)&var, NULL}
@@ -307,10 +366,13 @@ static const Wrap g_wraps[] = {
     TAKE("UnityEngine.Time::get_timeAsDouble", o_time_d), TAKE("UnityEngine.Time::get_fixedTimeAsDouble", o_fixed_d),
     TAKE("UnityEngine.Time::get_time", o_time_f), TAKE("UnityEngine.Time::get_fixedTime", o_fixed_f),
     TAKE("UnityEngine.Time::get_fixedDeltaTime", o_fixed_dt),
+    {"UnityEngine.Animator::Update", (void **)&o_anim_update, (void *)w_anim_update},
+    TAKE("UnityEngine.Component::get_transform", o_comp_transform), TAKE("UnityEngine.Transform::get_childCount", o_child_count),
+    TAKE("UnityEngine.Transform::GetChild", o_get_child),
 };
 // Called by il2cpp_add_internal_call for every icall the engine registers: the function the game is to call.
 void *rt_interp_wrap(const char *name, void *method) {
-    if (strncmp(name, "UnityEngine.T", 13)) return method;
+    if (strncmp(name, "UnityEngine.T", 13) && strncmp(name, "UnityEngine.A", 13) && strncmp(name, "UnityEngine.C", 13)) return method;
     for (size_t i = 0; i < sizeof g_wraps / sizeof *g_wraps; i++)
         if (!strcmp(g_wraps[i].name, name)) {
             *g_wraps[i].orig = method;
@@ -337,6 +399,7 @@ void interp_tick(Cpu *c) {
         // the part setters are never the game's own way in, so they may be missing from its table: nothing to do then
         o_get_lp = (Get2)o_get_localPosition_Injected; o_get_lr = (Get2)o_get_localRotation_Injected; o_get_ls = (Get2)o_get_localScale_Injected;
         o_set_lp = (Set2)o_set_localPosition_Injected; o_set_lr = (Set2)o_set_localRotation_Injected; o_set_ls = (Set2)o_set_localScale_Injected;
+        o_get_pos = (void (*)(void *, float *))o_get_position_Injected;
         ready = o_get_lp && o_get_lr && o_get_ls && o_set_lp && o_set_lr && o_set_ls && o_in_fixed && o_frame && o_fixed_dt &&
                 (o_time_d || o_time_f) && (o_fixed_d || o_fixed_f) && (!o_time_d == !o_fixed_d);
         rt_log("interp: %s", ready ? "ready" : "engine functions missing, motion stays at 60 Hz");
@@ -358,6 +421,9 @@ void interp_tick(Cpu *c) {
     rt_log("interp: %d transforms tracked, %d parts written in the last step (%d taken over by a frame script, %d jumped); "
            "%.1f parts blended a frame", g_n, act, ovr, snap, g_stat_frames ? (double)g_stat_blend / (double)g_stat_frames : 0.0);
     g_stat_blend = g_stat_frames = 0;
+    if (g_anim_calls) rt_log("interp: %llu Animator steps in fixed steps, %.0f transforms below each", (unsigned long long)g_anim_calls,
+                             (double)g_anim_noted / (double)g_anim_calls);
+    g_anim_calls = g_anim_noted = 0;
     int shown = 0;
     for (int i = 0; i < g_n && shown < 12; i++) {
         Entry *e = &g_e[i];
