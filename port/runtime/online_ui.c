@@ -709,6 +709,7 @@ static BOOL CALLBACK main_window(HWND h, LPARAM out) {
 // something takes it (rt_ui_click_consume). BR_INPUT_LIVE "CLICK x y" and "MOVE x y" stand in for the real mouse.
 static int g_click, g_test_click, g_test_move, g_test_x, g_test_y, g_mouse_moved, g_mouse_inside, g_mouse_down, g_test_hold;
 static float g_click_x, g_click_y, g_mouse_x = -1, g_mouse_y = -1;
+static int g_client_h;
 void rt_ui_test_click(int x, int y) { g_test_x = x; g_test_y = y; g_test_click = 1; }
 void rt_ui_test_move(int x, int y) { g_test_x = x; g_test_y = y; g_test_move = 1; }
 // BR_INPUT_LIVE "HOLD x y": the left button goes down at x y and stays down while further MOVE lines move the
@@ -725,6 +726,7 @@ static void ui_mouse_frame(void) {
     g_mouse_down = g_test_hold || (down && window_focused());
     EnumThreadWindows(GetCurrentThreadId(), main_window, (LPARAM)&w);
     if (!w || !GetClientRect(w, &cr)) return;
+    g_client_h = cr.bottom;
     static int test_cursor;                                         // a scripted cursor stays where the test put it
     extern int rt_no_real_input(void);
     if (g_test_click || g_test_move || g_test_hold) { p.x = g_test_x; p.y = g_test_y; edge = g_test_click; g_test_click = g_test_move = 0; test_cursor = 1; }
@@ -737,6 +739,7 @@ static void ui_mouse_frame(void) {
     if (edge && g_mouse_inside) { g_click = 1; g_click_x = x; g_click_y = y; }
 }
 int rt_ui_click_pending(void) { return g_click; }
+int rt_ui_client_h(void) { return g_client_h; }      // the game window's client height in pixels
 int rt_ui_test_held(void) { return g_test_hold; }      // pc_input.c: a scripted HOLD counts as the left button
 // The cursor in window pixels from the bottom left, and whether the left button is held; 0 when the cursor is not
 // over the window.

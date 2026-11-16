@@ -476,6 +476,8 @@ HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAx
 // stronger wins: values the game sends directly (SendVibrationValue: the left and right linear actuator of a
 // Switch controller, each standing for one motor) and the vibration-file player further down, which is what the
 // game's own effects use (low band -> heavy motor, high band -> light motor).
+extern uint64_t pc_kbm_last_input(void);     // pc_input.c
+static int vib_log(void);
 static float g_amp[MAX_PADS][2], g_file_amp[MAX_PADS][2];
 static uint16_t g_x_sent[MAX_PADS][2];
 static void motors_update(uint32_t id) {
@@ -485,6 +487,17 @@ static void motors_update(uint32_t id) {
         m[k] = g_amp[id][k] > g_file_amp[id][k] ? g_amp[id][k] : g_file_amp[id][k];
         if (!(m[k] > 0)) m[k] = 0;
         if (m[k] > 1) m[k] = 1;
+    }
+    // Player 1 is the keyboard and the first controller together: while the keyboard or mouse gave the last input
+    // (the same test the button glyphs use), or neither has been used yet, that controller is not the one being
+    // played and stays still.
+    if (id == 0 && pc_kbm_last_input() >= g_pad_tick[0]) {
+        if (vib_log() && (m[0] > 0 || m[1] > 0)) {
+            static uint64_t said;
+            uint64_t now = GetTickCount64();
+            if (now - said > 2000) { said = now; rt_log("vibration: pad 0 kept still, the keyboard / mouse is in use"); }
+        }
+        m[0] = m[1] = 0;
     }
     if (rt_no_real_input()) return;
     if (g_dev[id].xinput >= 0) {

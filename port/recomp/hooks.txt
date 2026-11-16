@@ -103,6 +103,10 @@
 43c8530   Wonder.AppInput+State::checkAction
 43c8d50   Wonder.AppInput+State::ActionAnalogValue
 43b5380   Wonder.AppInput::Update
+43c9f30   Wonder.AppInput+State::GetMouseButton   (photo mode / View Stage mouse camera)
+43ca110   Wonder.AppInput+State::GetMouseButtonDown
+43ca330   Wonder.AppInput+State::get_mousePosition
+43ca4d0   Wonder.AppInput+State::get_mouseScrollDelta
 43b5b60   Wonder.AppInput::FixedUpdate
 451d2a0   Wonder.UI.UIPartViewButtonBase::SetMouseAction
 4508710   Wonder.UI.UIStateOptionKeyConfigEdit::exec

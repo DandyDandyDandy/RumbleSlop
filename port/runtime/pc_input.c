@@ -44,6 +44,7 @@
 #define ACTION_MOVIE_SKIP 101
 #define ACTION_REWIND_FORWARD 90          // MainGame_Rewind_Forward (game's key: RightArrow)
 #define ACTION_REWIND_BACKWARD 91         // MainGame_Rewind_Backward (LeftArrow)
+#define ACTION_CAMERA_UP 55               // MainGame_Camera_Up, _Down, _Left, _Right, _ZoomIn, _ZoomOut (55..60)
 #define NKEY 112                            // UnityEngine.InputSystem.Key values 1..110
 #define MAX_KEYS 4
 
@@ -124,6 +125,8 @@ static int window_focused(void) {
 #define WHEEL_STEP_MS 70
 #define F_MAIN_GAME_STATE 0x42cfd10ull      // Wonder.MainGame.get_mainGameState (static): 4 = a stage is being played
 static volatile LONG g_wheel;                // notches not yet played: > 0 up (away from the user), < 0 down
+static volatile LONG g_wheel_cam;            // the same notches for the photo / View Stage cameras (mouse camera)
+static uint64_t g_cam_tick;                  // when such a camera last read the wheel
 static WNDPROC g_wheel_old_proc;
 static int g_wheel_blocked;
 static LRESULT CALLBACK wheel_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -133,7 +136,7 @@ static LRESULT CALLBACK wheel_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
         rest += GET_WHEEL_DELTA_WPARAM(w);
         int n = rest / WHEEL_DELTA;
         rest -= n * WHEEL_DELTA;
-        if (n) InterlockedExchangeAdd(&g_wheel, n);
+        if (n) { InterlockedExchangeAdd(&g_wheel, n); InterlockedExchangeAdd(&g_wheel_cam, n); }
     }
     return CallWindowProcW(g_wheel_old_proc, h, m, w, l);
 }
@@ -142,7 +145,7 @@ static BOOL CALLBACK wheel_window(HWND h, LPARAM out) {
     *(HWND *)out = h;
     return FALSE;
 }
-void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches); }      // BR_INPUT_LIVE "WHEEL <n>"
+void pc_input_test_wheel(int notches) { InterlockedExchangeAdd(&g_wheel, notches); InterlockedExchangeAdd(&g_wheel_cam, notches); }      // BR_INPUT_LIVE "WHEEL <n>"
 
 // ---- lists. Every list of the game sits in a UnityEngine.UI.ScrollRect; the game's own code moves its content
 // towards the focused item (three Update functions, which the game's PC code switches off while the mouse is the
@@ -435,7 +438,7 @@ static void sample(KeySet *s) {
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
     {                                           // the wheel on a screen without a list: the next waiting notch becomes an arrow-key tap
         static uint64_t next;
-        if ((g_wheel_blocked && !g_list_count) || text) InterlockedExchange(&g_wheel, 0);     // in play: no key taps
+        if ((g_wheel_blocked && !g_list_count) || text || now - g_cam_tick < 250) InterlockedExchange(&g_wheel, 0);     // in play / a camera has the wheel: no key taps
         else if (g_wheel && !g_list_count && now >= next) {
             LONG n = g_wheel;
             if (n > 8 || n < -8) n = InterlockedExchange(&g_wheel, n > 0 ? 8 : -8) > 0 ? 8 : -8;     // a spin does not queue for seconds
@@ -503,6 +506,14 @@ static int datum(Cpu *c) {                    // ActionAssignDatum..ctor(Action.
         // The Helper's rewind steps with the arrow keys only; players who move with WASD get D / A as well.
         if ((a == ACTION_REWIND_FORWARD || a == ACTION_REWIND_BACKWARD) && g_pending.nkeys == 1)
             g_pending.keys[g_pending.nkeys++] = (uint8_t)pc_key_by_name(a == ACTION_REWIND_FORWARD ? "D" : "A");
+        // The photo mode / View Stage camera (turn up, down, left, right, zoom in, out) has no keys in the game's PC
+        // table (it is the mouse's there); WASD selects in photo mode and the arrows move the camera, so turning gets
+        // I J K L and zoom + and -.
+        if (a >= ACTION_CAMERA_UP && a <= ACTION_CAMERA_UP + 5 && !g_pending.nkeys) {
+            static const char *const cam_keys[6] = {"I", "K", "J", "L", "Equals", "Minus"};
+            g_pending.keys[0] = (uint8_t)pc_key_by_name(cam_keys[a - ACTION_CAMERA_UP]);
+            g_pending.nkeys = 1;
+        }
         g_default[a] = g_pending; g_captured++;
     }
     memset(&g_pending, 0, sizeof g_pending);
@@ -640,6 +651,42 @@ void pc_mouse_sensitivity(int n) {
     if (p < -1) p = -1;
     g_sens_ratio = p > 0 ? 1.0f + p : p < 0 ? 0.1f + (p + 1.0f) * 0.9f : 1.0f;
     rt_log("mouse: sensitivity option %d, drag length x%.2f", n, (double)g_sens_ratio);
+}
+
+// ------------------------------------------------------------------------------------------------ mouse camera
+// Photo mode (MgPhotoModeCamera) and View Stage (MgViewStageCamera) have the game's own PC mouse control: a left
+// drag turns the camera, a middle drag moves it, the wheel zooms. They read the mouse through State.GetMouseButton
+// / GetMouseButtonDown / mousePosition / mouseScrollDelta, whose device functions the Switch build never sets, so
+// they always read "no mouse". The port answers them for player 1. As in the port's stage editor, a right drag
+// moves the camera as well (it stands for the middle button). Positions are in pixels of a 1080-line window
+// stretched by the Mouse Sensitivity option, so a drag turns as far at any window size. While one of these cameras
+// reads the wheel, its notches are not played as arrow-key taps.
+extern int rt_ui_client_h(void);              // online_ui.c
+static int enabled(void);
+static int cam_state_ok(uint64_t state) { return enabled() && state && LD32(state + STATE_ID) == 0 && !rt_text_entry_active(); }
+static int cam_buttons(int mask, int which) {  // which: 0 held, 1 went down this frame
+    int cur = g_frame.mouse, prev = g_frame.mouse_prev;
+    if (cur & 2) cur |= 4;                    // right = middle
+    if (prev & 2) prev |= 4;
+    return which ? (cur & ~prev & mask) != 0 : (cur & mask) != 0;
+}
+int rt_hook_43c9f30(Cpu *c) { c->x[0] = cam_state_ok(X(0)) && cam_buttons((int)W(1), 0); return 1; }    // GetMouseButton
+int rt_hook_43ca110(Cpu *c) { c->x[0] = cam_state_ok(X(0)) && cam_buttons((int)W(1), 1); return 1; }    // GetMouseButtonDown
+int rt_hook_43ca330(Cpu *c) {                                                                            // mousePosition
+    float x, y, k = 1.0f;
+    int down, h = rt_ui_client_h();
+    rt_ui_mouse(&x, &y, &down);
+    if (h > 0) k = 1080.0f / (float)h / g_sens_ratio;
+    rt_setf(c, 0, cam_state_ok(X(0)) ? x * k : 0); rt_setf(c, 1, cam_state_ok(X(0)) ? y * k : 0);
+    return 1;
+}
+int rt_hook_43ca4d0(Cpu *c) {                                                                            // mouseScrollDelta
+    uint64_t now = GetTickCount64();
+    if (now - g_cam_tick > 250) InterlockedExchange(&g_wheel_cam, 0);      // notches from before the camera was on
+    g_cam_tick = now;
+    LONG n = cam_state_ok(X(0)) ? InterlockedExchange(&g_wheel_cam, 0) : 0;
+    rt_setf(c, 0, 0); rt_setf(c, 1, (float)n);
+    return 1;
 }
 
 // ------------------------------------------------------------------------------------------------ chat wheel

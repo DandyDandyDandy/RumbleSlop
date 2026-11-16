@@ -690,6 +690,18 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   the DLL by `glyph_data.S`. Cells: `family * 32 + ButtonIcon.eID` (Xbox, PS5, PS4), `96 + Key`, mouse and the
   WASD / arrows groups from 208. The two groups are drawn by the script (`key_cluster`): four keycaps apart
   from each other with the pack's lettering made large (shrunk pack keys side by side overlapped).
+* **Photo mode and View Stage camera.** The game's PC table gives the camera actions (55..60, turn up / down / left
+  / right, zoom in / out) no keys: on PC they were the mouse's. The port gives them I J K L and = / - (WASD selects
+  in photo mode, the arrows move the camera); the game's guide shows them by itself. The mouse is the game's own
+  PC scheme: both cameras read `State.GetMouseButton` / `GetMouseButtonDown` / `mousePosition` /
+  `mouseScrollDelta`, whose device functions the Switch build never sets; the port answers them for player 1
+  (`pc_input.c`, "mouse camera"): left drag turns, middle or right drag moves (right as in the port's stage editor),
+  the wheel zooms. Positions are in pixels of a 1080-line window stretched by Mouse Sensitivity. While a camera
+  reads the wheel its notches are not arrow-key taps. The Rewind's steps (actions 90 / 91) also take D / A.
+* **Rumble and the keyboard.** Player 1 is the keyboard and the first controller together; while the keyboard or
+  mouse gave the last input (or neither has been used yet), that controller does not rumble (`motors_update` in
+  `imports_hid.c`; `BR_VIB_LOG=1` logs "kept still"). Measured with a DualSense: a fall steered by keys was kept
+  still, one steered by the pad rumbled.
 * **Tests without devices**: `BR_INPUT_LIVE` lines `KEY <Key name> [ms]`, `CLICK x y`, `MOVE x y`; `BR_KIND=<n>`
   forces a controller kind for the glyphs; `BR_GLYPH_LOG=1` logs the size of the game's own glyph sprites.
   Checked this way: menus and a stage by keys only, hover and click, Back button, rebinding and reset, the three
