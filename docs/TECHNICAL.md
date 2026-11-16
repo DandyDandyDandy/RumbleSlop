@@ -594,6 +594,17 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   The main-game camera has no mouse binding in the game's table (arrow keys). `BR_INPUT_DUMP=1` lists them.
   Seen: a scripted drag (`HOLD 960 540`, `MOVE 960 300`) rolls the ball forward into the goal of the first
   stage. Not done: the two `GestureDef` bindings (actions 61, 62), a real mouse in the hand.
+* **Chat wheel by mouse.** The game's PC layout opens the wheel with E or the middle button (action 96, held) and
+  aims with WASD or a left drag (97..100; the editor's wheel 147..150). The port adds pointing: hook `4662a30`
+  (`calcForChoosingItem`, `pc_input.c`) gives those four actions the cursor's direction from the centre of the
+  wheel's view (`m_RectTrs`), once the mouse moved while the wheel is open and until a key is pressed; within 12 %
+  of the view's size of the centre nothing is chosen. A left click sends: in play action 96 reads as released
+  (until it really is, so a held E does not reopen the wheel); in the wheel editor (Options > Chat Wheel > Chat
+  Wheel Settings, and the lobby's) the click is Decide on the editor's detector. `BR_WHEEL_LOG=1`. Seen: editor
+  (right -> Nice!, up-left -> Excited, click went on to "Choose how you want to chat"); online Adventure with two
+  instances (5120x1440): left -> Clap, right -> Nice! sent by click and shown in the guest's chat log, no reopen
+  with E still held; E + W alone still sends Hello!. Not tested: a real mouse, the middle button as the hold,
+  split screen (keyboard is player 1 only), Battle, the lobby's editor, 16:9 windows.
 * **Mouse Sensitivity.** The game has the option (`OptionParam.dataMouseSensitivity`, 5 in every save), its text
   in eleven languages and the arithmetic (`AppMouse.SetSensitivityReviseParamByInt`,
   `ActionAssignMouse.CalcRevisedSensitivity`), but this build shows no row for it and calls neither. The port

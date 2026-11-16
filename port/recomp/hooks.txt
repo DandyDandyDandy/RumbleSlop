@@ -107,6 +107,7 @@
 451d2a0   Wonder.UI.UIPartViewButtonBase::SetMouseAction
 4508710   Wonder.UI.UIStateOptionKeyConfigEdit::exec
 4572a10   Wonder.UI.Option.UIOptionChoicesItemData_KeyConfig::SetKeyConfigEditButton
+4662a30   Wonder.UI.Communication.UIChoicesGroupModule_SelectCommAction::calcForChoosingItem   (chat wheel by mouse)
 # port/runtime/pc_glyphs.c: button glyphs for the device in use
 43caab0   Wonder.AppInput+State::CopyToActiveLayer
 43cab80   Wonder.AppInput+State::CopyToInactiveLayer

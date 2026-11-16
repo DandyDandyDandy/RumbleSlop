@@ -634,6 +634,92 @@ void pc_mouse_sensitivity(int n) {
     rt_log("mouse: sensitivity option %d, drag length x%.2f", n, (double)g_sens_ratio);
 }
 
+// ------------------------------------------------------------------------------------------------ chat wheel
+// The chat wheel (UIChoicesGroupModule_SelectCommAction, in play and in the wheel editor of Options / the lobby)
+// picks its slice from the direction of a stick: four analog actions (its virtual getters, slots 7..10: up, down,
+// left, right), read by calcForChoosingItem, need a length of 0.4. With the mouse, the direction is the cursor's
+// from the wheel's centre: the slice the cursor points at is chosen, near the centre none. This starts once the
+// mouse moved while the wheel is open and ends when a key is pressed (keys and pad keep working as before).
+// A left click sends the chosen slice: in play the wheel sends when its button (action 96) is let go, so a click
+// makes that action read as released once; in the editor the click is the wheel's Decide.
+#define F_WHEEL_CALC 0x4662a30ull           // UIChoicesGroupModule_SelectCommAction.calcForChoosingItem(State, float)
+#define F_FOCUS_INDEX 0x45a85a0ull          // UIFocusOfChoicesCtrl_OneDimension.get_focusIndex
+#define WM_VIEW 0x20                        // module: m_SelectCommunicationActionView, m_FocusOnChoicesController
+#define WM_FOCUS 0x28
+#define WM_DETECTOR 0x70                    // ForCustomize: m_InputDetector
+#define WV_RECT 0x48                        // UIViewSelectCommAction.m_RectTrs
+#define ACTION_WHEEL_HOLD 96
+#define ACTION_EDITOR_UP 0x93               // the editor's module reads its own four actions
+static __thread uint64_t t_wheel;            // the module whose calcForChoosingItem is running
+static uint32_t g_wheel_act[4];              // its four actions
+static float g_wheel_aim[4];                 // what the cursor gives each of them
+static uint64_t g_wheel_mod, g_wheel_open_tick, g_wheel_editor_det;
+static uint32_t g_wheel_frame;
+static int g_wheel_send;                     // a click is waiting to send the slice (in play)
+static int enabled(void);
+extern int rt_ui_click_pending(void);
+static int wheel_log(void) { static int l = -1; if (l < 0) l = getenv("BR_WHEEL_LOG") != NULL; return l; }
+static uint32_t wheel_action(Cpu *c, uint64_t m, int slot) {
+    uint64_t k = LD64(m), off = 0x138 + 0x10 * (uint64_t)slot;
+    return (uint32_t)rt_call(c, LD64(k + off), 2, m, LD64(k + off + 8));
+}
+int rt_hook_4662a30(Cpu *c) {
+    static __thread int inside;
+    if (inside || !enabled()) return 0;
+    uint64_t m = X(0), state = X(1), now = GetTickCount64();
+    float dt = rt_getf(c, 0);
+    if (m != g_wheel_mod || g_list_frame - g_wheel_frame > 2) {      // the wheel opened
+        g_wheel_open_tick = now; g_wheel_send = 0;
+        if (wheel_log()) rt_log("wheel: open, actions %u %u %u %u", wheel_action(c, m, 7), wheel_action(c, m, 8), wheel_action(c, m, 9), wheel_action(c, m, 10));
+    }
+    g_wheel_mod = m; g_wheel_frame = g_list_frame;
+    for (int i = 0; i < 4; i++) { g_wheel_act[i] = wheel_action(c, m, 7 + i); g_wheel_aim[i] = 0; }
+    int editor = g_wheel_act[0] == ACTION_EDITOR_UP;
+    g_wheel_editor_det = editor ? LD64(m + WM_DETECTOR) : 0;
+    float x, y, r[4];
+    int down, inside_win = rt_ui_mouse(&x, &y, &down);
+    uint64_t view = LD64(m + WM_VIEW), rect = view ? LD64(view + WV_RECT) : 0;
+    int aim = g_mouse_tick > g_wheel_open_tick && g_mouse_tick >= g_key_tick && inside_win && rect && rt_ui_rect(c, rect, r);
+    if (aim) {
+        float dx = x - (r[0] + r[2] / 2), dy = y - (r[1] + r[3] / 2), len = sqrtf(dx * dx + dy * dy);
+        float dead = 0.12f * (r[2] < r[3] ? r[2] : r[3]);
+        if (dead < 12) dead = 12;
+        if (len >= dead) {
+            g_wheel_aim[0] = dy > 0 ? dy / len : 0; g_wheel_aim[1] = dy < 0 ? -dy / len : 0;
+            g_wheel_aim[2] = dx < 0 ? -dx / len : 0; g_wheel_aim[3] = dx > 0 ? dx / len : 0;
+        }
+        if (wheel_log() && rt_ui_mouse_moved())
+            rt_log("wheel: cursor %.0f %.0f, wheel %.0f %.0f %.0f %.0f, aim u%.2f d%.2f l%.2f r%.2f", x, y, r[0], r[1], r[2], r[3],
+                   g_wheel_aim[0], g_wheel_aim[1], g_wheel_aim[2], g_wheel_aim[3]);
+    }
+    t_wheel = m;
+    inside = 1;
+    c->x[0] = m; c->x[1] = state; rt_setf(c, 0, dt);
+    rt_call_regs(c, FN(F_WHEEL_CALC));
+    inside = 0;
+    t_wheel = 0;
+    if (!editor && rt_ui_click_pending() && inside_win) {             // a click sends the slice now chosen
+        rt_ui_click_consume();
+        g_wheel_send = 1;
+        if (wheel_log()) rt_log("wheel: click, focus %d", (int)rt_call(c, FN(F_FOCUS_INDEX), 2, LD64(m + WM_FOCUS), 0ull));
+    }
+    return 1;
+}
+static float wheel_value(uint64_t state, uint32_t action) {
+    if (!t_wheel || LD32(state + STATE_ID) != 0) return 0;
+    for (int i = 0; i < 4; i++)
+        if (g_wheel_act[i] == action) return g_wheel_aim[i];
+    return 0;
+}
+// The editor's detector, polled now: a click while a slice is chosen is Decide (ui_mouse).
+static int wheel_editor_click(Cpu *c, uint64_t det) {
+    if (!det || det != g_wheel_editor_det || g_list_frame - g_wheel_frame > 2 || !rt_ui_click_pending()) return 0;
+    if ((int)rt_call(c, FN(F_FOCUS_INDEX), 2, LD64(g_wheel_mod + WM_FOCUS), 0ull) < 0) return 0;
+    rt_ui_click_consume();
+    if (wheel_log()) rt_log("wheel: click in the editor, Decide");
+    return 1;
+}
+
 // ------------------------------------------------------------------------------------------------ the game's side
 // The gates State.checkAction applies before it asks the pad, for the keyboard: 1 = this state may see input now.
 static int state_takes_input(Cpu *c, uint64_t state, uint32_t action) {
@@ -690,6 +776,13 @@ int rt_hook_43c8530(Cpu *c) {
         if (which >= 0 && b && (b->nkeys || b->mouse || action == ACTION_TITLE_DECIDE || action == ACTION_MOVIE_SKIP) && state_takes_input(c, state, action))
             r = (uint64_t)binding_active(b, which < 4 ? &g_frame : &g_fixed, which & 3, action);
     }
+    // A click sent the slice: the wheel's button reads as let go until it really is, so a button still held after
+    // the click does not open the wheel again.
+    if (action == ACTION_WHEEL_HOLD && g_wheel_send && LD32(state + STATE_ID) == 0 && func &&
+        (func == LD64(state + STATE_FUNCS) || func == LD64(state + STATE_FUNCS + 32))) {
+        if (!r) g_wheel_send = 0;
+        r = 0;
+    }
     c->x[0] = r;
     return 1;
 }
@@ -703,6 +796,8 @@ int rt_hook_43c8d50(Cpu *c) {
     rt_call(c, FN(F_ACTION_ANALOG), 2, state, (uint64_t)action);
     inside = 0;
     float v = rt_getf(c, 0);
+    float wv = wheel_value(state, action);
+    if (wv > v) v = wv;
     const Binding *b = action < ACTION_COUNT ? pc_binding((int)action) : NULL;
     if (b && (b->nkeys || b->vp_button) && v < 1.0f && state_takes_input(c, state, action)) {
         float mv = vpad_value(b);
@@ -773,7 +868,8 @@ int rt_hook_43b5b60(Cpu *c) {
 #define VIEW_MOUSE_ACTION 0x30
 #define MA_DETECTOR 0x18                    // UIButtonMouseAction.m_InputActionDetector
 #define MA_SELECTABLE 0x20
-#define INPUT_CANCEL 2                      // eUserInput
+#define INPUT_DECIDE 1                      // eUserInput
+#define INPUT_CANCEL 2
 #define INPUT_PAUSE 17
 #define ACTION_CANCEL 2
 #define ACTION_PAUSE 3
@@ -860,6 +956,7 @@ static uint64_t ui_mouse(Cpu *c, uint64_t det, uint64_t r) {
     uint32_t layer = LD32(det + DET_LAYER);
     if ((uint32_t)rt_call(c, FN(F_LAYER_CURRENT), 1, 0ull) != layer) return r;
     if ((layer & ~1u) != 4 && !(rt_call(c, FN(F_CHECK_FADE), 2, det, 0ull) & 1)) return r;
+    if (wheel_editor_click(c, det)) { ST32(det + DET_USER_INPUT, INPUT_DECIDE); return INPUT_DECIDE; }
     if (rt_ui_click_pending()) {
         uint64_t back = LD64(det + DET_RETURN_BUTTON), v;
         if (back && (rt_call(c, FN(F_OBJ_ALIVE), 2, back, 0ull) & 1) && rt_ui_hit(c, back, 0) > 0) {   // the standing Back button: Cancel
