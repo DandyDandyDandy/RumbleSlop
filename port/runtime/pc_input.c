@@ -739,7 +739,8 @@ int rt_hook_43ca4d0(Cpu *c) {                                                   
 // (collideStage) and smooths. The port runs updateTRS and then moves both points by a free offset of its own and
 // scales the distance by a free zoom; the controller keeps the game's controls on top. Keyboard and mouse (player 1):
 //   W A S D   fly forward / left / back / right (along the view)     Q / E   down / up      Shift   three times faster
-//   left drag turns (the game's)    right, middle or Shift + left drag moves the view    wheel zooms    R   back to start
+//   right drag looks around (turns in place)   left drag orbits   middle or Shift + left drag moves the view
+//   wheel zooms    R   back to start
 // The menu's choices are on the arrow keys (actions 66..69); WASD is the camera's (74..77, its guide says
 // "Move Camera"), and while photo mode runs the keyboard does not feed the game's own clamped pan. Once moved
 // freely, the camera is not pushed out of the stage (it may go anywhere, as in an editor).
@@ -748,7 +749,6 @@ int rt_hook_43ca4d0(Cpu *c) {                                                   
 #define PH_TARGET_POS 0x28c
 static float g_ph_off[3], g_ph_zoom = 1.0f, g_ph_last_x, g_ph_last_y;
 static int g_ph_dragging, g_ph_free;
-static uint64_t g_ph_hold;                    // until then the game's distance is kept (the view glides back after R)
 static double g_ph_time;
 static double now_s(void) {
     static LARGE_INTEGER f;
@@ -767,23 +767,34 @@ static double now_s(void) {
 #define PH_MENU_TOP 350.0f                  // the photo menu's panel ends this many 1080-line pixels above the bottom
 static int g_ph_orbit;
 static float g_ph_orbit_x, g_ph_orbit_y;
+static uint64_t g_ph_hold;                    // until then the game's distance is kept (the view glides back after R or a look)
+static int g_ph_look;                         // a right drag: this frame turns the view in place (photo_free keeps the camera)
+static float g_ph_look_cam[3];
 static void photo_orbit(uint64_t self) {
     float x, y;
     int down, h = rt_ui_client_h(), m = g_frame.mouse, prev = g_frame.mouse_prev;
     int inside = rt_ui_mouse(&x, &y, &down);
     float k = h > 0 ? 1080.0f / (float)h : 1.0f;
-    int left = (m & 1) && !shift_held();
-    if (!left || !inside) { g_ph_orbit = 0; return; }
-    if (!g_ph_orbit) {                                               // a new press: above the menu only
-        if (!(prev & 1) && y * k > PH_MENU_TOP) { g_ph_orbit = 1; g_ph_orbit_x = x; g_ph_orbit_y = y; }
+    int left = (m & 1) && !shift_held(), right = (m & 2) != 0, mode = right ? 2 : left ? 1 : 0;
+    g_ph_look = 0;
+    if (!mode || !inside) { g_ph_orbit = 0; return; }
+    if (g_ph_orbit != mode) {                                        // a new press; the left button only above the menu
+        g_ph_orbit = 0;
+        if (mode == 2 || (!(prev & 1) && y * k > PH_MENU_TOP)) { g_ph_orbit = mode; g_ph_orbit_x = x; g_ph_orbit_y = y; }
         return;
     }
     float dx = (x - g_ph_orbit_x) * k / g_sens_ratio, dy = (y - g_ph_orbit_y) * k / g_sens_ratio;
     g_ph_orbit_x = x; g_ph_orbit_y = y;
-    float rx = ldf(self + PH_ROT_X) - dy * 0.3f, ry = ldf(self + PH_ROT_Y) + dx * 0.3f;
+    float sgn = 1.0f;                                                // the same angle change turns the view with the mouse when looking
+    float rx = ldf(self + PH_ROT_X) - sgn * dy * 0.3f, ry = ldf(self + PH_ROT_Y) + sgn * dx * 0.3f;
     float lo = ldf(self + PH_ROT_X_MIN), hi = ldf(self + PH_ROT_X_MAX);
     if (lo < hi) { if (rx < lo) rx = lo; if (rx > hi) rx = hi; }
     stf(self + PH_ROT_X, rx); stf(self + PH_ROT_Y, ry);
+    if (mode == 2) {                                                 // the camera stays where it was (last frame's target)
+        g_ph_look = 1;
+        g_ph_hold = GetTickCount64() + 1500;                         // and the game's distance stays (updateRotAndDist)
+        for (int i = 0; i < 3; i++) g_ph_look_cam[i] = ldf(self + PH_TARGET_POS + 4 * i);
+    }
 }
 // Clicks on the photo menu: its four pickers (Frame, Effect, Expression, Pose; ui_PartView_Template_Vertical_Picker_N
 // with a value box, an increase arrow above it and a decrease arrow below) take the click as the arrow keys would:
@@ -883,7 +894,7 @@ static void photo_free(Cpu *c, uint64_t self) {
     float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     if (getenv("BR_PHOTO_LOG")) {
         static double said;
-        if (t - said > 0.5) { said = t; rt_log("photo cam: game distance %.2f, zoom %.2f, offset %.2f %.2f %.2f", len, g_ph_zoom, g_ph_off[0], g_ph_off[1], g_ph_off[2]); }
+        if (t - said > 0.5) { said = t; rt_log("photo cam: game distance %.2f, zoom %.2f, offset %.2f %.2f %.2f, camera %.2f %.2f %.2f", len, g_ph_zoom, g_ph_off[0], g_ph_off[1], g_ph_off[2], ti[0] + d[0] * g_ph_zoom + g_ph_off[0], ti[1] + d[1] * g_ph_zoom + g_ph_off[1], ti[2] + d[2] * g_ph_zoom + g_ph_off[2]); }
     }
     if (!(len > 1e-4f)) return;
     float fw[3] = {-d[0] / len, -d[1] / len, -d[2] / len};          // camera -> point looked at
@@ -898,10 +909,12 @@ static void photo_free(Cpu *c, uint64_t self) {
         float f = (float)(key_held("W") - key_held("S")), s = (float)(key_held("D") - key_held("A")), v = (float)(key_held("E") - key_held("Q"));
         for (int i = 0; i < 3; i++) mv[i] = (fw[i] * f + rt[i] * s) * sp;
         mv[1] += v * sp;
-        // a drag with the right or middle button, or Shift + left, moves the view (the scene follows the cursor)
+        // a right drag turned the view in place (photo_orbit): the offset puts the camera back where it was
+        if (g_ph_look) for (int i = 0; i < 3; i++) g_ph_off[i] = g_ph_look_cam[i] - ti[i] - d[i] * g_ph_zoom;
+        // a drag with the middle button, or Shift + left, moves the view (the scene follows the cursor)
         float x, y;
         int down, h = rt_ui_client_h(), m = g_frame.mouse;
-        int inside = rt_ui_mouse(&x, &y, &down), pan = (m & 6) || ((m & 1) && shift_held());
+        int inside = rt_ui_mouse(&x, &y, &down), pan = (m & 4) || ((m & 1) && shift_held());
         if (pan && inside) {
             if (g_ph_dragging) {
                 float k = eff * 0.0016f * (h > 0 ? 1080.0f / (float)h : 1.0f) / g_sens_ratio, dx = x - g_ph_last_x, dy = y - g_ph_last_y;

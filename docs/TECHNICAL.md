@@ -692,8 +692,10 @@ the keyboard and mouse behave as in a PC release, with the game's own default la
   from each other with the pack's lettering made large (shrunk pack keys side by side overlapped).
 * **Photo mode on PC: a free camera like the port's stage editor** (`pc_input.c`, "free photo camera"; the
   controller keeps the game's controls). W A S D fly forward / left / back / right along the view, Q / E down / up,
-  Shift three times faster, R back to the start; left drag (started above the menu) orbits, right, middle or
-  Shift + left drag moves the view, the wheel zooms; I J K L turn and = / - zoom too. The menu (Frame, Effect,
+  Shift three times faster, R back to the start; right drag looks around (turns in place, as an editor's fly
+  camera: works together with W A S D, Q / E and Shift), left drag (started above the menu) orbits, middle or
+  Shift + left drag moves the view, the wheel zooms; I J K L turn and = / - zoom too. Looking changes the game's
+  angles and then sets the free offset so the camera stays where it was (and keeps the game's distance). The menu (Frame, Effect,
   Expression, Pose) is clicked: a click on a picker's value focuses it, on its upper / lower arrow changes it
   (`photo_click` turns the click into queued arrow-key taps; it runs before the generic menu mouse code, whose
   mouse action does nothing there). The arrow keys still work. While photo mode runs, W A S D Q E R reach no
