@@ -218,7 +218,9 @@ What the `BR_INPUT_LIVE` table row does not say, read from the code:
   it keeps while connected). `pad_hid.c` finds them and runs one reader thread per pad; each kind has its own
   protocol file behind the `PadDriver` interface of `pad_hid_dev.h`: `pad_ps.c` (DualSense, DualShock 4) and
   `pad_switch.c` (Switch Pro Controller: USB handshake, subcommands for motion, vibration, player LED, full
-  reports, factory stick calibration from SPI flash; written after dekuNukem's documentation and SDL). Buttons
+  reports, factory stick calibration from SPI flash; written after dekuNukem's documentation and SDL) and
+  `pad_valve.c` (Steam Deck and Steam Controller, mostly for their motion: see "Steam Deck and Steam Controller"
+  under Known gaps; a driver may refuse an interface of a matching device, `interface_ok`). Buttons
   come out by position (`PAD_SOUTH` ...); a Pro Controller is mapped by position (its labels are the game's own)
   and keeps the game's own button pictures. `BR_HID_PADS=off` turns HID pads off. No.1
   exists even without a controller. The Switch controller applet (press L+R to join) is answered at once with
@@ -1009,6 +1011,30 @@ Texture facts found the hard way:
   (`Wonder.AppInput+StateNpad::getButtonState`), from `HidPad.accel` at 8192 per g, Switch axis = pad axis
   `-x, +z, -y` (`BR_MOTION_MAP` overrides; `BR_MOTION_LOG=1` logs raw and converted values). XInput pads and an
   unfocused window report lying flat (0, 0, -1). Felt right with a USB DualSense and a Bluetooth Pro Controller; DualShock 4 and a Pro Controller on USB not tried.
+* **Steam Deck and Steam Controller: NOT TESTED (written 2026-11-15 without the hardware; needs a test on a Deck
+  and on a Steam Machine with the Steam Controller).** `pad_valve.c` reads the Deck's built-in controller
+  (28de:1205) and the Steam Controller of 2026 ("Triton": 28de:1302 USB, 1303 Bluetooth, 1304 / 1305 dongles,
+  interfaces 2..5) like SDL's HIDAPI drivers do (`SDL_hidapi_steamdeck.c`, `SDL_hidapi_steam_triton.c`; report
+  offsets checked against SDL's `controller_structs.h` with `offsetof`). Accelerometer 16384 per g, turned to the
+  HidPad axes as SDL does (x, z, -y) and halved. The Deck sends motion always; the Steam Controller is asked for
+  raw motion (setting `IMU_MODE`) every 3 s. Two roles, chosen in `devices_refresh` (`imports_hid.c`):
+  * Under Steam Input (the usual case) the game already has the controller as Steam's virtual Xbox pad
+    (28de:11ff, read with `XInputGetCapabilitiesEx`, ordinal 108 of `xinput1_4`). The Valve pad is then no player:
+    it lends its accelerometer to that XInput pad (`g_xmotion`); buttons, sticks and rumble stay Steam's. The n-th
+    Valve pad goes with the n-th virtual pad (a guess when Steam Input also wraps other pads); without
+    `XInputGetCapabilitiesEx` any XInput pad may take it.
+  * Without Steam Input it is a player of its own (Xbox layout and glyphs) and its keyboard / mouse emulation is
+    switched off every 3 s (Deck: clear digital mappings + trackpads off; controller: lizard mode off). No rumble
+    in that role.
+  What to look at on the devices (log lines start with `input:`; run with `BR_MOTION_LOG=1`): "Steam controller
+  ... connected", "... sends its state (motion x y z)" (lying flat, face up, it should read about 0 8192 0: y
+  is out of the face),"XInput pad 0 is Steam Input's", "XInput pad 0 takes its motion from the Steam controller", then
+  `motion:` lines that move when the controller tilts, and a stage with Options > Accelerometer On tilting the
+  right way (else `BR_MOTION_MAP`). Open questions: whether the HID device can be opened while Steam has it
+  (Windows normally shares it), whether Proton on SteamOS exposes it at all (Wine may hand the game only a
+  translated device: then no "Steam controller" line; Proton's `PROTON_ENABLE_HIDRAW` would be the next thing
+  to try), whether the `IMU_MODE` setting disturbs Steam's own gyro use, the dongle's interface numbers in the
+  Windows device path (`mi_02`..), and the full-pad role on Windows without Steam.
 * The game refuses Battle with 3 or 4 local players and online or local-wireless play with 2 local players (its
   own rule, unchanged).
 * Exclusive Full Screen has not been tried from the menu; the Reset button on the Display page ran without a

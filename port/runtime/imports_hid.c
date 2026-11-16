@@ -173,6 +173,29 @@ static int g_xconn[4];
 static uint64_t g_xprobe[4], g_xlast;
 static Dev g_dev[MAX_PADS];
 static int g_ndev, g_npads = 1;
+// Steam Deck / Steam Controller (pad_valve.c). Under Steam Input the game sees them as a virtual Xbox pad
+// (28de:11ff, told by the undocumented XInputGetCapabilitiesEx, ordinal 108 of xinput1_4, as SDL does); XInput has
+// no motion, so the Valve pad read over HID lends its accelerometer to that pad and is no player itself. The n-th
+// Valve pad goes with the n-th virtual pad: right for one Valve controller, a guess when Steam Input also wraps
+// other pads. Where XInputGetCapabilitiesEx is missing, any XInput pad may take the motion. A Valve pad without a
+// virtual pad to go with is a player of its own (no Steam Input). NOT TESTED on the devices.
+static int g_xsteam[4];                      // XInput user i is Steam Input's pad: 1, not: 0, unknown: -1
+static int g_xmotion[4] = {-1, -1, -1, -1};  // the HID slot whose motion XInput user i shows, or -1
+typedef struct { XINPUT_CAPABILITIES caps; WORD vid, pid, version, unk1; DWORD unk2; } XCapsEx;
+static int xinput_is_steam(int i) {
+    static DWORD (WINAPI *ex)(DWORD, DWORD, DWORD, XCapsEx *);
+    static int tried;
+    if (!tried) {
+        tried = 1;
+        HMODULE m = LoadLibraryA("xinput1_4.dll");
+        if (m) ex = (DWORD (WINAPI *)(DWORD, DWORD, DWORD, XCapsEx *))(void *)GetProcAddress(m, (LPCSTR)108);
+    }
+    XCapsEx c;
+    memset(&c, 0, sizeof c);
+    int r = !ex || ex(1, (DWORD)i, 0, &c) != ERROR_SUCCESS ? -1 : c.vid == 0x28de && c.pid == 0x11ff;
+    rt_log("input: XInput pad %d is %s (%04x:%04x)", i, r < 0 ? "of unknown origin" : r ? "Steam Input's" : "a pad of its own", c.vid, c.pid);
+    return r;
+}
 // The keyboard seat. Normally the keyboard and the first controller are both player 1. When the game asks for more
 // players than there are controllers and the keyboard can make up for one (the controller applet below), player
 // 1 becomes the keyboard alone and the controllers are players 2 and up; so two can play with one controller.
@@ -195,14 +218,31 @@ static void devices_refresh(void) {
         if (g_kb_seat) { g_dev[0].xinput = -2; n = 1; }      // no device: the keyboard
         for (int i = 0; i < 4; i++) {
             if (g_xconn[i] || now >= g_xprobe[i]) {
+                int was = g_xconn[i];
                 g_xconn[i] = !rt_no_real_input() && XInputGetState((DWORD)i, &g_xs[i]) == ERROR_SUCCESS;
                 if (!g_xconn[i]) g_xprobe[i] = now + 1000;
+                else if (!was) g_xsteam[i] = xinput_is_steam(i);
             }
             if (g_xconn[i] && n < MAX_PADS) g_dev[n++].xinput = i;
         }
+        int lent[4] = {-1, -1, -1, -1};
         for (int k = 0; k < HID_PAD_SLOTS; k++) {
             HidPad hp;
-            if (n < MAX_PADS && rt_hid_pad(k, &hp)) { g_dev[n].xinput = -1; g_dev[n++].hid = k; }
+            if (!rt_hid_pad(k, &hp)) continue;
+            if (hp.kind == PAD_KIND_STEAM_DECK || hp.kind == PAD_KIND_STEAM_CONTROLLER) {
+                int host = -1;
+                for (int i = 0; i < 4 && host < 0; i++) if (g_xconn[i] && lent[i] < 0 && g_xsteam[i] != 0) host = i;
+                rt_hid_pad_set_full(k, host < 0);
+                if (host >= 0) { lent[host] = k; continue; }
+            }
+            if (n < MAX_PADS) { g_dev[n].xinput = -1; g_dev[n++].hid = k; }
+        }
+        for (int i = 0; i < 4; i++) {
+            if (lent[i] != g_xmotion[i]) {
+                if (lent[i] >= 0) rt_log("input: XInput pad %d takes its motion from the Steam controller in HID slot %d", i, lent[i]);
+                else rt_log("input: XInput pad %d no longer has motion", i);
+            }
+            g_xmotion[i] = lent[i];
         }
         if (n != g_ndev) rt_log("input: %d controller%s connected", n, n == 1 ? "" : "s");
         g_ndev = n;
@@ -219,7 +259,11 @@ static int positional_layout(void) {
     if (positional < 0) { const char *e = getenv("BR_PAD_LAYOUT"); positional = e && !strcmp(e, "positional"); }
     return positional;
 }
-static int hid_kind(int slot) { HidPad hp; rt_hid_pad(slot, &hp); return hp.kind ? hp.kind : PAD_KIND_DUALSENSE; }
+static int hid_kind(int slot) {                // Valve pads have the Xbox layout and glyphs
+    HidPad hp;
+    rt_hid_pad(slot, &hp);
+    return hp.kind == PAD_KIND_STEAM_DECK || hp.kind == PAD_KIND_STEAM_CONTROLLER ? 1 : hp.kind ? hp.kind : PAD_KIND_DUALSENSE;
+}
 int rt_pad_kind(uint32_t id) { return id >= (uint32_t)g_ndev || g_dev[id].xinput == -2 ? 0 : g_dev[id].xinput >= 0 ? 1 : hid_kind(g_dev[id].hid); }
 uint64_t rt_pad_last_input(uint32_t id) { return id < MAX_PADS ? g_pad_tick[id] : 0; }
 int rt_pad_positional(void) { return positional_layout(); }
@@ -377,7 +421,7 @@ HOSTFN(_ZN2nn3hid18StartSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
 HOSTFN(_ZN2nn3hid17StopSixAxisSensorERKNS0_19SixAxisSensorHandleE) { (void)c; }
 // The game reads only the acceleration (Wonder.AppInput+StateNpad::getButtonState, for its Accelerometer option), in
 // g on the Switch's axes: x right, y forward (toward the triggers), z up out of the face; lying flat gives (0, 0, -1).
-// pad_hid.c gives every pad it reads (Sony, Pro Controller) about 8192 per g with x right, y out of the face, z
+// pad_hid.c gives every pad it reads (Sony, Pro Controller, Steam Deck / Steam Controller) about 8192 per g with x right, y out of the face, z
 // toward the player (SDL, Linux hid-playstation). Each Switch axis takes one pad axis with a sign: BR_MOTION_MAP="-x,+z,-y" (the default).
 // Pads without sensors (XInput) and a window without the focus stay flat. BR_MOTION_LOG=1 logs the raw and the
 // converted values four times a second.
@@ -407,7 +451,8 @@ HOSTFN(_ZN2nn3hid21GetSixAxisSensorStateEPNS0_18SixAxisSensorStateERKNS0_19SixAx
     motion_map_init();
     memset(s, 0, 0x60);
     ST64(X(0) + 8, (uint64_t)InterlockedIncrement64(&g_sampling));
-    int hid = id < (uint32_t)g_ndev && g_dev[id].xinput == -1 && rt_hid_pad(g_dev[id].hid, &hp) && hp.has_motion;
+    int slot = id >= (uint32_t)g_ndev ? -1 : g_dev[id].xinput == -1 ? g_dev[id].hid : g_dev[id].xinput >= 0 ? g_xmotion[g_dev[id].xinput] : -1;
+    int hid = slot >= 0 && rt_hid_pad(slot, &hp) && hp.has_motion;      // a HID pad, or Steam Input's pad with a Valve pad's motion
     if (hid && focused())
         for (int i = 0; i < 3; i++) {
             int k = g_mmap[i] < 0 ? -g_mmap[i] : g_mmap[i];

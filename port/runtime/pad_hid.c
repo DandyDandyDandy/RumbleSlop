@@ -1,5 +1,5 @@
-// Pads read directly over HID, because they are not XInput devices: Sony pads (pad_ps.c) and the Switch Pro
-// Controller (pad_switch.c). Up to four at once, USB or Bluetooth. A scanner thread looks for pads once a second;
+// Pads read directly over HID, because they are not XInput devices: Sony pads (pad_ps.c), the Switch Pro
+// Controller (pad_switch.c), and the Steam Deck / Steam Controller (pad_valve.c; mostly for their motion). Up to four at once, USB or Bluetooth. A scanner thread looks for pads once a second;
 // each pad found gets a slot and a reader thread that keeps its latest state. A slot keeps its number while its pad
 // stays connected, so players do not swap when another pad comes or goes; plugging in while the game runs works.
 // Rumble: rt_hid_pad_rumble hands the two motor strengths to the pad's protocol, which writes them through a second
@@ -12,7 +12,7 @@
 #include "rt.h"
 #include "pad_hid_dev.h"
 
-static const PadDriver *const g_drivers[] = {&pad_driver_ps, &pad_driver_switch};
+static const PadDriver *const g_drivers[] = {&pad_driver_ps, &pad_driver_switch, &pad_driver_valve};
 static PadSlot g_s[HID_PAD_SLOTS];
 static volatile LONG g_started;
 static SRWLOCK g_lock = SRWLOCK_INIT;        // state and rumble fields of all slots
@@ -28,6 +28,17 @@ int pad_write(PadSlot *s, const uint8_t *d, DWORD n) {
     if (InterlockedIncrement(&said) <= 3) rt_log("input: %s %d: report %02x not accepted (error %lu)", s->drv->name, s->slot, d[0], GetLastError());
     return 0;
 }
+int pad_feature(PadSlot *s, const uint8_t *d, DWORD n) {
+    uint8_t r[512] = {0};
+    DWORD len = s->feat_len > n && s->feat_len <= sizeof r ? s->feat_len : n;
+    if (len > sizeof r || s->out == INVALID_HANDLE_VALUE) return 0;
+    memcpy(r, d, n);
+    if (HidD_SetFeature(s->out, r, len)) return 1;
+    static volatile LONG said;
+    if (InterlockedIncrement(&said) <= 3) rt_log("input: %s %d: feature report %02x %02x not accepted (error %lu)", s->drv->name, s->slot, d[0], n > 1 ? d[1] : 0, GetLastError());
+    return 0;
+}
+void rt_hid_pad_set_full(int slot, int full) { if (slot >= 0 && slot < HID_PAD_SLOTS) InterlockedExchange(&g_s[slot].full, full); }
 
 static DWORD WINAPI reader(void *arg) {
     PadSlot *s = arg;
@@ -84,7 +95,8 @@ static void scan(void) {
         if (HidD_GetAttributes(h, &at))
             for (size_t d = 0; d < sizeof g_drivers / sizeof *g_drivers && !drv; d++)
                 if (g_drivers[d]->match(at.VendorID, at.ProductID)) drv = g_drivers[d];
-        int ok = drv && HidD_GetPreparsedData(h, &pp) && HidP_GetCaps(pp, &caps) == HIDP_STATUS_SUCCESS && caps.InputReportByteLength >= 10;
+        int ok = drv && HidD_GetPreparsedData(h, &pp) && HidP_GetCaps(pp, &caps) == HIDP_STATUS_SUCCESS && caps.InputReportByteLength >= 10 &&
+                 (!drv->interface_ok || drv->interface_ok(det.d.DevicePath, at.ProductID, caps.UsagePage));
         if (pp) HidD_FreePreparsedData(pp);
         if (!ok) { CloseHandle(h); continue; }
         PadSlot *s = &g_s[free_slot];
@@ -94,8 +106,9 @@ static void scan(void) {
         s->in = h;
         s->out = CreateFileA(det.d.DevicePath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
         s->vid = at.VendorID; s->pid = at.ProductID; s->drv = drv;
-        s->in_len = caps.InputReportByteLength; s->out_len = caps.OutputReportByteLength;
+        s->in_len = caps.InputReportByteLength; s->out_len = caps.OutputReportByteLength; s->feat_len = caps.FeatureReportByteLength;
         s->bt = caps.InputReportByteLength > 64;   // USB reports are 64 bytes; Bluetooth ones longer (78, 362)
+        if (drv == &pad_driver_valve) s->bt = at.ProductID == 0x1303;   // the Deck's reports are 64 bytes + number 0
         s->slot = free_slot;
         ReleaseSRWLockExclusive(&g_lock);
         InterlockedExchange(&s->used, 1);

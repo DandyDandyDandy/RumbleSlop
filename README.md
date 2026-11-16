@@ -27,6 +27,8 @@ of the same engine version.
 - Keyboard and mouse with the game's own PC key layout, rebinding in Options > Key Configuration, mouse on every menu
 - Xbox, DualSense and DualShock 4 controllers, up to four for split screen, with rumble; button pictures follow the
   device in use
+- Motion controls (the game's Accelerometer option) with a DualSense, DualShock 4 or Switch Pro Controller; for
+  the Steam Deck and the Steam Controller the support is written but not yet tested on the devices
 - Two players with one controller: the keyboard is player 1, the controller player 2
 - Online play between PCs running this port: friend rooms joined by a room code, over Steam (no ports to open)
   or directly
