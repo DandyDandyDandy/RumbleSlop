@@ -438,7 +438,12 @@ static void sample(KeySet *s) {
         if (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) s->mouse |= 8;
         if (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) s->mouse |= 16;
     }
-    { extern int rt_ui_test_held(void); if (rt_ui_test_held()) s->mouse |= 1; }      // BR_INPUT_LIVE "HOLD x y"
+    {                                           // BR_INPUT_LIVE "HOLD x y": the left button (BR_TEST_HOLD_BUTTON=2 right, 4 middle)
+        extern int rt_ui_test_held(void);
+        static int button = -1;
+        if (button < 0) { const char *e = getenv("BR_TEST_HOLD_BUTTON"); button = e && atoi(e) > 0 ? atoi(e) : 1; }
+        if (rt_ui_test_held()) s->mouse |= button;
+    }
     if (s->mouse & ~s->mouse_prev) g_kbm_tick = now;
     {                                           // the wheel on a screen without a list: the next waiting notch becomes an arrow-key tap
         static uint64_t next;
@@ -1061,7 +1066,10 @@ static int binding_active(const Binding *b, const KeySet *s, int kind, uint32_t 
         if (kind == 0 ? s->cur[k] : kind == 1 ? (s->cur[k] && !s->prev[k]) : kind == 2 ? (!s->cur[k] && s->prev[k]) : s->repeat[k]) return 1;
     }
     if (b->mouse) {
-        int cur = s->mouse & b->mouse, prev = s->mouse_prev & b->mouse;
+        // Photo mode: right / middle drag and Shift + left drag move the free camera; they are not the game's buttons
+        // (right is Cancel in the game's table and would leave photo mode).
+        int own = photo_active() ? 6 | (shift_held() ? 1 : 0) : 0;
+        int cur = s->mouse & b->mouse & ~own, prev = s->mouse_prev & b->mouse & ~own;
         if (kind == 0 ? cur != 0 : kind == 1 || kind == 3 ? (cur & ~prev) != 0 : (prev & ~cur) != 0) return 1;
     }
     if (action == ACTION_TITLE_DECIDE || action == ACTION_MOVIE_SKIP)    // "any button": any key except Esc
