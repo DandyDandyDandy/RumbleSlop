@@ -94,6 +94,11 @@ static uint64_t item(uint64_t list, int i) {
 
 void test_aids_tick(Cpu *c) {   // once per frame; the caller preserves the registers
     static int every = -1, frame;
+    static double hang_at = -1;                              // BR_TEST_HANG=<s>: freeze the main thread (watchdog test)
+    if (hang_at < 0) { const char *e = getenv("BR_TEST_HANG"); hang_at = e ? atof(e) : 0; }
+    static uint64_t first;                                    // the first frame, in ms
+    if (!first) first = GetTickCount64();
+    if (hang_at > 0 && (GetTickCount64() - first) / 1000.0 > hang_at) { rt_log("test: freezing the main thread"); Sleep(INFINITE); }
     if (every < 0) { const char *e = getenv("BR_UNLOAD_EVERY"); every = e ? atoi(e) : 0; }
     if (every > 0 && ++frame % every == 0) rt_call(c, FN(F_UNLOAD_UNUSED), 1, 0ull);
     if (!InterlockedExchange(&g_goal, 0)) return;

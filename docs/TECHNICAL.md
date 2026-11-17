@@ -119,6 +119,11 @@ itself: any `BR_` environment variable, or `BR_LOG=<file>`, counts as one (and `
 With logging off the runtime keeps its last 200 lines in memory and writes them, with the FATAL report, to
 `port.log` only when the game stops with an error. `port_crash.log` (a raw record of every host fault) is only made
 with logging on.
+A watchdog thread checks the game window with Windows' own hung-window test every 2 s; after 15 s without a
+response it writes, once, the kept lines and every thread's host stack (guest backtraces too) to `port.log`,
+with logging off as well, so a freeze leaves a report like a crash does. `BR_WATCHDOG=0` turns it off;
+`BR_TEST_HANG=<s>` freezes the main thread that long after the first frame to test it (it does not turn
+logging on). `BR_HANGDUMP` uses the same thread dump.
 
 For bounded test runs use `sh port/runtime/run_player.sh <seconds> [VAR=value ...]`. It kills any running
 instance first, runs headless (`-batchmode -nographics`) unless `BR_PLAYER_ARGS` is given, and kills the player at

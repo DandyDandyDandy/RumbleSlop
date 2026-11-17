@@ -27,7 +27,7 @@ static int g_log_ready, g_log_on;
 static char g_ring[RING_LINES][240];
 static unsigned g_ring_pos;
 static char g_log_path[MAX_PATH];
-static volatile DWORD g_hang_tid;
+static __thread int t_hang_thread;            // this thread writes hang reports: never wait for the log lock
 // The collector holds the log lock while it suspends threads, so that no suspended thread owns it (gc.c).
 void rt_log_lock(void) { EnterCriticalSection(&g_log_cs); }
 void rt_log_unlock(void) { LeaveCriticalSection(&g_log_cs); }
@@ -80,7 +80,7 @@ static int log_wanted(void) {
     for (int i = 1; argv && i < argc && !on; i++) on = !lstrcmpiW(argv[i], L"--log");
     if (argv) LocalFree(argv);
     LPCH env = GetEnvironmentStringsA();
-    for (const char *p = env; p && *p && !on; p += strlen(p) + 1) on = !strncmp(p, "BR_", 3);
+    for (const char *p = env; p && *p && !on; p += strlen(p) + 1) on = !strncmp(p, "BR_", 3) && strncmp(p, "BR_TEST_HANG=", 13);
     if (env) FreeEnvironmentStringsA(env);
     return on;
 }
@@ -88,7 +88,11 @@ static int log_wanted(void) {
 // Debug logging off and the game stopping with an error: open port.log after all and put the kept lines into it.
 static void log_spill(void) {
     if (!g_log_ready || g_log_on) return;
-    EnterCriticalSection(&g_log_cs);
+    int locked = 1;
+    if (t_hang_thread) {
+        locked = 0;
+        for (int i = 0; i < 50 && !(locked = TryEnterCriticalSection(&g_log_cs)); i++) Sleep(10);
+    } else EnterCriticalSection(&g_log_cs);
     if (!g_log_on) {
         g_log = fopen(g_log_path, "w");
         if (!g_log) g_log = stderr;
@@ -98,7 +102,7 @@ static void log_spill(void) {
         fflush(g_log);
         g_log_on = 1;
     }
-    LeaveCriticalSection(&g_log_cs);
+    if (locked) LeaveCriticalSection(&g_log_cs);
 }
 
 void rt_log_init(void) {
@@ -144,7 +148,7 @@ void rt_log_init(void) {
 
 void rt_vlog(const char *fmt, va_list ap) {
     if (!g_log_ready) rt_log_init();
-    if (g_hang_tid && g_hang_tid == GetCurrentThreadId()) {
+    if (t_hang_thread) {
         // The hang dump must come out even when the log lock is held by a stuck or suspended thread: it then
         // goes to port_hang.log beside the log.
         int got = 0;
@@ -309,10 +313,7 @@ int rt_gc_thread_registered(RtThread *t);
 extern volatile DWORD rt_world_owner;
 static int readable(uint64_t a, size_t n);
 // Host stack of a suspended thread as module+offset frames (resolve GameAssembly offsets with llvm-symbolizer).
-static void host_backtrace(HANDLE th) {
-    CONTEXT ctx;
-    ctx.ContextFlags = CONTEXT_FULL;
-    if (!GetThreadContext(th, &ctx)) return;
+static void host_backtrace_ctx(CONTEXT ctx) {
     char line[1500];
     int n = 0;
     for (int i = 0; i < 28 && ctx.Rip; i++) {
@@ -336,50 +337,97 @@ static void host_backtrace(HANDLE th) {
     }
     rt_log("  host stack:%s", line);
 }
+static void host_backtrace(HANDLE th) {
+    CONTEXT ctx;
+    ctx.ContextFlags = CONTEXT_FULL;
+    if (GetThreadContext(th, &ctx)) host_backtrace_ctx(ctx);
+}
+// Suspend, read the registers, resume.
+static int thread_ctx(HANDLE th, CONTEXT *ctx) {
+    ctx->ContextFlags = CONTEXT_FULL;
+    if (SuspendThread(th) == (DWORD)-1) return 0;
+    int ok = GetThreadContext(th, ctx);
+    ResumeThread(th);
+    return ok;
+}
+// Every thread with a guest context (host function, host stack, guest backtrace), and with all also the engine's
+// own threads (render thread, workers).
+static void dump_threads(int all) {
+    int locked = rt_threads_trylock();
+    if (!locked) rt_log("the thread list is locked (a collection is in progress; world owner thread %lu)", (unsigned long)rt_world_owner);
+    for (RtThread *t = rt_threads; t; t = t->next) {
+        if (!t->host_thread || t->host_tid == GetCurrentThreadId()) continue;
+        CONTEXT ctx;
+        int ok = thread_ctx(t->host_thread, &ctx);
+        rt_log("thread %lu: call depth %d, %s with the collector, in host function %s", (unsigned long)t->host_tid, t->call_depth,
+               rt_gc_thread_registered(t) ? "registered" : "NOT registered", t->in_host ? t->in_host : "(none)");
+        if (ok) host_backtrace_ctx(ctx);
+    }
+    for (RtThread *t = rt_threads; t; t = t->next)
+        if (t->host_thread && t->call_depth > 0 && (locked || t->host_tid == rt_world_owner)) rt_backtrace(&t->cpu);
+    if (all) {
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        THREADENTRY32 te = {.dwSize = sizeof te};
+        for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+            if (te.th32OwnerProcessID != GetCurrentProcessId() || te.th32ThreadID == GetCurrentThreadId()) continue;
+            int guest = 0;
+            for (RtThread *t = rt_threads; t; t = t->next)
+                if (t->host_tid == te.th32ThreadID) guest = 1;
+            if (guest) continue;
+            HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+            if (!th) continue;
+            CONTEXT ctx;
+            int ok = thread_ctx(th, &ctx);
+            CloseHandle(th);
+            rt_log("engine thread %lu:", (unsigned long)te.th32ThreadID);
+            if (ok) host_backtrace_ctx(ctx);
+        }
+        CloseHandle(snap);
+    }
+    if (locked) rt_threads_unlock();
+}
 static DWORD WINAPI hang_main(void *p) {
     const char *e = p;
     double done = 0;
-    g_hang_tid = GetCurrentThreadId();
+    t_hang_thread = 1;
     while (*e) {
         double at = strtod(e, (char **)&e);
         if (*e == ',') e++;
         if (at > done) Sleep((DWORD)((at - done) * 1000));
         done = at;
         rt_log("hangdump at %.1f s:", at);
-        int locked = rt_threads_trylock();
-        if (!locked) rt_log("the thread list is locked (a collection is in progress; world owner thread %lu)", (unsigned long)rt_world_owner);
-        for (RtThread *t = rt_threads; t; t = t->next) {
-            if (!t->host_thread || t->host_tid == GetCurrentThreadId()) continue;
-            SuspendThread(t->host_thread);
-            rt_log("thread %lu: call depth %d, %s with the collector, in host function %s", (unsigned long)t->host_tid, t->call_depth,
-                   rt_gc_thread_registered(t) ? "registered" : "NOT registered", t->in_host ? t->in_host : "(none)");
-            host_backtrace(t->host_thread);
-            ResumeThread(t->host_thread);
-        }
-        for (RtThread *t = rt_threads; t; t = t->next)
-            if (t->host_thread && t->call_depth > 0 && (locked || t->host_tid == rt_world_owner)) rt_backtrace(&t->cpu);
-        if (getenv("BR_HANGDUMP_ALL")) {      // also the threads that never ran guest code (engine workers, render thread)
-            HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-            THREADENTRY32 te = {.dwSize = sizeof te};
-            for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
-                if (te.th32OwnerProcessID != GetCurrentProcessId() || te.th32ThreadID == GetCurrentThreadId()) continue;
-                int guest = 0;
-                for (RtThread *t = rt_threads; t; t = t->next)
-                    if (t->host_tid == te.th32ThreadID) guest = 1;
-                if (guest) continue;
-                HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
-                if (!th) continue;
-                SuspendThread(th);
-                rt_log("engine thread %lu:", (unsigned long)te.th32ThreadID);
-                host_backtrace(th);
-                ResumeThread(th);
-                CloseHandle(th);
-            }
-            CloseHandle(snap);
-        }
-        if (locked) rt_threads_unlock();
+        dump_threads(getenv("BR_HANGDUMP_ALL") != NULL);
     }
     return 0;
+}
+// The watchdog: Windows' own hung-window test (the one behind "not responding") on the game window every 2 s.
+// After 15 s without a response it writes, once, the kept log lines and every thread's stack to port.log (also
+// with debug logging off), so a freeze leaves a report as a crash does. BR_WATCHDOG=0 turns it off.
+static HWND g_wd_win;
+static BOOL CALLBACK wd_find(HWND h, LPARAM p) {
+    (void)p;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
+    g_wd_win = h;
+    return FALSE;
+}
+static DWORD WINAPI watchdog_main(void *p) {
+    (void)p;
+    t_hang_thread = 1;
+    int hung = 0;
+    for (;;) {
+        Sleep(2000);
+        if (!g_wd_win || !IsWindow(g_wd_win)) { g_wd_win = NULL; hung = 0; EnumWindows(wd_find, 0); continue; }
+        hung = IsHungAppWindow(g_wd_win) ? hung + 2 : 0;
+        if (hung < 15) continue;
+        log_spill();
+        rt_log("watchdog: the game window has not responded for %d s (the game is frozen); the threads follow", hung);
+        dump_threads(1);
+        rt_log("watchdog: end of the report (resolve UnityPlayer.dll+0x... with port\\tools\\sym_unity.py)");
+        if (g_log && g_log != stderr) fflush(g_log);
+        return 0;
+    }
 }
 // BR_STATUS=<seconds>: every that many seconds log the counters of the host platform layer.
 void rt_audio_stats(uint64_t *appended_bytes, uint64_t *released);
@@ -409,6 +457,8 @@ void rt_fnsample_init(void) {
     if (st && *st) CreateThread(NULL, 0, status_main, (void *)st, 0, NULL);
     const char *h = getenv("BR_HANGDUMP");
     if (h && *h) CreateThread(NULL, 0, hang_main, (void *)h, 0, NULL);
+    const char *wd = getenv("BR_WATCHDOG");
+    if (!wd || *wd != '0') CreateThread(NULL, 0, watchdog_main, NULL, 0, NULL);
     const char *e = getenv("BR_FNSAMPLE");
     if (!e || !*e) return;
     g_sample = VirtualAlloc(NULL, (size_t)SAMPLE_SLOTS * 4, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
