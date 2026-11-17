@@ -92,21 +92,12 @@ Spacewar for this, so Steam shows you as "playing Spacewar" while online play is
 `steam_api64.dll`, which the game copies from any of your installed Steam games. `steam=0` in `port_net.txt`
 turns this off.
 
-## Known problems
-
-- Tested: the setup from scratch on one PC; title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
-  split-screen Adventure. Later stages and other modes have had little or no testing.
-- Motion controls on the Steam Deck and the Steam Controller are written but not yet tested on the devices.
-- Add-on content installation has not been tested with every pack.
-- Online play has not been tested over the internet. Rooms over Steam have not been tested between two Steam
-  accounts yet.
-- The opening scene plays through the first time (the game's own rule); the tutorial question on a new save skips it.
-- The window is white for the first seconds after starting.
+## Logs
 
 The game writes no log files when playing. If it does not start or misbehaves, run `RumbleSlop.exe --log`
-(from a command prompt in the `game` folder, or add `--log` to a shortcut): it then writes `game\port.log` and
-`game\player.log`. If the game stops with an error, it always leaves `port.log` with the error report.
-
+(from a command prompt in the `game` folder, or add `--log` to a shortcut's launch options): it then writes
+`game\port.log` and `game\player.log`. If the game stops with an error or freezes, it always leaves `port.log`
+with a report.
 ## For developers
 
 [docs/TECHNICAL.md](docs/TECHNICAL.md) explains how the port works, how to rebuild parts of it, the diagnostics, and
