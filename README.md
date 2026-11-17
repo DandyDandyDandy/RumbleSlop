@@ -55,7 +55,7 @@ setup with a message.
    `.nsp` files. The file names do not matter.
 3. Double-click `setup.cmd`.
 
-The setup takes 30 to 60 minutes, most of it converting shaders. It can be closed and started again; finished steps
+The setup takes 15 to 30 minutes, most of it converting shaders. It can be closed and started again; finished steps
 are not repeated. When it says it is finished:
 
 4. Start `game\RumbleSlop.exe`. Windows Firewall asks once whether the game may use the network (needed only for
