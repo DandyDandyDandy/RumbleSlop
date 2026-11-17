@@ -4,6 +4,7 @@
 #include <initguid.h>
 #include <knownfolders.h>
 #include <shlobj.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,14 @@ volatile int g_fnprof;
 void rt_fnsample_init(void);
 static FILE *g_log;
 static CRITICAL_SECTION g_log_cs;
+// Debug logging is off when playing: no port.log is written. It is on with --log on the command line, with BR_LOG,
+// or in a test run (any BR_ environment variable set). When it is off, the last lines are kept in memory and written
+// to port.log only if the game stops with an error, so a crash still leaves its report.
+static int g_log_ready, g_log_on;
+#define RING_LINES 200
+static char g_ring[RING_LINES][240];
+static unsigned g_ring_pos;
+static char g_log_path[MAX_PATH];
 static volatile DWORD g_hang_tid;
 // The collector holds the log lock while it suspends threads, so that no suspended thread owns it (gc.c).
 void rt_log_lock(void) { EnterCriticalSection(&g_log_cs); }
@@ -62,8 +71,38 @@ const char *rt_user_dir(void) {
 }
 const char *rt_data_dir(void) { return g_data_dir; }
 
+static int log_wanted(void) {
+    const char *e = getenv("BR_LOG");
+    if (e && *e) return 1;
+    int argc = 0;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int on = 0;
+    for (int i = 1; argv && i < argc && !on; i++) on = !lstrcmpiW(argv[i], L"--log");
+    if (argv) LocalFree(argv);
+    LPCH env = GetEnvironmentStringsA();
+    for (const char *p = env; p && *p && !on; p += strlen(p) + 1) on = !strncmp(p, "BR_", 3);
+    if (env) FreeEnvironmentStringsA(env);
+    return on;
+}
+
+// Debug logging off and the game stopping with an error: open port.log after all and put the kept lines into it.
+static void log_spill(void) {
+    if (!g_log_ready || g_log_on) return;
+    EnterCriticalSection(&g_log_cs);
+    if (!g_log_on) {
+        g_log = fopen(g_log_path, "w");
+        if (!g_log) g_log = stderr;
+        fprintf(g_log, "(debug logging is off; run the game with --log for a full log) the last lines before the error:\n");
+        unsigned n = g_ring_pos < RING_LINES ? g_ring_pos : RING_LINES;
+        for (unsigned i = g_ring_pos - n; i != g_ring_pos; i++) fprintf(g_log, "%s\n", g_ring[i % RING_LINES]);
+        fflush(g_log);
+        g_log_on = 1;
+    }
+    LeaveCriticalSection(&g_log_cs);
+}
+
 void rt_log_init(void) {
-    if (g_log) return;
+    if (g_log_ready) return;
     InitializeCriticalSection(&g_log_cs);
     char exe[MAX_PATH];
     GetModuleFileNameA(NULL, exe, sizeof exe);
@@ -77,11 +116,14 @@ void rt_log_init(void) {
     snprintf(g_data_dir, sizeof g_data_dir, "%s%s_Data\\", g_exe_dir, base);
     const char *e = getenv("BR_DATA_DIR");
     if (e && *e) snprintf(g_data_dir, sizeof g_data_dir, "%s\\", e);
-    char path[MAX_PATH];
     e = getenv("BR_LOG");
-    snprintf(path, sizeof path, "%s%s", e && strchr(e, ':') ? "" : g_exe_dir, e && *e ? e : "port.log");
-    g_log = fopen(path, "w");
-    if (!g_log) g_log = stderr;
+    snprintf(g_log_path, sizeof g_log_path, "%s%s", e && strchr(e, ':') ? "" : g_exe_dir, e && *e ? e : "port.log");
+    g_log_on = log_wanted();
+    if (g_log_on) {
+        g_log = fopen(g_log_path, "w");
+        if (!g_log) g_log = stderr;
+    }
+    g_log_ready = 1;
     e = getenv("BR_TRACE");
     if (e) {
         rt_trace = (int)strtol(e, NULL, 0);
@@ -101,7 +143,7 @@ void rt_log_init(void) {
 }
 
 void rt_vlog(const char *fmt, va_list ap) {
-    if (!g_log) rt_log_init();
+    if (!g_log_ready) rt_log_init();
     if (g_hang_tid && g_hang_tid == GetCurrentThreadId()) {
         // The hang dump must come out even when the log lock is held by a stuck or suspended thread: it then
         // goes to port_hang.log beside the log.
@@ -115,7 +157,11 @@ void rt_vlog(const char *fmt, va_list ap) {
         }
     } else
     EnterCriticalSection(&g_log_cs);
-    if (g_log_lines++ < g_log_max) {
+    if (!g_log_on) {
+        char *line = g_ring[g_ring_pos++ % RING_LINES];
+        int n = snprintf(line, sizeof g_ring[0], "[%5lu] ", GetCurrentThreadId());
+        vsnprintf(line + n, sizeof g_ring[0] - n, fmt, ap);
+    } else if (g_log_lines++ < g_log_max) {
         fprintf(g_log, "[%5lu] ", GetCurrentThreadId());
         vfprintf(g_log, fmt, ap);
         fputc('\n', g_log);
@@ -419,6 +465,7 @@ void rt_backtrace(Cpu *c) {
 __attribute__((noreturn)) static void die(const char *msg) {
     static volatile LONG dying;
     if (InterlockedExchange(&dying, 1)) Sleep(INFINITE);
+    log_spill();
     if (g_log && g_log != stderr) fflush(g_log);
     fprintf(stderr, "RumbleSlop: %s\n", msg);
     // A player gets a message; a scripted run (BR_NO_REAL_INPUT, or BR_FATAL_BOX=0) must not wait for a click.
@@ -435,6 +482,7 @@ __attribute__((noreturn)) static void die(const char *msg) {
 }
 
 void rt_fatal(const char *fmt, ...) {
+    log_spill();
     char msg[2048];
     va_list ap;
     va_start(ap, fmt);
@@ -447,6 +495,7 @@ void rt_fatal(const char *fmt, ...) {
 }
 
 void rt_fatal_c(Cpu *c, const char *fmt, ...) {
+    log_spill();
     char msg[2048];
     va_list ap;
     va_start(ap, fmt);
@@ -555,6 +604,7 @@ static LONG CALLBACK veh(EXCEPTION_POINTERS *ep) {
         static volatile LONG once;
         if (code == EXCEPTION_STACK_OVERFLOW) { die("host stack overflow in lifted code"); }
         if (!InterlockedExchange(&once, 1)) {
+            log_spill();
             g_log_max = ~0ull;
             rt_log("FATAL: host exception %#lx at GameAssembly+%#llx, fault address %#llx (%s)", code,
                    (unsigned long long)((char *)ip - (char *)g_mod_lo),
@@ -589,6 +639,7 @@ void rt_log_install_veh(void *module) {
     g_mod_hi = p;
     char path[MAX_PATH];
     snprintf(path, sizeof path, "%sport_crash.log", g_exe_dir);
+    if (g_log_on)                                   // a raw record of every fault: only with debug logging
     g_raw = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL);
     AddVectoredExceptionHandler(1, veh);
     { extern void heapdbg_init(void); heapdbg_init(); }

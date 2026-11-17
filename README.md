@@ -102,7 +102,9 @@ turns this off.
 - The opening scene plays through the first time (the game's own rule); the tutorial question on a new save skips it.
 - The window is white for the first seconds after starting.
 
-If the game does not start, look at `game\port.log` and `game\player.log`.
+The game writes no log files when playing. If it does not start or misbehaves, run `RumbleSlop.exe --log`
+(from a command prompt in the `game` folder, or add `--log` to a shortcut): it then writes `game\port.log` and
+`game\player.log`. If the game stops with an error, it always leaves `port.log` with the error report.
 
 ## For developers
 
