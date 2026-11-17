@@ -8,4 +8,7 @@ Put your own files here, then run setup.cmd (one folder up).
 File names do not matter; the setup looks inside the files. Compressed dumps (.nsz, .xcz) are not supported.
 After the setup has finished, nothing in this folder is needed any more.
 
+Add-on content bought later: put its .nsp files here together with prod.keys and run  setup.cmd --only dlc
+(the base game and the update are not needed for that).
+
 Nothing in this folder is ever committed (see .gitignore). Do not share these files or the built game.

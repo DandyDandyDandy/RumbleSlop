@@ -10,7 +10,7 @@ Put these into input\\ first (see README.md):
     prod.keys            your console's keys
     the base game        .xci (cartridge dump) or .nsp
     the 2.2.0 update     .nsp
-    add-on content       .nsp files, optional
+    add-on content       .nsp files, optional (added later: setup.cmd --only dlc, needs only prod.keys and them)
 
 Steps: tools, extract, image, generate, compile, link, assets, shaders, textures, assemble, dlc.
 Logs of each step are in build\\logs\\.
@@ -59,8 +59,9 @@ def run(step, *cmd, cwd=None, env=None):
 
 # ------------------------------------------------------------------------------------------------------- inputs
 
-def find_inputs():
-    """(keys path, [Container of the game], [paths of add-on content packages]). Explains what is missing."""
+def find_inputs(need_game=True):
+    """(keys path, [Container of the game], [Container of each add-on content package], (base, patch)).
+    Explains what is missing. need_game=False accepts input\\ without the game (installing add-on content later)."""
     import nx
     paths.INPUT.mkdir(parents=True, exist_ok=True)
     files = sorted(p for p in paths.INPUT.iterdir() if p.is_file())
@@ -90,8 +91,8 @@ def find_inputs():
             dlc.append(c)
         else:
             problems.append(f'{p.name}: not Super Monkey Ball Banana Rumble (title {min(ids):016x})' if ids else f'{p.name}: empty')
-    base, patch = nx.find_program(game, TITLE_ID)
-    if base is None or patch is None:
+    base, patch = nx.find_program(game, TITLE_ID) if game else (None, None)
+    if need_game and (base is None or patch is None):
         have = 'only the update' if patch else ('only the base game' if base else 'neither')
         hint = ''
         if base and not patch:
@@ -103,9 +104,9 @@ def find_inputs():
     return keys[0], game, dlc, (base, patch)
 
 
-def input_stamp():
-    return sorted((p.name, p.stat().st_size, int(p.stat().st_mtime)) for p in paths.INPUT.iterdir()
-                  if p.is_file() and p.suffix.lower() in ('.xci', '.nsp', '.keys'))
+def file_stamp(files):
+    """Name, size and time of files, to notice when input\\ changes (as lists: the form it has in state.json)."""
+    return sorted([Path(p).name, Path(p).stat().st_size, int(Path(p).stat().st_mtime)] for p in files)
 
 
 # -------------------------------------------------------------------------------------------------------- steps
@@ -191,7 +192,7 @@ def step_assemble():
 
 def step_dlc():
     import nx
-    _, _, dlc, _ = find_inputs()
+    _, _, dlc, _ = find_inputs(need_game=False)
     if not dlc:
         say('    no add-on content in input\\ (optional)')
         return
@@ -266,21 +267,27 @@ def main():
             i = NAMES.index(name)
             st['done'] = [d for d in st['done'] if d not in (NAMES[i:] if flag == '--redo' else [name])]
             todo = NAMES[i:] if flag == '--redo' else [name]
-    stamp = input_stamp() if paths.INPUT.exists() else []
-    if st.get('inputs') not in (None, [list(x) for x in stamp]) and 'extract' in st['done']:
-        say('The files in input\\ changed: starting again from the game dump.')
-        st['done'] = [d for d in st['done'] if d == 'tools']
     say(f'{paths.NAME} setup: building the game in {paths.GAME}')
     t_all = time.time()
     try:
         say('Checking input\\ ...')
-        keys, game, dlc, _ = find_inputs()
-        say(f'  keys: {keys.name}; game files: {", ".join(os.path.basename(c.path) for c in game)}'
+        only_dlc = todo == ['dlc']
+        keys, game, dlc, _ = find_inputs(need_game=not only_dlc)
+        say(f'  keys: {keys.name}; game files: {", ".join(os.path.basename(c.path) for c in game) or "none"}'
             + (f'; add-on content: {len(dlc)} file(s)' if dlc else ''))
+        if not only_dlc:
+            stamp = file_stamp([keys] + [c.path for c in game])
+            if st.get('inputs') not in (None, stamp) and 'extract' in st['done']:
+                say('The game files in input\\ changed: starting again from the game dump.')
+                st['done'] = [d for d in st['done'] if d == 'tools']
+            st['inputs'] = stamp
+        dlc_stamp = file_stamp(c.path for c in dlc)
+        if st.get('dlc_inputs', []) != dlc_stamp:
+            st['done'] = [d for d in st['done'] if d != 'dlc']     # add-on content added: install it, nothing else
+        st['dlc_inputs'] = dlc_stamp
         free = shutil.disk_usage(paths.ROOT).free >> 30
         if free < 25 and 'textures' not in st['done']:
             say(f'  warning: only {free} GB free on this drive; the build needs about 25 GB')
-        st['inputs'] = stamp
         for i, (name, title, fn) in enumerate(STEPS, 1):
             if name not in todo:
                 continue

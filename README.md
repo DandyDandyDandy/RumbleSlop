@@ -2,6 +2,20 @@
 
 Super Monkey Ball Banana Rumble as a native Windows game, built on your PC from your own Switch copy.
 
+**What it adds to the Switch game**
+
+- Any resolution: windowed, borderless or full screen, wide screens (16:10, 21:9, 32:9), Steam Deck detection
+- Uncapped frame rate with smooth motion above 60 fps, VSync, render scale and the game's other graphics options
+- Keyboard and mouse with rebinding; Xbox, DualSense, DualShock 4 and Switch Pro controllers with rumble and
+  matching button pictures
+- Up to four players in split screen; keyboard + controller counts as two players
+- Online play between PCs by room code, over Steam or directly
+- Motion controls with a DualSense, DualShock 4 or Switch Pro Controller
+- Your add-on content (DLC) installed from your own files
+- The Dole collaboration look can be switched back on
+- Skip the intro tutorial on a new save
+- Nothing is sent to the publisher: no statistics, no telemetry
+
 It is called RumbleSlop because it is vibecoded slop: the whole port was written by an AI coding agent. It works
 surprisingly well. Expect rough edges anyway.
 
@@ -11,29 +25,12 @@ surprisingly well. Expect rough edges anyway.
 >
 > Not affiliated with or endorsed by SEGA, Nintendo, Unity or CRI Middleware.
 
-## What you get
+## How it works
 
 A real PC version, not an emulator: the game's own code is recompiled to x64 and runs inside Unity's Windows player
-of the same engine version.
-
-- Windowed, borderless and full screen at any resolution, frame rate limit and VSync, in the game's own Options menu
-- The game's graphics rows work: render scale, shadow quality, post-processing, anti-aliasing, texture filtering,
-  HUD size
-- Real motion above 60 frames a second: the game simulates at 60 Hz and the port blends every frame in between
-  (automatic whenever more than 60 frames a second are drawn)
-- Wide screens (21:9, 32:9) and 16:10, Steam Deck detection
-- The Dole collaboration look (stage logo, bananas, main menu) can be switched on again: Options > General >
-  Dole Collaboration
-- Keyboard and mouse with the game's own PC key layout, rebinding in Options > Key Configuration, mouse on every menu
-- Xbox, DualSense and DualShock 4 controllers, up to four for split screen, with rumble; button pictures follow the
-  device in use
-- Motion controls (the game's Accelerometer option) with a DualSense, DualShock 4 or Switch Pro Controller; for
-  the Steam Deck and the Steam Controller the support is written but not yet tested on the devices
-- Two players with one controller: the keyboard is player 1, the controller player 2
-- Online play between PCs running this port: friend rooms joined by a room code, over Steam (no ports to open)
-  or directly
-- Add-on content you own
-- The intro tutorial can be skipped on a new save
+of the same engine version. Display and graphics settings are in the game's own Options menu; above 60 frames a
+second the game still simulates at 60 Hz and the port blends every frame in between. The Dole collaboration look is
+under Options > General > Dole Collaboration, key rebinding under Options > Key Configuration.
 
 ## What you need
 
@@ -45,7 +42,7 @@ of the same engine version.
   - `prod.keys` of your console
   - the base game as `.xci` or `.nsp`
   - the 2.2.0 update as `.nsp`
-  - optional: add-on content `.nsp` files
+  - optional: your add-on content (DLC) as `.nsp` files
 
 Only version 2.2.0 of the game is supported. The base game without that update, or with another update, stops the
 setup with a message.
@@ -53,7 +50,8 @@ setup with a message.
 ## Setup (once)
 
 1. Download or clone this repository.
-2. Put your files into the `input` folder. The file names do not matter.
+2. Put your files into the `input` folder: `prod.keys`, the base game, the 2.2.0 update and any add-on content
+   `.nsp` files. The file names do not matter.
 3. Double-click `setup.cmd`.
 
 The setup takes 30 to 60 minutes, most of it converting shaders. It can be closed and started again; finished steps
@@ -64,6 +62,10 @@ are not repeated. When it says it is finished:
 
 Afterwards the `build` folder and the files in `input` are not needed any more: `setup.cmd --clean` deletes
 `build`. The `game` folder can be moved anywhere.
+
+Add-on content bought later: put its `.nsp` files and `prod.keys` into `input` and run `setup.cmd --only dlc`
+(the base game and update are not needed for this). With the game files still in `input`, a plain `setup.cmd`
+does the same: it notices the new packs and installs only them.
 
 Saves and the settings the port adds (`port_display.txt`, `port_keys.txt`, `port_name.txt`, `port_net.txt`) are in
 `Saved Games\RumbleSlop` in your user folder. To keep them inside the game folder instead (a portable game), put an
@@ -92,6 +94,8 @@ turns this off.
 
 - Tested: the setup from scratch on one PC; title, menus, options, early Adventure stages, online Battle and Adventure between two copies on one PC,
   split-screen Adventure. Later stages and other modes have had little or no testing.
+- Motion controls on the Steam Deck and the Steam Controller are written but not yet tested on the devices.
+- Add-on content installation has not been tested with every pack.
 - Online play has not been tested over the internet. Rooms over Steam have not been tested between two Steam
   accounts yet.
 - The opening scene plays through the first time (the game's own rule); the tutorial question on a new save skips it.
