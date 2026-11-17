@@ -3,7 +3,6 @@
 //   * the code entry screen has six one-character boxes: they are merged into one text box for the whole code;
 //   * the lobby shows the code in a field sized for six characters: the text is fitted on one line, and revealing
 //     the code (R) also puts it on the Windows clipboard so it can be pasted to friends;
-//   * when a Steam friend has a room open (steam_net.c), the code entry screen names them and fills their code in.
 // Texts of six characters or fewer (the game's own passwords for local-wireless rooms) are left as they were.
 #include <windows.h>
 #include <stdio.h>
@@ -122,46 +121,6 @@ int rt_hook_46f75c0(Cpu *c) {
     rt_call(c, FN(F_TMP_SET_TEXT), 4, tmp, new_str16(c, shown, m), 1ull, 0ull);
     return 1;
 }
-// A Steam friend's room for the code entry screen: looked for from the moment the screen's explanation is set and
-// for 6 s after (Steam may need a moment to start); when found while the box is still empty, the code goes into it
-// and the explanation names the friend (rt_hook_47e0e00).
-uint64_t rt_tr_str(Cpu *c, const char *english);    // port_text.c
-int online_steam_on(void);                          // online.c: port_net.txt / BR_NET_STEAM allow Steam
-static char g_friend_code[16];
-static uint64_t g_friend_until, g_friend_tmp;
-static int g_friend_filled;                          // the box holds a friend's code nobody has edited: no auto-join
-static void friend_look(Cpu *c, uint64_t tmp) {     // the screen opened: look for a while
-    g_friend_until = 0;
-    g_friend_filled = 0;
-    if (!tmp || !online_steam_on()) return;
-    g_friend_tmp = tmp;
-    g_friend_until = GetTickCount64() + 6000;
-}
-// 1 and the code in g_friend_code when a friend's room is known now; the explanation then names the friend.
-static int friend_found(Cpu *c) {
-    char prefix[32], code[32], name[128];
-    uint64_t tmp = g_friend_tmp;
-    np_steam_prefix(prefix, sizeof prefix);
-    if (!sn_friend_room(prefix, code, sizeof code, name, sizeof name)) return 0;
-    int n = 0;
-    for (const char *p = code; *p && n < 12; p++)
-        if ((*p >= '0' && *p <= '9') || (*p >= 'A' && *p <= 'Z')) g_friend_code[n++] = *p;
-    g_friend_code[n] = 0;
-    if (n != 12) return 0;
-    rt_log("online ui: Steam friend \"%s\" has a room open; its code goes into the box", name);
-    uint64_t s = rt_call(c, FN(F_TMP_GET_TEXT), 2, tmp, 0ull), t = rt_tr_str(c, "A Steam friend's room code is filled in:");
-    int sl = s ? (int)LD32(s + STR_LEN) : 0, tl = t ? (int)LD32(t + STR_LEN) : 0;
-    uint16_t out[800];
-    int m = 0;
-    if (sl > 500 || tl > 150) return 1;
-    for (int i = 0; i < sl; i++) out[m++] = LD16(s + STR_CHARS + 2 * (uint64_t)i);
-    if (m) out[m++] = '\n';
-    for (int i = 0; i < tl; i++) out[m++] = LD16(t + STR_CHARS + 2 * (uint64_t)i);
-    out[m++] = ' ';
-    m += MultiByteToWideChar(CP_UTF8, 0, name, -1, (wchar_t *)out + m, 100) - 1;
-    if (m > 0) rt_call(c, FN(F_TMP_SET_TEXT), 4, tmp, new_str16(c, out, m), 1ull, 0ull);
-    return 1;
-}
 // UIViewBattleRoyaleFriendMatchEnterPassword.SetExplanationText(eTypeOfUse): {+0x68 TextMeshProUGUI explanation}.
 // The English text says "six-character".
 static void twelve(Cpu *c, uint64_t tmp);
@@ -172,7 +131,6 @@ int rt_hook_46f7550(Cpu *c) {
     inside = 1; c->pc = FN(F_SET_EXPLANATION); rt_dispatch(c); inside = 0;
     uint64_t tmp = LD64(self + 0x68);
     twelve(c, tmp);
-    friend_look(c, tmp);
     return 1;
 }
 static void twelve(Cpu *c, uint64_t tmp) {
@@ -278,15 +236,6 @@ int rt_hook_47e0e00(Cpu *c) {
     if (!sb) return 1;
     int len = (int)rt_call(c, FN(F_SB_LENGTH), 2, sb, 0ull);
     int ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-    if (g_friend_until) {                                            // a Steam friend's room: their code, once
-        if (now > g_friend_until || len) g_friend_until = 0;
-        else if (friend_found(c)) {
-            g_friend_until = 0;
-            g_friend_filled = 1;
-            for (const char *p = g_friend_code; *p; p++) len = sb_append(c, sb, len, (uint16_t)*p);
-            changed = 1;
-        }
-    }
     for (int vk = 8; vk < 0x6a; vk++) {
         int digit = vk >= '0' && vk <= '9', pad = vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9, letter = vk >= 'A' && vk <= 'Z';
         if (!(digit || pad || letter || vk == VK_BACK || vk == VK_DELETE)) continue;
@@ -329,10 +278,8 @@ int rt_hook_47e0e00(Cpu *c) {
         if (ch == '<') { if (len > 0) { rt_call(c, FN(F_SB_REMOVE), 4, sb, (uint64_t)(len - 1), 1ull, 0ull); len--; changed = 1; } }
         else { int before = len; len = sb_append(c, sb, len, (uint16_t)(uint8_t)ch); changed |= len != before; }
     }
-    if (g_friend_filled == 2 && changed) g_friend_filled = 0;           // the player edited the friend's code
     g_code_len = len;
     if (changed) rt_call(c, FN(F_ON_UPDATE_INPUT), 2, self, 0ull);
-    if (g_friend_filled == 1) g_friend_filled = 2;
     return 1;
 }
 // CharacterInputModule_SwitchForPassword.OpenKeyboard(): there is no keyboard to open, typing is always on.
@@ -344,11 +291,10 @@ int rt_hook_4651f50(Cpu *c) {
     if (rt_text_entry_active()) c->x[1] = g_code_len < CODE_MAX;
     return 0;
 }
-// UIViewCtrl_EnterPassword.ForceFocusOnDecide(): a complete code is searched for at once. Not a Steam friend's code
-// filled in for the player: they press Search themselves (or type another code).
+// UIViewCtrl_EnterPassword.ForceFocusOnDecide(): a complete code (typed or pasted) is searched for at once.
 int rt_hook_46521a0(Cpu *c) {
     (void)c;
-    return rt_text_entry_active() && (g_code_len < CODE_MAX || g_friend_filled);
+    return rt_text_entry_active() && g_code_len < CODE_MAX;
 }
 // CharacterInputModule_SwitchForPassword.SetStr(string): where the game's paste button delivers the clipboard text.
 int rt_hook_47e1120(Cpu *c) {

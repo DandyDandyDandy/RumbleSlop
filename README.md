@@ -80,13 +80,14 @@ F12 saves a picture of the game into a `screenshots` folder in the same place.
 Keyboard defaults are the game's own: W A S D tilt, arrow keys camera, Space spin dash, Enter confirm, Esc cancel
 and pause, Q / E tabs. With the mouse: hold the left button and drag to tilt. Everything can be rebound in Options > Key Configuration.
 
-Online: **Online Play > Battle (or Adventure) > Host** creates a room and shows a room code; the other players
-choose **Join** and type it. The host must be reachable on UDP port 23711: the port asks the router for that through
+Online: **Online Play > Battle (or Adventure) > Host** creates a room and shows a room code (R shows it
+and copies it to the clipboard); send it to the other players, who choose **Join** and paste it (Ctrl+V) or type it. The host must be reachable on UDP port 23711: the port asks the router for that through
 UPnP; without UPnP it works on the same network or VPN, or with the port forwarded by hand (`port_net.txt`, see
 [docs/TECHNICAL.md](docs/TECHNICAL.md)). Random matchmaking, rankings and play with Switch consoles do not exist.
 
-When Steam is running, rooms go over Steam's relay network instead: nothing to open on the router, and a Steam
-friend's room code is filled in for you on the Join screen (press Search). The game borrows Valve's test app
+When Steam is running, rooms go over Steam's relay network instead: nothing to open on the router. The code still
+has to be passed on by hand; it tells the joining game which Steam account hosts the room. The port does not look
+at your friends list and does not show your room to anyone. The game borrows Valve's test app
 Spacewar for this, so Steam shows you as "playing Spacewar" while online play is in use; it needs a
 `steam_api64.dll`, which the game copies from any of your installed Steam games. `steam=0` in `port_net.txt`
 turns this off.

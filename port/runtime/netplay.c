@@ -642,18 +642,12 @@ static uint32_t local_ip(void) {
     }
     return ip ? ip : 0x7f000001;
 }
-// The rich presence a Steam host shows its friends: protocol number and code, so only matching builds pick it up.
-void np_steam_prefix(char *out, size_t n) { snprintf(out, n, "BRN%04x:", PROTO); }
 static int host_setup(Sess *s) {
     if (s->steam) {
-        char rp[64];
         uint64_t me = sn_self();
         if (!me) return 0;
         np_code_format((uint32_t)me, NP_STEAM_PORT_INDEX, s->secret, s->code, sizeof s->code);
-        np_steam_prefix(rp, sizeof rp);
-        snprintf(rp + strlen(rp), sizeof rp - strlen(rp), "%s", s->code);
-        sn_presence(rp);
-        np_logf("net: hosting over Steam (account %u); Steam friends see the code", (unsigned)me);
+        np_logf("net: hosting over Steam (account %u)", (unsigned)me);
         return 1;
     }
     struct sockaddr_in a = {0};
@@ -743,10 +737,7 @@ static DWORD WINAPI sess_thread(LPVOID arg) {
         }
     if (np->cur == s) np->cur = NULL;
     LeaveCriticalSection(&np->lock);
-    if (s->steam) {
-        if (s->host) sn_presence(NULL);
-        sn_use(0);
-    }
+    if (s->steam) sn_use(0);
     while (s->early_head) { Ev *e = s->early_head; s->early_head = e->next; free(e->e.data); free(e); }
     if (s->s != INVALID_SOCKET) closesocket(s->s);
     if (s->mapped) upnp_unmap(s->port);

@@ -329,20 +329,15 @@ How it is put together:
   * One worker thread makes every Steam call (start, manual callback dispatch, send, receive, presence, friend
     list, shut down); the rest only touches queues. Reason: Steam's client reports internal assertions through
     `OutputDebugString`, which stalled for minutes here; when that happened inside the room lock the game froze.
-    Steam is started when online play needs it (code entry screen, creating or joining a Steam room) and shut down
+    Steam is started when online play needs it (creating or joining a Steam room) and shut down
     a minute after the last room ended, and on exit from `il2cpp_shutdown` (`sn_shutdown`): a process that exits
     with Steam up hangs in Steam's unload.
-  * Friends: the host sets rich presence `brn` = `BRN<protocol>:<code>` (protocol includes the content tag, so
-    RumbleSlop and RumbleManiaSlop rooms do not mix). On the code entry screen the port looks for a Steam friend in
-    Spacewar with a matching `brn` for 6 s; when found and the box is still empty, the code is filled in and the
-    explanation line names the friend. Unlike a typed code, a filled-in code is not searched for at once (the hook
-    on `ForceFocusOnDecide` holds back): the player presses Search, or types another code. Only Steam friends can see
-    the presence; the code's secret still decides who may join.
-  * Test aids: `BR_STEAM_FAKE_FRIEND=name|code` answers the friend lookup as if that friend hosted;
-    `BR_NET_STEAM=0` for two instances on one PC (one Steam account cannot reach itself: Steam reports "a message
+  * No friends list and no rich presence: players pass the code to each other (the lobby's R copies it to the
+    clipboard, Ctrl+V or the paste button puts it into the Join box). A Steam room's code holds the host's
+    account number, so the joining game reaches the host through the relay network from the code alone.
+  * Test aids: `BR_NET_STEAM=0` for two instances on one PC (one Steam account cannot reach itself: Steam reports "a message
     session failed"). Seen on this PC: Steam started under app 480, a Steam room created and the lobby reached, a
-    datagram to the own account and back (stand-alone probe), the friend line and filled code, Search starting the
-    join, clean exit with Steam up, direct rooms unchanged. **Not tested: a join between two Steam accounts**
+    datagram to the own account and back (stand-alone probe), clean exit with Steam up, direct rooms unchanged. **Not tested: a join between two Steam accounts**
     (needs a second PC or account), the relay's latency, a friend's presence actually seen.
 * Lobby password panel (Battle and Adventure, `restyle_password_panel`): widened from 610 to 800 units with a 440
   wide code field, so the 12-character code has room. The code starts hidden as in the original (R shows it). The

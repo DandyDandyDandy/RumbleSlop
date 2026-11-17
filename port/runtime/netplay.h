@@ -85,11 +85,8 @@ int sn_send(uint64_t to, const void *p, int n);
 int sn_recv(uint8_t *buf, int cap, uint64_t *from);
 void sn_pump(void);
 void sn_close(uint64_t peer);
-void sn_presence(const char *value);              // NULL clears
-int sn_friend_room(const char *prefix, char *code, size_t ncode, char *name, size_t nname);
 void sn_tick(void);                               // once a frame from the game
 void sn_shutdown(void);                           // before the process exits
-void np_steam_prefix(char *out, size_t n);        // the presence prefix of this build's protocol
 
 void np_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));   // provided by the embedding program
 

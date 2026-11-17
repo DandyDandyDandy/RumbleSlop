@@ -1,10 +1,9 @@
 // Steam as a carrier for online play (netplay.c): datagrams to a Steam account through Valve's relay network
-// (ISteamNetworkingMessages), and the room code shown to Steam friends (rich presence). Nothing else of Steam is
-// used: no lobbies, achievements, stats or overlay.
+// (ISteamNetworkingMessages). Nothing else of Steam is used: no friends list, rich presence, lobbies, achievements,
+// stats or overlay. A Steam room's code holds the host's account number; players pass codes to each other.
 //
 // The port runs under Spacewar (app 480), Valve's shared test app, so Steam reports "playing Spacewar" and nothing
-// goes to any publisher. Steam is started only when online play needs it (the code entry screen, hosting, joining
-// a Steam room) and shut down again a minute after the last room ended, so offline play never shows as playing.
+// goes to any publisher. Steam is started only when online play needs it (hosting or joining a Steam room) and shut down again a minute after the last room ended, so offline play never shows as playing.
 //
 // steam_api64.dll is Valve's; it is not part of the repo. It is looked for next to the exe, then (copied from there
 // once) in the player's own Steam games: any game that ships a recent enough steam_api64.dll will do.
@@ -29,7 +28,6 @@ typedef struct { int32_t user, callback; uint8_t *param; int32_t size; } CbMsg; 
 #define MSG_DATA 0
 #define MSG_SIZE 8
 #define MSG_PEER 16
-typedef struct { uint64_t game; uint32_t ip; uint16_t port, qport; uint64_t lobby; } FriendGame;   // FriendGameInfo_t
 
 static struct {
     HMODULE dll;
@@ -39,15 +37,8 @@ static struct {
     int32_t (*GetPipe)(void);
     void (*MdInit)(void), (*MdRunFrame)(int32_t), (*MdFree)(int32_t);
     int (*MdNext)(int32_t, CbMsg *);
-    void *(*User)(void), *(*Friends)(void), *(*Msgs)(void), *(*NUtils)(void);
+    void *(*User)(void), *(*Msgs)(void), *(*NUtils)(void);
     uint64_t (*GetSteamID)(void *);
-    int (*FriendCount)(void *, int);
-    uint64_t (*FriendByIndex)(void *, int, int);
-    int (*FriendGamePlayed)(void *, uint64_t, FriendGame *);
-    const char *(*FriendName)(void *, uint64_t);
-    const char *(*FriendRp)(void *, uint64_t, const char *);
-    int (*SetRp)(void *, const char *, const char *);
-    void (*ClearRp)(void *);
     int (*Send)(void *, const Ident *, const void *, uint32_t, int, int);
     int (*Recv)(void *, int, void **, int);
     int (*Accept)(void *, const Ident *);
@@ -88,17 +79,9 @@ static int try_dll(const char *path) {
     LOAD(MdNext, "SteamAPI_ManualDispatch_GetNextCallback");
     LOAD(MdFree, "SteamAPI_ManualDispatch_FreeLastCallback");
     LOAD2(User, "SteamAPI_SteamUser_v023", "SteamAPI_SteamUser_v021");
-    LOAD2(Friends, "SteamAPI_SteamFriends_v018", "SteamAPI_SteamFriends_v017");
     LOAD(Msgs, "SteamAPI_SteamNetworkingMessages_SteamAPI_v002");
     LOAD2(NUtils, "SteamAPI_SteamNetworkingUtils_SteamAPI_v004", "SteamAPI_SteamNetworkingUtils_SteamAPI_v003");
     LOAD(GetSteamID, "SteamAPI_ISteamUser_GetSteamID");
-    LOAD(FriendCount, "SteamAPI_ISteamFriends_GetFriendCount");
-    LOAD(FriendByIndex, "SteamAPI_ISteamFriends_GetFriendByIndex");
-    LOAD(FriendGamePlayed, "SteamAPI_ISteamFriends_GetFriendGamePlayed");
-    LOAD(FriendName, "SteamAPI_ISteamFriends_GetFriendPersonaName");
-    LOAD(FriendRp, "SteamAPI_ISteamFriends_GetFriendRichPresence");
-    LOAD(SetRp, "SteamAPI_ISteamFriends_SetRichPresence");
-    LOAD(ClearRp, "SteamAPI_ISteamFriends_ClearRichPresence");
     LOAD(Send, "SteamAPI_ISteamNetworkingMessages_SendMessageToUser");
     LOAD(Recv, "SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel");
     LOAD(Accept, "SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser");
@@ -183,7 +166,7 @@ static int load(void) {
 }
 
 // ---------------------------------------------------------------------------------------------------- the worker
-// One thread makes every Steam call (start, dispatch, send, receive, presence, friends, shut down). Steam's client
+// One thread makes every Steam call (start, dispatch, send, receive, shut down). Steam's client
 // reports internal assertions through OutputDebugString, which can stall for seconds; on its own thread that only
 // delays packets, while a stall inside the room lock froze the game. The rest of the port only touches the queues.
 typedef struct Pkt { struct Pkt *next; uint64_t peer; int len; uint8_t data[]; } Pkt;
@@ -191,10 +174,6 @@ static Pkt *g_out_head, *g_out_tail, *g_in_head, *g_in_tail;
 static int g_in_count;
 static HANDLE g_thread, g_ready;
 static volatile LONG g_stop;
-static char g_rp_want[64], g_rp_set[64];
-static uint64_t g_friends_wanted;          // last time a friend lookup was asked for
-static int g_friend_found;
-static char g_friend_code[64], g_friend_name[128];
 
 static void q_push(Pkt **head, Pkt **tail, Pkt *p) {
     p->next = NULL;
@@ -222,29 +201,6 @@ static void worker_pump(void) {
         S.MdFree(pipe);
     }
 }
-static void worker_friends(const char *prefix_any) {
-    (void)prefix_any;
-    void *fr = S.Friends();
-    int n = S.FriendCount(fr, 4 /* k_EFriendFlagImmediate */), found = 0;
-    char code[64] = "", name[128] = "";
-    for (int i = 0; i < n && !found; i++) {
-        uint64_t id = S.FriendByIndex(fr, i, 4);
-        FriendGame g;
-        memset(&g, 0, sizeof g);
-        if (!S.FriendGamePlayed(fr, id, &g) || (g.game & 0xffffff) != 480) continue;
-        const char *v = S.FriendRp(fr, id, "brn");
-        if (!v || !v[0]) continue;
-        const char *nm = S.FriendName(fr, id);
-        snprintf(code, sizeof code, "%s", v);
-        snprintf(name, sizeof name, "%s", nm ? nm : "");
-        found = 1;
-    }
-    EnterCriticalSection(&g_lock);
-    g_friend_found = found;
-    snprintf(g_friend_code, sizeof g_friend_code, "%s", code);
-    snprintf(g_friend_name, sizeof g_friend_name, "%s", name);
-    LeaveCriticalSection(&g_lock);
-}
 static DWORD WINAPI worker(LPVOID arg) {
     (void)arg;
     char err[1024] = "";
@@ -262,7 +218,6 @@ static DWORD WINAPI worker(LPVOID arg) {
     }
     g_up = up;
     SetEvent(g_ready);
-    uint64_t last_friends = 0;
     uint8_t *buf = malloc(4096);
     while (up && buf && !g_stop) {
         worker_pump();
@@ -270,10 +225,6 @@ static DWORD WINAPI worker(LPVOID arg) {
         Pkt *list;
         EnterCriticalSection(&g_lock);
         list = g_out_head; g_out_head = g_out_tail = NULL;
-        char rp[64];
-        int rp_change = strcmp(g_rp_want, g_rp_set) != 0;
-        snprintf(rp, sizeof rp, "%s", g_rp_want);
-        int want_friends = now_ms() - g_friends_wanted < 5000;
         int idle = !g_users && now_ms() - g_last_use > IDLE_SHUTDOWN_MS;
         LeaveCriticalSection(&g_lock);
         while (list) {
@@ -304,25 +255,16 @@ static DWORD WINAPI worker(LPVOID arg) {
             LeaveCriticalSection(&g_lock);
             free(p);
         }
-        if (rp_change) {
-            if (rp[0]) S.SetRp(S.Friends(), "brn", rp); else S.ClearRp(S.Friends());
-            EnterCriticalSection(&g_lock);
-            snprintf(g_rp_set, sizeof g_rp_set, "%s", rp);
-            LeaveCriticalSection(&g_lock);
-        }
-        if (want_friends && now_ms() - last_friends > 1000) { worker_friends(NULL); last_friends = now_ms(); }
         if (idle) break;
         Sleep(1);
     }
     if (up) {
-        S.ClearRp(S.Friends());
         S.Shutdown();
         np_logf("steam: shut down%s", g_stop ? "" : " (online play not used for a minute)");
     }
     free(buf);
     EnterCriticalSection(&g_lock);
     g_up = 0;
-    g_rp_set[0] = 0;
     q_free(&g_out_head, &g_out_tail);
     q_free(&g_in_head, &g_in_tail);
     g_in_count = 0;
@@ -386,32 +328,6 @@ int sn_recv(uint8_t *buf, int cap, uint64_t *from) {
 void sn_pump(void) {}
 void sn_close(uint64_t peer) { (void)peer; }
 
-// Rich presence key "brn": "<protocol>:<room code>", seen by Steam friends who also run Spacewar.
-void sn_presence(const char *value) {
-    InitOnceExecuteOnce(&g_once, once_init, NULL, NULL);
-    EnterCriticalSection(&g_lock);
-    snprintf(g_rp_want, sizeof g_rp_want, "%s", value ? value : "");
-    LeaveCriticalSection(&g_lock);
-}
-// A Steam friend in Spacewar whose "brn" presence starts with prefix: the rest of it into code, the friend's name
-// (UTF-8) into name. 1 when found. Never waits: it starts Steam and the lookup (once a second while asked for in
-// the last 5 s), and answers from the last lookup, so callers ask again for a few frames.
-int sn_friend_room(const char *prefix, char *code, size_t ncode, char *name, size_t nname) {
-    const char *fake = getenv("BR_STEAM_FAKE_FRIEND");             // test aid: "name|code" as if a friend hosted
-    if (fake && strchr(fake, '|')) {
-        snprintf(name, nname, "%.*s", (int)(strchr(fake, '|') - fake), fake);
-        snprintf(code, ncode, "%s", strchr(fake, '|') + 1);
-        return 1;
-    }
-    if (!start(0)) return 0;
-    EnterCriticalSection(&g_lock);
-    g_friends_wanted = now_ms();
-    size_t pl = strlen(prefix);
-    int ok = g_friend_found && !strncmp(g_friend_code, prefix, pl);
-    if (ok) { snprintf(code, ncode, "%s", g_friend_code + pl); snprintf(name, nname, "%s", g_friend_name); }
-    LeaveCriticalSection(&g_lock);
-    return ok;
-}
 // Once a frame from the game: nothing to do (the worker runs and stops by itself); kept for the interface.
 void sn_tick(void) {}
 // Before the process exits (il2cpp_shutdown): Steam must be shut down by its own thread while threads still run;
