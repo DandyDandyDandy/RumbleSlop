@@ -36,8 +36,9 @@ under Options > General > Dole Collaboration, key rebinding under Options > Key 
 
 - Windows 10 or 11, 64-bit, a CPU with AVX2 (anything from the last ten years), a GPU with Vulkan
 - [Python](https://www.python.org/downloads/windows/) 3.10 or newer (tick "Add python.exe to PATH" in its installer)
-- About 25 GB free while the setup runs (6 GB afterwards) and an internet connection for the tools it downloads
-  (about 300 MB: the llvm-mingw compiler, Ninja, Unity's Windows player, SPIRV-Tools)
+- About 15 GB free besides your game files (the build uses about 12 GB; 6 GB stay after `setup.cmd --clean`)
+- An internet connection for the tools the setup downloads (about 300 MB: the llvm-mingw compiler, Ninja, Unity's
+  Windows player, SPIRV-Tools)
 - Your own files:
   - `prod.keys` of your console
   - the base game as `.xci` or `.nsp`

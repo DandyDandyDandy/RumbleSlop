@@ -286,8 +286,8 @@ def main():
             st['done'] = [d for d in st['done'] if d != 'dlc']     # add-on content added: install it, nothing else
         st['dlc_inputs'] = dlc_stamp
         free = shutil.disk_usage(paths.ROOT).free >> 30
-        if free < 25 and 'textures' not in st['done']:
-            say(f'  warning: only {free} GB free on this drive; the build needs about 25 GB')
+        if free < 15 and 'textures' not in st['done']:
+            say(f'  warning: only {free} GB free on this drive; the build needs about 15 GB')
         for i, (name, title, fn) in enumerate(STEPS, 1):
             if name not in todo:
                 continue
