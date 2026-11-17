@@ -45,16 +45,24 @@ def say(msg=''):
 
 
 def run(step, *cmd, cwd=None, env=None):
-    """Run a tool of the build; its output goes to build\\logs\\<step>.log, the last lines are shown on failure."""
+    """Run a tool of the build; its output goes to build\\logs\\<step>.log, the last lines are shown on failure.
+    Lines a tool starts with "progress:" are also shown here (the long steps report how far they are)."""
     LOGS.mkdir(parents=True, exist_ok=True)
     log = LOGS / f'{step}.log'
     with open(log, 'a', encoding='utf-8', errors='replace') as f:
         f.write(f'\n$ {" ".join(str(c) for c in cmd)}\n')
         f.flush()
-        r = subprocess.run([str(c) for c in cmd], cwd=cwd, env=env or paths.tool_env(), stdout=f, stderr=subprocess.STDOUT)
-    if r.returncode:
+        p = subprocess.Popen([str(c) for c in cmd], cwd=cwd, env=env or paths.tool_env(), stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', bufsize=1)
+        for line in p.stdout:
+            f.write(line)
+            f.flush()
+            if line.startswith('progress:'):
+                say('    ' + line[len('progress:'):].strip())
+        code = p.wait()
+    if code:
         tail = log.read_text(encoding='utf-8', errors='replace').splitlines()[-25:]
-        raise Fail(f'step "{step}" failed (exit code {r.returncode}). Last lines of {log}:\n    ' + '\n    '.join(tail))
+        raise Fail(f'step "{step}" failed (exit code {code}). Last lines of {log}:\n    ' + '\n    '.join(tail))
 
 
 # ------------------------------------------------------------------------------------------------------- inputs

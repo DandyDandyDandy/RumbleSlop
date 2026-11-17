@@ -29,6 +29,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -50,6 +51,9 @@ STATE = os.path.join(ROOT, 'shader_vk_state')
 UNITS = os.path.join(STATE, 'units')
 SHADERS = os.path.join(STATE, 'shaders')
 TMP = os.path.join(STATE, 'tmp')
+# Files in UNITS after a full conversion of game version 2.2.0 (every build ends with this many): the measure of
+# the progress line, which the setup shows (lines starting with "progress:").
+EXPECTED_UNITS = 34535
 FIELDS = ('platforms', 'offsets', 'compressedLengths', 'decompressedLengths', 'compressedBlob', 'stageCounts', 'm_ParsedForm')
 
 
@@ -187,9 +191,20 @@ def cmd_convert(a):
     tot = collections.Counter()
     neutral = []
     log = open(os.path.join(STATE, 'convert.log'), 'a', encoding='utf-8')
+    done = [0]
+    stop = threading.Event()
+
+    def progress():                     # every 30 s: the program units converted so far (the cache files)
+        while not stop.wait(30):
+            units = sum(len(os.listdir(e.path)) for e in os.scandir(UNITS) if e.is_dir()) if os.path.isdir(UNITS) else 0
+            pct = min(99, units * 100 // EXPECTED_UNITS)
+            print(f'progress: converting shaders {pct}% ({units} of about {EXPECTED_UNITS} programs, {done[0]} of '
+                  f'{len(order)} shaders done, {int(time.time() - t0) // 60} min)', flush=True)
+    threading.Thread(target=progress, daemon=True).start()
     with ProcessPoolExecutor(a.jobs) as ex:
         futs = [ex.submit(convert_one, t[:3]) for t in order]
         for n, f in enumerate(as_completed(futs)):
+            done[0] = n + 1
             r = f.result()
             for k, v in r['stats'].items():
                 tot[k] += v
@@ -202,6 +217,7 @@ def cmd_convert(a):
             if not r['cached'] and (r['seconds'] > 20 or n % 25 == 0):
                 print(f"[{time.time() - t0:6.0f}s] {n + 1}/{len(order)} {r['name']} units={r['stats'].get('units', 0)} {r['seconds']:.0f}s"
                       + (' NEUTRALISED: ' + r['neutralized'] if r['neutralized'] else ''), flush=True)
+    stop.set()
     print(f'convert done in {time.time() - t0:.0f}s')
     for k in sorted(tot):
         print(f'{tot[k]:>10}  {k}')
