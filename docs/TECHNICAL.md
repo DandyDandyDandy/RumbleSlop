@@ -491,8 +491,7 @@ that is exactly "Ver. " and digits and dots. RumbleSlop is "RS", RumbleManiaSlop
 
 **Every major release needs a version number agreed for it, and `PORT_LABEL` in `port\paths.py` changed to it
 before the release is built** (both repos keep their own prefix; `build_runtime.py` passes it in as a define and
-recompiles the runtime when `paths.py` changes). The number started at 0.1 on 2026-11-15 and has not been raised
-since.
+recompiles the runtime when `paths.py` changes). The number started at 0.1 on 2026-11-15; 0.2 on 2026-11-19 (short bundle names, no MSAA on Qualcomm GPUs).
 
 ### Language (`imports_plat.c`, `port_text.c`)
 
@@ -506,6 +505,28 @@ port, not by native speakers. Seen in Japanese: the quit question and the Displa
 (the game's fonts had the kanji). Not looked at: the other languages on screen (Chinese and Korean could miss
 characters in the game's fonts), a Windows in another language, the row help texts (still none), the game's own
 untranslated PC words ("Windowed", "MIDDLE" in Japanese).
+
+### Short names for the longest bundle paths (`port/assets/shorten.py`, the setup's last step)
+
+The game's bundles keep the names the game's build gave them; the longest was 225 characters below the game folder.
+Windows tools that copy or zip a folder leave out files whose full path is over 260 characters, and a game folder
+without such a file hangs on every screen that needs it, with nothing but a `RemoteProviderException: Invalid path
+in AssetBundleProvider` in `player.log` (first report: the tab buttons' animation was not there, so Options and
+Missions never opened; the folder had been copied to a Linux handheld). The step moves every bundle whose path below
+`aa\` is longer than 110 characters (608 files) to `aa\Switch\s\<16 hex digits>.bundle` and rewrites those
+`m_InternalIds` of `aa\catalog.json` (and of an import's `mania\catalog.json`); the engine opens a bundle by that path
+and nothing else knows the file name. `aa\short_names.json` lists old -> new. The longest path below the game folder
+is then 150 characters. The step runs at the end of every setup run (the steps before it put files back under their
+own names). `shorten.py restore` undoes it for tools that read bundles by their own names: `mania\build.py` does
+restore, its work, apply; the level editor restores and leaves it so (run `setup.cmd` afterwards to shorten again).
+Checked: both games start, title, Options, Style, a stage; restore then apply gives byte-identical catalogs. A plain
+path of the same length as the reporter's did load on a Steam Machine under Proton, so the limit is in the copying
+tools, not in the game.
+
+A newer port over a finished build: `setup.py` keeps the port's version (`PORT_LABEL`) in `build\state.json`; when
+it differs, the `link` and `assemble` steps run again (runtime sources are recompiled, the game folder is put
+together again), nothing else. A release that changes `hooks.txt` needs `generate` and `compile` too: then say so in
+its notes (`setup.cmd --redo generate`).
 
 ### Where the player's files are (`rt_user_dir`, `log.c`)
 

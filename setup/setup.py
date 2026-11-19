@@ -222,6 +222,12 @@ def step_dlc():
     say(f'    {n} pack(s) installed')
 
 
+def step_shorten():
+    # always the last step, and done again on every run: the steps before it put bundles back under their
+    # own names (port/assets/shorten.py says why the names are shortened)
+    run('shorten', PY, paths.PORT / 'assets' / 'shorten.py', 'apply', paths.GAME)
+
+
 STEPS = [
     ('tools', 'Getting the build tools (compiler, Unity player; about 300 MB of downloads)', step_tools),
     ('extract', 'Reading your game dump', step_extract),
@@ -234,6 +240,7 @@ STEPS = [
     ('textures', 'Converting textures', step_textures),
     ('assemble', 'Putting the game folder together', step_assemble),
     ('dlc', 'Add-on content', step_dlc),
+    ('shorten', 'Shortening long file names', step_shorten),
 ]
 NAMES = [s[0] for s in STEPS]
 
@@ -275,24 +282,38 @@ def main():
             i = NAMES.index(name)
             st['done'] = [d for d in st['done'] if d not in (NAMES[i:] if flag == '--redo' else [name])]
             todo = NAMES[i:] if flag == '--redo' else [name]
+    st['done'] = [d for d in st['done'] if d != 'shorten']
+    if st.get('port') != paths.PORT_LABEL and 'link' in st['done'] and todo == NAMES:
+        # a newer version of the port over a finished build: its own code is compiled and linked again and the
+        # game folder put together again (a minute); the converted game data stays
+        say(f'Updating the game to {paths.PORT_LABEL} ...')
+        st['done'] = [d for d in st['done'] if d not in ('link', 'assemble')]
+    st['port'] = paths.PORT_LABEL
+    if 'shorten' not in todo:
+        todo = todo + ['shorten']
     say(f'{paths.NAME} setup: building the game in {paths.GAME}')
     t_all = time.time()
     try:
         say('Checking input\\ ...')
-        only_dlc = todo == ['dlc']
-        keys, game, dlc, _ = find_inputs(need_game=not only_dlc)
-        say(f'  keys: {keys.name}; game files: {", ".join(os.path.basename(c.path) for c in game) or "none"}'
-            + (f'; add-on content: {len(dlc)} file(s)' if dlc else ''))
-        if not only_dlc:
-            stamp = file_stamp([keys] + [c.path for c in game])
-            if st.get('inputs') not in (None, stamp) and 'extract' in st['done']:
-                say('The game files in input\\ changed: starting again from the game dump.')
-                st['done'] = [d for d in st['done'] if d == 'tools']
-            st['inputs'] = stamp
-        dlc_stamp = file_stamp(c.path for c in dlc)
-        if st.get('dlc_inputs', []) != dlc_stamp:
-            st['done'] = [d for d in st['done'] if d != 'dlc']     # add-on content added: install it, nothing else
-        st['dlc_inputs'] = dlc_stamp
+        only_dlc = [t for t in todo if t != 'shorten'] == ['dlc']
+        emptied = 'extract' in st['done'] and not (paths.INPUT.exists() and any(paths.INPUT.glob('*.keys')))
+        if emptied:
+            # a finished build whose input\ was cleared (it is not needed any more): an update of the port needs no dump
+            say('  nothing in input\\: the finished build is used as it is')
+        else:
+            keys, game, dlc, _ = find_inputs(need_game=not only_dlc and 'extract' not in st['done'])
+            say(f'  keys: {keys.name}; game files: {", ".join(os.path.basename(c.path) for c in game) or "none"}'
+                + (f'; add-on content: {len(dlc)} file(s)' if dlc else ''))
+            if not only_dlc and game:
+                stamp = file_stamp([keys] + [c.path for c in game])
+                if st.get('inputs') not in (None, stamp) and 'extract' in st['done']:
+                    say('The game files in input\\ changed: starting again from the game dump.')
+                    st['done'] = [d for d in st['done'] if d == 'tools']
+                st['inputs'] = stamp
+            dlc_stamp = file_stamp(c.path for c in dlc)
+            if st.get('dlc_inputs', []) != dlc_stamp:
+                st['done'] = [d for d in st['done'] if d != 'dlc']     # add-on content added: install it, nothing else
+            st['dlc_inputs'] = dlc_stamp
         free = shutil.disk_usage(paths.ROOT).free >> 30
         if free < 15 and 'textures' not in st['done']:
             say(f'  warning: only {free} GB free on this drive; the build needs about 15 GB')
