@@ -528,6 +528,18 @@ it differs, the `link` and `assemble` steps run again (runtime sources are recom
 together again), nothing else. A release that changes `hooks.txt` needs `generate` and `compile` too: then say so in
 its notes (`setup.cmd --redo generate`).
 
+A finished game folder without `build\` (`setup.cmd --clean`, or only the game was kept): `setup.py` sees a
+complete game folder and no linked build and sets `game_only` in the state. The game folder holds the flat image
+of the game executable (`il2cpp_data\main.bin`) and the metadata, which is everything the port's code is made
+from: `tools\nso.py pack` writes the image back as an NSO with the file's original header
+(`port\recomp\tables\nso_header.hex`; the packed file parses to the same image, segments, symbols and
+relocations as the dump's), the steps that read the dump or convert data count as done, `generate`, `compile`
+and `link` run (40 s, 108 s, 4 s here), and `assemble --code-only` puts only `GameAssembly.dll` and the exe into
+the game folder (the icon is then read from the game folder's own title bundle). Later versions update the same
+way (`link` + code-only `assemble`). Such a build cannot follow a release that changes how game data is
+converted (bundles, shaders, textures): that needs the dump again. Checked in RumbleSlop with an empty build and
+input folder (tools already downloaded): the game starts, a stage, Options.
+
 ### Where the player's files are (`rt_user_dir`, `log.c`)
 
 Save data (`save\`, `temp\`) and the port's settings files (`port_display.txt`, `port_keys.txt`, `port_name.txt`,

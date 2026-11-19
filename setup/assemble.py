@@ -70,6 +70,13 @@ def boot_config(src, dst):
 
 def main():
     game, data, rom = paths.GAME, paths.DATA, paths.ROMFS_DATA
+    if '--code-only' in sys.argv:      # a build made from the game folder alone (setup.py, GAME_ONLY): only the code is new
+        for f in ('GameAssembly.dll', f'{paths.NAME}.exe'):
+            if not (paths.OBJ / f).exists():
+                sys.exit(f'assemble: not built yet: {f}')
+            place(paths.OBJ / f, game / f, link=False)
+        print(f'game folder updated: {game} (the port\'s code)')
+        return
     need = {
         'the recompiled game (GameAssembly.dll)': paths.OBJ / 'GameAssembly.dll',
         'the launcher': paths.OBJ / f'{paths.NAME}.exe',

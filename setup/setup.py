@@ -195,7 +195,33 @@ def step_textures():
 
 
 def step_assemble():
-    run('assemble', PY, HERE / 'assemble.py')
+    run('assemble', PY, HERE / 'assemble.py', *(['--code-only'] if GAME_ONLY else []))
+
+
+# A finished game folder without its build folder (setup.cmd --clean, or a game folder kept on its own): the folder
+# still holds the game executable's image and metadata, which is all the port's code is made from. The steps that
+# read the dump or convert the game's data count as done (their results are in the game folder), the code is
+# generated, compiled and linked again, and "assemble" only puts the new code into the game folder.
+GAME_ONLY = False
+DATA_STEPS = ('extract', 'image', 'assets', 'shaders', 'textures', 'dlc', 'mania')
+
+
+def game_files():
+    il2cpp = paths.DATA / 'il2cpp_data'
+    return il2cpp / 'main.bin', il2cpp / 'Metadata' / 'global-metadata.dat'
+
+
+def game_complete():
+    return all(p.exists() for p in game_files() + (paths.GAME / 'GameAssembly.dll', paths.DATA / 'StreamingAssets' / 'aa' / 'catalog.json'))
+
+
+def recover_from_game():
+    image, metadata = game_files()
+    for src, dst in ((image, paths.MAIN_BIN), (metadata, paths.METADATA)):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    paths.EXEFS.mkdir(parents=True, exist_ok=True)
+    run('recover', PY, paths.ROOT / 'tools' / 'nso.py', 'pack', paths.MAIN_BIN, paths.TABLES / 'nso_header.hex', paths.EXEFS / 'main')
 
 
 def step_dlc():
@@ -289,6 +315,14 @@ def main():
         say(f'Updating the game to {paths.PORT_LABEL} ...')
         st['done'] = [d for d in st['done'] if d not in ('link', 'assemble')]
     st['port'] = paths.PORT_LABEL
+    global GAME_ONLY
+    recover = False
+    if 'link' not in st['done'] and todo == NAMES and game_complete():
+        say('The finished game folder is here without its build folder: the port\'s own code is built again from the')
+        say('game folder (this downloads the build tools and compiles for some minutes). The game data stays as it is.')
+        st['game_only'] = recover = True
+        st['done'] = [n for n in NAMES if n in st['done'] or n in DATA_STEPS]
+    GAME_ONLY = bool(st.get('game_only'))
     if 'shorten' not in todo:
         todo = todo + ['shorten']
     say(f'{paths.NAME} setup: building the game in {paths.GAME}')
@@ -314,6 +348,8 @@ def main():
             if st.get('dlc_inputs', []) != dlc_stamp:
                 st['done'] = [d for d in st['done'] if d != 'dlc']     # add-on content added: install it, nothing else
             st['dlc_inputs'] = dlc_stamp
+        if recover:
+            recover_from_game()
         free = shutil.disk_usage(paths.ROOT).free >> 30
         if free < 15 and 'textures' not in st['done']:
             say(f'  warning: only {free} GB free on this drive; the build needs about 15 GB')

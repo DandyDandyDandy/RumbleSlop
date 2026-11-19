@@ -1,0 +1,12 @@
+# The 0x100-byte NSO header of the game executable (main, version 2.2.0): segment addresses and sizes, the
+# build id, the places of the symbol tables, the segments' SHA-256. Facts about the file, no game code.
+# tools/nso.py pack uses it to turn the flat image a finished game folder keeps (il2cpp_data/main.bin) back
+# into the file the code generator reads.
+4e534f3000000000000000003f0000000d01000000000000a880870400010000
+dca92e0200908704b4865a010d00000020e8e1020020e20508b6c900f8599701
+95548fabbca7a4f723c3468e5cfb34d000000000000000000000000000000000
+cfa82e02443eb30017fe2e000000000000000000000000000000000000000000
+0000000000000000ac845a01e6010000b076030071a60000e0100300d0650000
+5257eb1b61d59e723c827c258eab6c77fee32dc68475a45af9a75caba6e945a2
+f89c0e04d5e9d882c3709771bb03cec87e183293cfc4dad19d49d5b6cb3d6448
+cf3b2f5b4a8e6e62c2f778b4f634db6bbbdcc76fbf9a308b66a37d69f96f571c

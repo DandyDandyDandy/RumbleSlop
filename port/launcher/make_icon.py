@@ -24,9 +24,12 @@ SIZES = (256, 64, 48, 32, 24, 16)
 
 def picture():
     import UnityPy
-    if not BUNDLE.exists():
+    # the dump's bundle, or its converted copy in a finished game folder (a build made from the game folder alone)
+    rel = BUNDLE.relative_to(paths.ROMFS_DATA)
+    bundle = next((b for b in (BUNDLE, paths.DATA / rel) if b.exists()), None)
+    if bundle is None:
         sys.exit(f'make_icon: {BUNDLE} is missing (run the setup step "extract" first)')
-    for obj in UnityPy.load(str(BUNDLE)).objects:
+    for obj in UnityPy.load(str(bundle)).objects:
         if obj.type.name == 'Texture2D':
             tex = obj.read()
             if tex.m_Name == paths.ICON_TEXTURE:

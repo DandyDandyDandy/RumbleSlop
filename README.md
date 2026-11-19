@@ -70,8 +70,11 @@ does the same: it notices the new packs and installs only them.
 
 Updating to a newer version of the port: get the new version of this folder (`git pull`, or unpack the new release
 over it, keeping `build` and `game`) and run `setup.cmd` again. It rebuilds only the port's own part and puts the
-game folder together again, which takes a minute or two; saves and settings are untouched. This needs the `build`
-folder of the first setup; without it the setup starts from the game dump.
+game folder together again, which takes a minute or two; saves and settings are untouched.
+
+If you deleted `build` and `input` and kept only the game: put the `game` folder into the new version's folder
+(next to `setup.cmd`) and run `setup.cmd`. It then rebuilds the port's code from the game folder itself: the
+build tools are downloaded again (about 300 MB) and it compiles for some minutes. Your dump is not needed.
 
 Copying the game folder to another PC or to a Steam Deck: the folder's own path should stay under about 100
 characters. Windows tools leave out files whose full path is longer than 260 characters, and the longest file here
