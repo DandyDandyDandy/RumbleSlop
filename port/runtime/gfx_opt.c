@@ -147,7 +147,17 @@ static void apply(Cpu *c, const int v[5]) {
     int shadow = sh == 1 ? 512 : sh == 3 ? 4096 : g_base[b].shadow;
     if (sh == 1 && shadow > g_base[b].shadow) shadow = g_base[b].shadow;
     if (sh == 3 && shadow < g_base[b].shadow) shadow = g_base[b].shadow;
-    int msaa = aa == 2 ? 1 : g_base[b].msaa < 4 ? 4 : g_base[b].msaa;
+    // Qualcomm Adreno (Mesa Turnip; an ARM handheld under Proton): with MSAA, 2x or 4x, a grid of black blocks covers
+    // the 3D picture from the third stage of a session on (seen on an Adreno 740, Mesa 26.2; the port's other
+    // graphics settings made no difference). Without MSAA it is clean, so there the row does nothing.
+    // BR_GFX_ADRENO_MSAA=1 keeps MSAA for a test.
+    static int adreno = -1;
+    if (adreno < 0) {
+        int (*vendor)(void) = (int (*)(void))rt_icall_host("UnityEngine.SystemInfo::GetGraphicsDeviceVendorID");
+        adreno = vendor && vendor() == 0x5143 && !getenv("BR_GFX_ADRENO_MSAA");
+        if (adreno) rt_log("graphics: Qualcomm GPU: no MSAA (it corrupts the picture with this driver)");
+    }
+    int msaa = aa == 2 || adreno ? 1 : g_base[b].msaa < 4 ? 4 : g_base[b].msaa;
     set_f(c, F_SET_SCALE, asset, scale);
     rt_call(c, FN(F_SET_SHADOW_RES), 3, asset, (uint64_t)shadow, 0ull);
     rt_call(c, FN(F_SET_MSAA), 3, asset, (uint64_t)msaa, 0ull);
